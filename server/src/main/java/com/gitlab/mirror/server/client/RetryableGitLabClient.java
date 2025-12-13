@@ -39,10 +39,12 @@ public class RetryableGitLabClient {
         return executeWithRetry(() -> {
             HttpHeaders headers = createHeaders();
             HttpEntity<Void> entity = new HttpEntity<>(headers);
-            String url = baseUrl + path;
+            String urlString = baseUrl + path;
 
-            log.debug("GET {}", sanitizeUrl(url));
-            ResponseEntity<T> response = restTemplate.exchange(url, HttpMethod.GET, entity, responseType);
+            log.debug("GET {}", sanitizeUrl(urlString));
+            // Use URI instead of String to avoid double encoding
+            java.net.URI uri = java.net.URI.create(urlString);
+            ResponseEntity<T> response = restTemplate.exchange(uri, HttpMethod.GET, entity, responseType);
             return response.getBody();
         });
     }
@@ -54,10 +56,11 @@ public class RetryableGitLabClient {
         return executeWithRetry(() -> {
             HttpHeaders headers = createHeaders();
             HttpEntity<T> entity = new HttpEntity<>(body, headers);
-            String url = baseUrl + path;
+            String urlString = baseUrl + path;
 
-            log.debug("POST {}", sanitizeUrl(url));
-            ResponseEntity<R> response = restTemplate.exchange(url, HttpMethod.POST, entity, responseType);
+            log.debug("POST {}", sanitizeUrl(urlString));
+            java.net.URI uri = java.net.URI.create(urlString);
+            ResponseEntity<R> response = restTemplate.exchange(uri, HttpMethod.POST, entity, responseType);
             return response.getBody();
         });
     }
@@ -69,10 +72,11 @@ public class RetryableGitLabClient {
         return executeWithRetry(() -> {
             HttpHeaders headers = createHeaders();
             HttpEntity<T> entity = new HttpEntity<>(body, headers);
-            String url = baseUrl + path;
+            String urlString = baseUrl + path;
 
-            log.debug("PUT {}", sanitizeUrl(url));
-            ResponseEntity<R> response = restTemplate.exchange(url, HttpMethod.PUT, entity, responseType);
+            log.debug("PUT {}", sanitizeUrl(urlString));
+            java.net.URI uri = java.net.URI.create(urlString);
+            ResponseEntity<R> response = restTemplate.exchange(uri, HttpMethod.PUT, entity, responseType);
             return response.getBody();
         });
     }
@@ -84,10 +88,11 @@ public class RetryableGitLabClient {
         executeWithRetry(() -> {
             HttpHeaders headers = createHeaders();
             HttpEntity<Void> entity = new HttpEntity<>(headers);
-            String url = baseUrl + path;
+            String urlString = baseUrl + path;
 
-            log.debug("DELETE {}", sanitizeUrl(url));
-            restTemplate.exchange(url, HttpMethod.DELETE, entity, Void.class);
+            log.debug("DELETE {}", sanitizeUrl(urlString));
+            java.net.URI uri = java.net.URI.create(urlString);
+            restTemplate.exchange(uri, HttpMethod.DELETE, entity, Void.class);
             return null;
         });
     }

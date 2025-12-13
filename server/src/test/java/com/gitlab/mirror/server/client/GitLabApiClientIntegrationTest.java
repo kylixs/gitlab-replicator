@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.Duration;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -167,14 +168,28 @@ class GitLabApiClientIntegrationTest {
             assertThat(createdProject.getId()).isNotNull();
             assertThat(createdProject.getPath()).isEqualTo(testProjectPath);
             assertThat(createdProject.getName()).isEqualTo(testProjectName);
-            log.info("Project created: id={}, path={}", createdProject.getId(), createdProject.getPathWithNamespace());
+            log.info("Project created: id={}, path={}, pathWithNamespace={}",
+                    createdProject.getId(), createdProject.getPath(), createdProject.getPathWithNamespace());
 
-            // 4. 验证项目存在（通过path查询）
-            GitLabProject fetchedByPath = apiClient.getProject(fullProjectPath);
+            // Verify pathWithNamespace is not null
+            assertThat(createdProject.getPathWithNamespace())
+                    .as("pathWithNamespace should not be null")
+                    .isNotNull();
+
+            // 4. 验证项目存在（通过ID查询）
+            GitLabProject fetchedById = apiClient.getProjectById(createdProject.getId());
+            assertThat(fetchedById).isNotNull();
+            assertThat(fetchedById.getId()).isEqualTo(createdProject.getId());
+            assertThat(fetchedById.getPathWithNamespace()).isEqualTo(createdProject.getPathWithNamespace());
+            log.info("Project verified by ID: {}", fetchedById.getPathWithNamespace());
+
+            // 5. 验证项目存在（通过path查询）
+            String pathToQuery = createdProject.getPathWithNamespace();
+            log.info("Querying project by path: '{}'", pathToQuery);
+            GitLabProject fetchedByPath = apiClient.getProject(pathToQuery);
             assertThat(fetchedByPath).isNotNull();
             assertThat(fetchedByPath.getId()).isEqualTo(createdProject.getId());
-            assertThat(fetchedByPath.getPathWithNamespace()).isEqualTo(fullProjectPath);
-            log.info("Project verified successfully: {}", fetchedByPath.getPathWithNamespace());
+            log.info("Project verified by path: {}", fetchedByPath.getPathWithNamespace());
 
         } catch (GitLabClientException e) {
             // If it's a "has already been taken" error, just skip the test

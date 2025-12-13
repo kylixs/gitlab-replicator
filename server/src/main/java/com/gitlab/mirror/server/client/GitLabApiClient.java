@@ -139,6 +139,15 @@ public class GitLabApiClient {
     public GitLabProject getProject(String projectPath) {
         String encodedPath = URLEncoder.encode(projectPath, StandardCharsets.UTF_8);
         String path = "/api/v4/projects/" + encodedPath;
+        log.debug("Querying project by path: original='{}', encoded='{}', url='{}'", projectPath, encodedPath, path);
+        return client.get(path, GitLabProject.class);
+    }
+
+    /**
+     * Get project details by ID
+     */
+    public GitLabProject getProjectById(Long projectId) {
+        String path = "/api/v4/projects/" + projectId;
         return client.get(path, GitLabProject.class);
     }
 
