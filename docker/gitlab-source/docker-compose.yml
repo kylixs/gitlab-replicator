@@ -1,0 +1,74 @@
+# 源 GitLab 实例
+# 用于测试 GitLab Mirror 同步工具
+
+version: '3.8'
+
+services:
+  gitlab-source:
+    image: gitlab/gitlab-ce:latest
+    container_name: gitlab-source
+    restart: unless-stopped
+    hostname: gitlab-source.local
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        # 外部访问 URL
+        external_url 'http://gitlab-source.local:8000'
+
+        # 时区设置
+        gitlab_rails['time_zone'] = 'Asia/Shanghai'
+
+        # 邮件配置（禁用）
+        gitlab_rails['smtp_enable'] = false
+        gitlab_rails['gitlab_email_enabled'] = false
+
+        # 初始 root 密码（首次启动后可修改）
+        #gitlab_rails['initial_root_password'] = 'GitLabSource123!'
+
+        # 性能优化（开发环境）
+        postgresql['shared_buffers'] = "256MB"
+        postgresql['max_connections'] = 200
+        unicorn['worker_processes'] = 2
+        sidekiq['max_concurrency'] = 10
+
+        # Prometheus 监控
+        prometheus_monitoring['enable'] = false
+
+        # GitLab Pages（禁用）
+        pages_external_url 'http://pages.gitlab-source.local'
+        gitlab_pages['enable'] = false
+
+        # Container Registry（禁用以节省资源）
+        registry_external_url 'http://registry.gitlab-source.local'
+        gitlab_rails['registry_enabled'] = false
+
+        # SSH 端口
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+
+    ports:
+      - "8000:8000"   # HTTP
+      - "2222:22"     # SSH
+    volumes:
+      - ./config:/etc/gitlab
+      - ./logs:/var/log/gitlab
+      - ./data:/var/opt/gitlab
+    networks:
+      - gitlab-network
+    shm_size: '256m'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/-/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+volumes:
+  gitlab_source_config:
+    driver: local
+  gitlab_source_logs:
+    driver: local
+  gitlab_source_data:
+    driver: local
+
+networks:
+  gitlab-network:
+    driver: bridge

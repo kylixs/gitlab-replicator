@@ -1,0 +1,5 @@
+
+gitlab base url: https://git-w.jlcops.com/
+access token: glpat-Doo000-07QaO_4sJo9TbtW86MQp1OjE1CA.01.0y0zy62tq
+
+

@@ -1,0 +1,6 @@
+bak
+docker/*/data
+docker/*/logs
+docker/*/config
+
+

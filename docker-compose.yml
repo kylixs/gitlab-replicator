@@ -1,0 +1,64 @@
+# GitLab Mirror - 开发环境 Docker Compose
+# 包含：MySQL 8.0
+
+version: '3.8'
+
+services:
+  # MySQL 8.0 数据库
+  mysql:
+    image: mysql:8
+    container_name: gitlab-mirror-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_123
+      MYSQL_DATABASE: gitlab_mirror
+      MYSQL_USER: gitlab_mirror
+      MYSQL_PASSWORD: mirror_pass_123
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d
+      - ./docker/mysql/conf:/etc/mysql/conf.d
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --mysql-native-password=ON
+      - --max_connections=500
+      - --innodb_buffer_pool_size=512M
+    networks:
+      - gitlab-mirror-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (可选，用于缓存和分布式锁)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: gitlab-mirror-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   command: redis-server --appendonly yes --requirepass redis_pass_123
+  #   networks:
+  #     - gitlab-mirror-network
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  mysql_data:
+    driver: local
+  # redis_data:
+  #   driver: local
+
+networks:
+  gitlab-mirror-network:
+    driver: bridge
