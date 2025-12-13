@@ -259,6 +259,31 @@ show_usage() {
     echo "    --status <status>                Filter by status"
     echo "    --page <n>                       Page number"
     echo ""
+    echo -e "${YELLOW}Pull-Sync Commands:${NC}"
+    echo "  gitlab-mirror pull <subcommand>    Pull sync management"
+    echo "    list [OPTIONS]                   List Pull sync configs"
+    echo "    show <project-id>                Show config details"
+    echo "    priority <id> <priority>         Update priority (critical/high/normal/low)"
+    echo "    enable <project-id>              Enable Pull sync"
+    echo "    disable <project-id>             Disable Pull sync"
+    echo ""
+    echo "  gitlab-mirror task <subcommand>    Task management"
+    echo "    list [OPTIONS]                   List tasks"
+    echo "    show <task-id>                   Show task details"
+    echo "    retry <task-id>                  Manually retry a task"
+    echo "    reset <task-id>                  Reset failure count"
+    echo "    stats                            Show task statistics"
+    echo ""
+    echo "  gitlab-mirror scheduler <subcommand> Scheduler management"
+    echo "    status                           Show scheduler status"
+    echo "    trigger [--type=pull]            Manually trigger scheduling"
+    echo "    metrics                          Show scheduler metrics"
+    echo ""
+    echo "  gitlab-mirror webhook <subcommand> Webhook monitoring"
+    echo "    list [OPTIONS]                   List webhook events"
+    echo "    show <event-id>                  Show event details"
+    echo "    stats                            Show webhook statistics"
+    echo ""
     echo -e "${YELLOW}Help:${NC}"
     echo "  gitlab-mirror help                 Show this help message"
     echo "  gitlab-mirror version              Show version information"
@@ -301,7 +326,7 @@ main() {
             shift
             show_logs "$@"
             ;;
-        projects|mirrors|mirror|events|discover|export|compensate|sync)
+        projects|mirrors|mirror|events|discover|export|compensate|sync|pull|task|scheduler|webhook)
             execute_cli_command "$@"
             ;;
         help|--help|-h)
