@@ -387,9 +387,44 @@ public class PullSyncExecutorService {
         task.setDurationSeconds((int) durationSeconds);
         task.setLastSyncStatus("failed");
         task.setLastRunAt(completedAt);
-        task.setErrorType(classifyError(e));
+
+        String errorType = classifyError(e);
+        task.setErrorType(errorType);
         task.setErrorMessage(e.getMessage());
         task.setConsecutiveFailures(task.getConsecutiveFailures() + 1);
+
+        // Check if auto-disable is needed
+        SyncProject project = syncProjectMapper.selectById(task.getSyncProjectId());
+        PullSyncConfig config = pullSyncConfigMapper.selectOne(
+            new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<PullSyncConfig>()
+                .eq("sync_project_id", task.getSyncProjectId())
+        );
+
+        boolean shouldDisable = false;
+        String disableReason = null;
+
+        // Disable immediately for non-retryable errors
+        if (isNonRetryableError(errorType)) {
+            shouldDisable = true;
+            disableReason = "Non-retryable error: " + errorType;
+        }
+        // Disable after 5 consecutive failures
+        else if (task.getConsecutiveFailures() >= 5) {
+            shouldDisable = true;
+            disableReason = "Too many consecutive failures (≥5)";
+        }
+
+        if (shouldDisable && config != null) {
+            config.setEnabled(false);
+            pullSyncConfigMapper.updateById(config);
+            log.warn("Auto-disabled pull sync for project: {}, reason: {}",
+                project != null ? project.getProjectKey() : task.getSyncProjectId(), disableReason);
+
+            if (project != null) {
+                recordSyncEvent(project, "auto_disabled", "warning",
+                    String.format("%s, Failures: %d", disableReason, task.getConsecutiveFailures()));
+            }
+        }
 
         // Calculate retry time with exponential backoff
         task.setNextRunAt(calculateRetryTime(task.getConsecutiveFailures()));
@@ -398,11 +433,20 @@ public class PullSyncExecutorService {
         syncTaskMapper.updateById(task);
 
         // Record failure event
-        SyncProject project = syncProjectMapper.selectById(task.getSyncProjectId());
         if (project != null) {
             recordSyncEvent(project, "sync_failed", "failed",
                 String.format("Error: %s, Failures: %d", e.getMessage(), task.getConsecutiveFailures()));
         }
+    }
+
+    /**
+     * Check if error is non-retryable
+     *
+     * @param errorType Error type
+     * @return true if non-retryable
+     */
+    private boolean isNonRetryableError(String errorType) {
+        return "auth_failed".equals(errorType) || "not_found".equals(errorType);
     }
 
     /**
