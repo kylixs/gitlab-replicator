@@ -35,3 +35,16 @@ logging:
     com.gitlab.mirror: DEBUG
   file:
     name: ${LOG_FILE:logs/gitlab-mirror-service.log}
+
+# GitLab API Configuration
+gitlab:
+  source:
+    url: ${SOURCE_GITLAB_URL:http://localhost:8081}
+    token: ${SOURCE_GITLAB_TOKEN:}
+  target:
+    url: ${TARGET_GITLAB_URL:http://localhost:8082}
+    token: ${TARGET_GITLAB_TOKEN:}
+  api:
+    timeout: 30000
+    max-retries: 3
+    retry-delay: 1000
