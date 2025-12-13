@@ -30,6 +30,7 @@ public class PullSyncExecutorService {
 
     private final GitCommandExecutor gitCommandExecutor;
     private final TargetProjectManagementService targetProjectManagementService;
+    private final DiskManagementService diskManagementService;
     private final SyncTaskMapper syncTaskMapper;
     private final SyncProjectMapper syncProjectMapper;
     private final PullSyncConfigMapper pullSyncConfigMapper;
@@ -102,10 +103,18 @@ public class PullSyncExecutorService {
         // 1. Ensure target project exists
         ensureTargetProjectExists(project);
 
-        // 2. Prepare local repository path
+        // 2. Check disk space availability
+        long requiredSpace = diskManagementService.estimateRequiredSpace(project.getId());
+        if (!diskManagementService.checkAvailableSpace(requiredSpace)) {
+            throw new RuntimeException(String.format(
+                "Insufficient disk space: required=%d bytes, project=%s",
+                requiredSpace, project.getProjectKey()));
+        }
+
+        // 3. Prepare local repository path
         String localRepoPath = prepareLocalRepoPath(project, config);
 
-        // 3. Get source and target repository URLs
+        // 4. Get source and target repository URLs
         SourceProjectInfo sourceInfo = sourceProjectInfoMapper.selectOne(
             new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<SourceProjectInfo>()
                 .eq("sync_project_id", project.getId())
@@ -124,7 +133,7 @@ public class PullSyncExecutorService {
         String targetUrl = buildGitUrl(properties.getTarget().getUrl(),
             properties.getTarget().getToken(), targetInfo.getPathWithNamespace());
 
-        // 4. Execute git sync-first (clone + push)
+        // 5. Execute git sync-first (clone + push)
         GitCommandExecutor.GitResult result = gitCommandExecutor.syncFirst(
             sourceUrl, targetUrl, localRepoPath
         );
@@ -133,15 +142,15 @@ public class PullSyncExecutorService {
             throw new RuntimeException("First sync failed: " + result.getError());
         }
 
-        // 5. Update config with local repo path
+        // 6. Update config with local repo path
         config.setLocalRepoPath(localRepoPath);
         pullSyncConfigMapper.updateById(config);
 
-        // 6. Update task with sync result
+        // 7. Update task with sync result
         String finalSha = result.getParsedValue("FINAL_SHA");
         updateTaskAfterSuccess(task, true, finalSha, finalSha);
 
-        // 7. Record event
+        // 8. Record event
         recordSyncEvent(project, "first_sync_completed", "success",
             String.format("First sync completed, SHA: %s", finalSha));
 

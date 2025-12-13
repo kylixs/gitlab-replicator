@@ -1,6 +1,6 @@
 # 模块 3: Pull 同步执行器 (Pull Sync Executor)
 
-**状态**: ⏸️ 待处理 (Pending)
+**状态**: ✅ 已完成 (Completed)
 
 **目标**: 实现 Pull 同步的核心执行逻辑，包括 Git 命令封装和同步流程。
 
@@ -213,7 +213,7 @@ public enum ErrorType {
 ---
 
 ### T3.5 磁盘管理和清理
-**状态**: ⏸️ 待处理 (Pending)
+**状态**: ✅ 已完成
 **依赖**: T3.3
 
 **任务目标**:

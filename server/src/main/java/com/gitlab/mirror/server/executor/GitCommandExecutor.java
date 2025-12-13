@@ -256,6 +256,16 @@ public class GitCommandExecutor {
     }
 
     /**
+     * Run git gc on repository (alias for cleanup)
+     *
+     * @param localPath Local repository path
+     * @return Execution result
+     */
+    public GitResult gcRepository(String localPath) {
+        return cleanup(localPath);
+    }
+
+    /**
      * Check if directory is a valid git repository
      *
      * @param localPath Path to check
