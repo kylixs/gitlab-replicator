@@ -1,6 +1,8 @@
 package com.gitlab.mirror.server.config;
 
+import com.gitlab.mirror.server.client.GitLabApiClient;
 import com.gitlab.mirror.server.client.RetryableGitLabClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -50,5 +52,15 @@ public class GitLabClientConfig {
                 gitLabProperties.getApi().getMaxRetries(),
                 gitLabProperties.getApi().getRetryDelay()
         );
+    }
+
+    @Bean("sourceGitLabApiClient")
+    public GitLabApiClient sourceGitLabApiClient(@Qualifier("sourceGitLabClient") RetryableGitLabClient client) {
+        return new GitLabApiClient(client);
+    }
+
+    @Bean("targetGitLabApiClient")
+    public GitLabApiClient targetGitLabApiClient(@Qualifier("targetGitLabClient") RetryableGitLabClient client) {
+        return new GitLabApiClient(client);
     }
 }
