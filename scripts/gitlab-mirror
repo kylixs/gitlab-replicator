@@ -1,0 +1,317 @@
+#!/bin/bash
+
+# GitLab Mirror CLI Script
+# Manages GitLab Mirror service and provides CLI commands
+
+set -e
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PID_FILE="$PROJECT_ROOT/gitlab-mirror.pid"
+LOG_FILE="$PROJECT_ROOT/logs/gitlab-mirror.log"
+JAR_FILE="$PROJECT_ROOT/server/target/server-1.0.0-SNAPSHOT.jar"
+CLI_JAR_FILE="$PROJECT_ROOT/cli-client/target/cli-client-1.0.0-SNAPSHOT.jar"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Functions
+print_success() {
+    echo -e "${GREEN}✓ $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}✗ $1${NC}" >&2
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠ $1${NC}"
+}
+
+print_info() {
+    echo -e "${CYAN}ℹ $1${NC}"
+}
+
+# Check if JAR exists
+check_jar() {
+    if [ ! -f "$JAR_FILE" ]; then
+        print_error "Server JAR not found: $JAR_FILE"
+        print_info "Please build the project first: mvn clean package"
+        exit 1
+    fi
+}
+
+# Check if CLI JAR exists
+check_cli_jar() {
+    if [ ! -f "$CLI_JAR_FILE" ]; then
+        print_error "CLI JAR not found: $CLI_JAR_FILE"
+        print_info "Please build the project first: mvn clean package"
+        exit 1
+    fi
+}
+
+# Start service
+start_service() {
+    check_jar
+
+    if is_running; then
+        print_warning "Service is already running (PID: $(cat $PID_FILE))"
+        exit 1
+    fi
+
+    print_info "Starting GitLab Mirror service..."
+
+    # Create logs directory
+    mkdir -p "$PROJECT_ROOT/logs"
+
+    # Load environment variables from .env file if exists
+    if [ -f "$PROJECT_ROOT/.env" ]; then
+        set -a
+        source "$PROJECT_ROOT/.env"
+        set +a
+    fi
+
+    # Start the service in background
+    nohup java -jar "$JAR_FILE" > "$LOG_FILE" 2>&1 &
+    echo $! > "$PID_FILE"
+
+    sleep 2
+
+    if is_running; then
+        print_success "Service started successfully (PID: $(cat $PID_FILE))"
+        print_info "Logs: $LOG_FILE"
+    else
+        print_error "Failed to start service"
+        print_info "Check logs: $LOG_FILE"
+        exit 1
+    fi
+}
+
+# Stop service
+stop_service() {
+    if ! is_running; then
+        print_warning "Service is not running"
+        exit 1
+    fi
+
+    local pid=$(cat "$PID_FILE")
+    print_info "Stopping GitLab Mirror service (PID: $pid)..."
+
+    kill "$pid"
+
+    # Wait for process to stop
+    local count=0
+    while is_running && [ $count -lt 30 ]; do
+        sleep 1
+        count=$((count + 1))
+    done
+
+    if is_running; then
+        print_warning "Force killing process..."
+        kill -9 "$pid"
+    fi
+
+    rm -f "$PID_FILE"
+    print_success "Service stopped"
+}
+
+# Restart service
+restart_service() {
+    if is_running; then
+        stop_service
+    fi
+    start_service
+}
+
+# Check if service is running
+is_running() {
+    if [ ! -f "$PID_FILE" ]; then
+        return 1
+    fi
+
+    local pid=$(cat "$PID_FILE")
+    if ps -p "$pid" > /dev/null 2>&1; then
+        return 0
+    else
+        rm -f "$PID_FILE"
+        return 1
+    fi
+}
+
+# Show service status
+show_status() {
+    if is_running; then
+        local pid=$(cat "$PID_FILE")
+        print_success "Service is running (PID: $pid)"
+
+        # Try to get status from API
+        if command -v curl &> /dev/null; then
+            local api_url="${GITLAB_MIRROR_API_URL:-http://localhost:8080}"
+            local response=$(curl -s "$api_url/api/status" 2>/dev/null || echo "")
+            if [ -n "$response" ]; then
+                echo ""
+                echo "API Status:"
+                echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+            fi
+        fi
+    else
+        print_warning "Service is not running"
+        exit 1
+    fi
+}
+
+# Reload configuration
+reload_config() {
+    check_cli_jar
+
+    print_info "Reloading configuration..."
+
+    # Load environment variables
+    if [ -f "$PROJECT_ROOT/.env" ]; then
+        set -a
+        source "$PROJECT_ROOT/.env"
+        set +a
+    fi
+
+    # Call API via Java client
+    java -cp "$CLI_JAR_FILE" com.gitlab.mirror.cli.command.ServiceCommand reload
+
+    if [ $? -eq 0 ]; then
+        print_success "Configuration reloaded"
+    else
+        print_error "Failed to reload configuration"
+        exit 1
+    fi
+}
+
+# Show logs
+show_logs() {
+    if [ ! -f "$LOG_FILE" ]; then
+        print_warning "Log file not found: $LOG_FILE"
+        exit 1
+    fi
+
+    if [ "$1" = "-f" ] || [ "$1" = "--follow" ]; then
+        tail -f "$LOG_FILE"
+    else
+        tail -n 100 "$LOG_FILE"
+    fi
+}
+
+# Execute CLI command via Java client
+execute_cli_command() {
+    check_cli_jar
+
+    # Load environment variables
+    if [ -f "$PROJECT_ROOT/.env" ]; then
+        set -a
+        source "$PROJECT_ROOT/.env"
+        set +a
+    fi
+
+    # Execute Java CLI command
+    java -jar "$CLI_JAR_FILE" "$@"
+}
+
+# Show usage
+show_usage() {
+    cat << EOF
+${CYAN}GitLab Mirror CLI${NC}
+
+${YELLOW}Service Management:${NC}
+  gitlab-mirror start                Start the service
+  gitlab-mirror stop                 Stop the service
+  gitlab-mirror restart              Restart the service
+  gitlab-mirror status               Show service status
+  gitlab-mirror reload               Reload configuration
+  gitlab-mirror logs [-f]            Show logs (use -f to follow)
+
+${YELLOW}Project Management:${NC}
+  gitlab-mirror projects [OPTIONS]   List projects
+    --status <status>                Filter by status (active, failed, pending)
+    --page <n>                       Page number (default: 1)
+    --size <n>                       Page size (default: 20)
+  gitlab-mirror discover             Trigger project discovery
+
+${YELLOW}Mirror Management:${NC}
+  gitlab-mirror mirrors [OPTIONS]    List mirrors
+    --status <status>                Filter by status (synced, failed, syncing)
+  gitlab-mirror mirror <project>     Show mirror details
+  gitlab-mirror mirror <project> --setup   Setup mirror
+  gitlab-mirror mirror <project> --poll    Poll mirror status
+
+${YELLOW}Event Management:${NC}
+  gitlab-mirror events [OPTIONS]     List events
+    --project <key>                  Filter by project
+    --type <type>                    Filter by event type
+    --status <status>                Filter by status
+    --page <n>                       Page number
+
+${YELLOW}Help:${NC}
+  gitlab-mirror help                 Show this help message
+  gitlab-mirror version              Show version information
+
+${CYAN}Environment Variables:${NC}
+  GITLAB_MIRROR_API_URL             API base URL (default: http://localhost:8080)
+  GITLAB_MIRROR_TOKEN               API authentication token
+
+EOF
+}
+
+# Show version
+show_version() {
+    echo "GitLab Mirror CLI v1.0.0-SNAPSHOT"
+}
+
+# Main
+main() {
+    if [ $# -eq 0 ]; then
+        show_usage
+        exit 0
+    fi
+
+    case "$1" in
+        start)
+            start_service
+            ;;
+        stop)
+            stop_service
+            ;;
+        restart)
+            restart_service
+            ;;
+        status)
+            show_status
+            ;;
+        reload)
+            reload_config
+            ;;
+        logs)
+            shift
+            show_logs "$@"
+            ;;
+        projects|mirrors|mirror|events|discover|export)
+            execute_cli_command "$@"
+            ;;
+        help|--help|-h)
+            show_usage
+            ;;
+        version|--version|-v)
+            show_version
+            ;;
+        *)
+            print_error "Unknown command: $1"
+            echo ""
+            show_usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
