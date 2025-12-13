@@ -71,21 +71,38 @@ public class ProjectCommand {
         }
 
         // Print table
-        String[] headers = {"Project Key", "Status", "Method", "Enabled", "Updated At"};
+        String[] headers = {"ID", "Project Key", "Status", "Method", "Updated At"};
         List<String[]> rows = new ArrayList<>();
+        List<String> errorMessages = new ArrayList<>();
 
         for (Map<String, Object> item : items) {
             String[] row = new String[5];
-            row[0] = OutputFormatter.truncate(String.valueOf(item.get("projectKey")), 40);
-            row[1] = String.valueOf(item.get("syncStatus"));
-            row[2] = String.valueOf(item.get("syncMethod"));
-            row[3] = Boolean.TRUE.equals(item.get("enabled")) ? "Yes" : "No";
+            row[0] = String.valueOf(item.get("id"));
+            row[1] = OutputFormatter.truncate(String.valueOf(item.get("projectKey")), 40);
+            row[2] = String.valueOf(item.get("syncStatus"));
+            row[3] = String.valueOf(item.get("syncMethod"));
             row[4] = String.valueOf(item.get("updatedAt"));
             rows.add(row);
+
+            // Collect error messages for failed projects
+            if ("failed".equals(item.get("syncStatus")) && item.get("errorMessage") != null) {
+                errorMessages.add(String.format("  → %s: %s",
+                    item.get("projectKey"),
+                    item.get("errorMessage")));
+            }
         }
 
         System.out.println();
         OutputFormatter.printTable(headers, rows);
+
+        // Print error messages if any
+        if (!errorMessages.isEmpty()) {
+            System.out.println();
+            OutputFormatter.printError("Failed Projects:");
+            for (String errorMsg : errorMessages) {
+                System.out.println(errorMsg);
+            }
+        }
 
         // Print pagination info
         System.out.println();

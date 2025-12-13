@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.gitlab.mirror.server.api.dto.ApiResponse;
 import com.gitlab.mirror.server.api.dto.PageResponse;
+import com.gitlab.mirror.server.api.dto.ProjectDTO;
 import com.gitlab.mirror.server.api.exception.ResourceNotFoundException;
 import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncProject;
@@ -18,7 +19,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Project Management API Controller
@@ -53,7 +56,7 @@ public class ProjectController {
      * Get project list with pagination and filters
      */
     @GetMapping
-    public ApiResponse<PageResponse<SyncProject>> getProjects(
+    public ApiResponse<PageResponse<ProjectDTO>> getProjects(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String syncMethod,
             @RequestParam(defaultValue = "1") int page,
@@ -73,7 +76,32 @@ public class ProjectController {
         Page<SyncProject> pageRequest = new Page<>(page, size);
         IPage<SyncProject> result = syncProjectMapper.selectPage(pageRequest, wrapper);
 
-        return ApiResponse.success(PageResponse.of(result));
+        // Convert to DTO
+        List<ProjectDTO> dtoList = result.getRecords().stream()
+                .map(this::toProjectDTO)
+                .collect(Collectors.toList());
+
+        PageResponse<ProjectDTO> pageResponse = PageResponse.of(
+                dtoList,
+                result.getTotal(),
+                (int) result.getCurrent(),
+                (int) result.getSize()
+        );
+
+        return ApiResponse.success(pageResponse);
+    }
+
+    private ProjectDTO toProjectDTO(SyncProject project) {
+        ProjectDTO dto = new ProjectDTO();
+        dto.setId(project.getId());
+        dto.setProjectKey(project.getProjectKey());
+        dto.setSyncMethod(project.getSyncMethod());
+        dto.setSyncStatus(project.getSyncStatus());
+        dto.setEnabled(project.getEnabled());
+        dto.setErrorMessage(project.getErrorMessage());
+        dto.setCreatedAt(project.getCreatedAt());
+        dto.setUpdatedAt(project.getUpdatedAt());
+        return dto;
     }
 
     /**

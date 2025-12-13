@@ -53,6 +53,12 @@ public class GitLabMirrorCli {
                 case "mirror":
                     new MirrorCommand(apiClient).execute(commandArgs);
                     break;
+                case "compensate":
+                    new CompensateCommand(apiClient).execute(commandArgs);
+                    break;
+                case "sync":
+                    new SyncCommand(apiClient).execute(commandArgs);
+                    break;
                 case "events":
                     new EventCommand(apiClient).execute(commandArgs);
                     break;
@@ -96,6 +102,8 @@ public class GitLabMirrorCli {
         System.out.println("  discover              Trigger project discovery");
         System.out.println("  mirrors               List mirrors");
         System.out.println("  mirror <project>      Show mirror details");
+        System.out.println("  compensate            Trigger mirror compensation check");
+        System.out.println("  sync <project>        Trigger push mirror sync for a project");
         System.out.println("  events                List events");
         System.out.println("  export                Export data");
         System.out.println("  help                  Show this help message");

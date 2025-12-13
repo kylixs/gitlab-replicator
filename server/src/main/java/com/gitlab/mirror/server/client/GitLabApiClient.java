@@ -274,11 +274,14 @@ public class GitLabApiClient {
     }
 
     /**
-     * Trigger mirror sync
+     * Trigger push mirror sync
+     *
+     * @param projectId GitLab project ID
+     * @param mirrorId Remote mirror ID
      */
     public void triggerMirrorSync(Long projectId, Long mirrorId) {
-        log.info("Triggering mirror sync for project {} mirror {}", projectId, mirrorId);
-        client.post("/api/v4/projects/" + projectId + "/mirror/pull", null, Object.class);
+        log.info("Triggering push mirror sync for project {} mirror {}", projectId, mirrorId);
+        client.post("/api/v4/projects/" + projectId + "/remote_mirrors/" + mirrorId + "/sync", null, Object.class);
     }
 
     /**

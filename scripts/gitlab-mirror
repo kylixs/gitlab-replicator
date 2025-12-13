@@ -226,47 +226,47 @@ execute_cli_command() {
 
 # Show usage
 show_usage() {
-    cat << EOF
-${CYAN}GitLab Mirror CLI${NC}
-
-${YELLOW}Service Management:${NC}
-  gitlab-mirror start                Start the service
-  gitlab-mirror stop                 Stop the service
-  gitlab-mirror restart              Restart the service
-  gitlab-mirror status               Show service status
-  gitlab-mirror reload               Reload configuration
-  gitlab-mirror logs [-f]            Show logs (use -f to follow)
-
-${YELLOW}Project Management:${NC}
-  gitlab-mirror projects [OPTIONS]   List projects
-    --status <status>                Filter by status (active, failed, pending)
-    --page <n>                       Page number (default: 1)
-    --size <n>                       Page size (default: 20)
-  gitlab-mirror discover             Trigger project discovery
-
-${YELLOW}Mirror Management:${NC}
-  gitlab-mirror mirrors [OPTIONS]    List mirrors
-    --status <status>                Filter by status (synced, failed, syncing)
-  gitlab-mirror mirror <project>     Show mirror details
-  gitlab-mirror mirror <project> --setup   Setup mirror
-  gitlab-mirror mirror <project> --poll    Poll mirror status
-
-${YELLOW}Event Management:${NC}
-  gitlab-mirror events [OPTIONS]     List events
-    --project <key>                  Filter by project
-    --type <type>                    Filter by event type
-    --status <status>                Filter by status
-    --page <n>                       Page number
-
-${YELLOW}Help:${NC}
-  gitlab-mirror help                 Show this help message
-  gitlab-mirror version              Show version information
-
-${CYAN}Environment Variables:${NC}
-  GITLAB_MIRROR_API_URL             API base URL (default: http://localhost:8080)
-  GITLAB_MIRROR_TOKEN               API authentication token
-
-EOF
+    echo -e "${CYAN}GitLab Mirror CLI${NC}"
+    echo ""
+    echo -e "${YELLOW}Service Management:${NC}"
+    echo "  gitlab-mirror start                Start the service"
+    echo "  gitlab-mirror stop                 Stop the service"
+    echo "  gitlab-mirror restart              Restart the service"
+    echo "  gitlab-mirror status               Show service status"
+    echo "  gitlab-mirror reload               Reload configuration"
+    echo "  gitlab-mirror logs [-f]            Show logs (use -f to follow)"
+    echo ""
+    echo -e "${YELLOW}Project Management:${NC}"
+    echo "  gitlab-mirror projects [OPTIONS]   List projects"
+    echo "    --status <status>                Filter by status (active, failed, pending)"
+    echo "    --page <n>                       Page number (default: 1)"
+    echo "    --size <n>                       Page size (default: 20)"
+    echo "  gitlab-mirror discover             Trigger project discovery"
+    echo ""
+    echo -e "${YELLOW}Mirror Management:${NC}"
+    echo "  gitlab-mirror mirrors [OPTIONS]    List mirrors"
+    echo "    --status <status>                Filter by status (synced, failed, syncing)"
+    echo "  gitlab-mirror mirror <project>     Show mirror details"
+    echo "  gitlab-mirror mirror <project> --setup   Setup mirror"
+    echo "  gitlab-mirror mirror <project> --poll    Poll mirror status"
+    echo "  gitlab-mirror compensate           Trigger mirror compensation check"
+    echo "  gitlab-mirror sync <project>       Trigger push mirror sync for a project"
+    echo ""
+    echo -e "${YELLOW}Event Management:${NC}"
+    echo "  gitlab-mirror events [OPTIONS]     List events"
+    echo "    --project <key>                  Filter by project"
+    echo "    --type <type>                    Filter by event type"
+    echo "    --status <status>                Filter by status"
+    echo "    --page <n>                       Page number"
+    echo ""
+    echo -e "${YELLOW}Help:${NC}"
+    echo "  gitlab-mirror help                 Show this help message"
+    echo "  gitlab-mirror version              Show version information"
+    echo ""
+    echo -e "${CYAN}Environment Variables:${NC}"
+    echo "  GITLAB_MIRROR_API_URL             API base URL (default: http://localhost:8080)"
+    echo "  GITLAB_MIRROR_TOKEN               API authentication token"
+    echo ""
 }
 
 # Show version
@@ -301,7 +301,7 @@ main() {
             shift
             show_logs "$@"
             ;;
-        projects|mirrors|mirror|events|discover|export)
+        projects|mirrors|mirror|events|discover|export|compensate|sync)
             execute_cli_command "$@"
             ;;
         help|--help|-h)

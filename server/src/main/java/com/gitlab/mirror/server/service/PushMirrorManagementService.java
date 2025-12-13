@@ -107,7 +107,20 @@ public class PushMirrorManagementService {
         config.setConsecutiveFailures(0);
 
         if (config.getId() == null) {
-            pushMirrorConfigMapper.insert(config);
+            try {
+                pushMirrorConfigMapper.insert(config);
+            } catch (org.springframework.dao.DuplicateKeyException e) {
+                // 并发情况下可能已经被其他线程创建了，重新查询
+                log.warn("Duplicate mirror config detected for syncProjectId={}, reloading from database", syncProjectId);
+                PushMirrorConfig reloadedConfig = pushMirrorConfigMapper.selectBySyncProjectId(syncProjectId);
+                if (reloadedConfig != null && reloadedConfig.getGitlabMirrorId() != null) {
+                    // 已经配置完成，直接返回
+                    log.info("Mirror already configured by another thread: mirrorId={}", reloadedConfig.getGitlabMirrorId());
+                    return reloadedConfig;
+                }
+                // 如果记录存在但未配置完成，使用已存在的记录继续
+                config = reloadedConfig != null ? reloadedConfig : config;
+            }
         } else {
             pushMirrorConfigMapper.updateById(config);
         }
@@ -247,14 +260,19 @@ public class PushMirrorManagementService {
 
             // 更新配置
             config.setLastUpdateStatus(newStatus);
+
+            // 优先使用last_update_at，如果为空则使用last_update_started_at
             if (mirror.getLastUpdateAt() != null) {
                 config.setLastUpdateAt(mirror.getLastUpdateAt().toLocalDateTime());
+            } else if (mirror.getLastUpdateStartedAt() != null) {
+                config.setLastUpdateAt(mirror.getLastUpdateStartedAt().toLocalDateTime());
             }
+
             if (mirror.getLastSuccessfulUpdateAt() != null) {
                 config.setLastSuccessfulUpdateAt(mirror.getLastSuccessfulUpdateAt().toLocalDateTime());
             }
 
-            // 更新连续失败计数
+            // 更新连续失败计数和错误信息
             if (PushMirrorConfig.UpdateStatus.FAILED.equals(newStatus)) {
                 config.setConsecutiveFailures(
                         config.getConsecutiveFailures() != null ? config.getConsecutiveFailures() + 1 : 1
@@ -263,6 +281,11 @@ public class PushMirrorManagementService {
             } else if (PushMirrorConfig.UpdateStatus.FINISHED.equals(newStatus)) {
                 config.setConsecutiveFailures(0);
                 config.setErrorMessage(null);
+            } else {
+                // 对于其他状态（to_retry, started等），也保存错误信息（如果有）
+                if (mirror.getLastError() != null && !mirror.getLastError().isEmpty()) {
+                    config.setErrorMessage(mirror.getLastError());
+                }
             }
 
             pushMirrorConfigMapper.updateById(config);
@@ -371,6 +394,39 @@ public class PushMirrorManagementService {
 
         log.error("Mirror configuration failed: syncProjectId={}, consecutiveFailures={}",
                 config.getSyncProjectId(), config.getConsecutiveFailures(), e);
+    }
+
+    /**
+     * 手动触发Mirror同步
+     *
+     * @param syncProjectId 同步项目ID
+     */
+    public void triggerSync(Long syncProjectId) {
+        log.info("Manually triggering mirror sync for syncProjectId={}", syncProjectId);
+
+        PushMirrorConfig config = pushMirrorConfigMapper.selectBySyncProjectId(syncProjectId);
+        if (config == null || config.getGitlabMirrorId() == null) {
+            throw new IllegalArgumentException("Mirror not configured for syncProjectId: " + syncProjectId);
+        }
+
+        SourceProjectInfo sourceInfo = getSourceProjectInfo(syncProjectId);
+        if (sourceInfo == null) {
+            throw new IllegalArgumentException("Source project info not found for syncProjectId: " + syncProjectId);
+        }
+
+        try {
+            sourceGitLabApiClient.triggerMirrorSync(sourceInfo.getGitlabProjectId(), config.getGitlabMirrorId());
+            log.info("Successfully triggered mirror sync: syncProjectId={}, mirrorId={}",
+                    syncProjectId, config.getGitlabMirrorId());
+
+            recordMirrorEvent(syncProjectId, "mirror_sync_triggered", "success",
+                    Map.of("mirror_id", config.getGitlabMirrorId()));
+        } catch (Exception e) {
+            log.error("Failed to trigger mirror sync: syncProjectId={}", syncProjectId, e);
+            recordMirrorEvent(syncProjectId, "mirror_sync_failed", "error",
+                    Map.of("error", e.getMessage()));
+            throw new RuntimeException("Failed to trigger mirror sync: " + e.getMessage(), e);
+        }
     }
 
     /**

@@ -66,21 +66,42 @@ public class MirrorListCommand {
         }
 
         // Print table
-        String[] headers = {"Mirror ID", "Sync Project ID", "Status", "Last Update", "Failures"};
+        String[] headers = {"Mirror ID", "Sync ID", "Project Key", "Status", "Last Update", "Failures"};
         List<String[]> rows = new ArrayList<>();
 
         for (Map<String, Object> item : items) {
-            String[] row = new String[5];
+            String[] row = new String[6];
             row[0] = String.valueOf(item.get("gitlabMirrorId"));
             row[1] = String.valueOf(item.get("syncProjectId"));
-            row[2] = String.valueOf(item.get("lastUpdateStatus"));
-            row[3] = String.valueOf(item.get("lastUpdateAt"));
-            row[4] = String.valueOf(item.get("consecutiveFailures"));
+            row[2] = OutputFormatter.truncate(String.valueOf(item.get("projectKey")), 35);
+            row[3] = String.valueOf(item.get("lastUpdateStatus"));
+            row[4] = String.valueOf(item.get("lastUpdateAt"));
+            row[5] = String.valueOf(item.get("consecutiveFailures"));
             rows.add(row);
         }
 
         System.out.println();
         OutputFormatter.printTable(headers, rows);
+
+        // Print error messages for failed mirrors
+        boolean hasErrors = false;
+        for (Map<String, Object> item : items) {
+            String errorMessage = (String) item.get("errorMessage");
+            String status = String.valueOf(item.get("lastUpdateStatus"));
+
+            if (errorMessage != null && !errorMessage.isEmpty() &&
+                (status.equals("failed") || status.equals("to_retry"))) {
+                if (!hasErrors) {
+                    System.out.println();
+                    OutputFormatter.printWarning("Error Details:");
+                    hasErrors = true;
+                }
+                System.out.println();
+                System.out.printf("Mirror ID %s (Status: %s):%n",
+                    item.get("gitlabMirrorId"), status);
+                System.out.printf("  %s%n", errorMessage);
+            }
+        }
 
         // Print pagination info
         System.out.println();
