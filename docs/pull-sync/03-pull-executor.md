@@ -39,27 +39,12 @@
   - 参考 [PULL_SYNC_DESIGN.md - 错误处理与重试](../PULL_SYNC_DESIGN.md#流程-6-错误处理与重试)
 
 **核心方法**:
-```java
-public class GitCommandExecutor {
-    // git clone --mirror
-    GitCloneResult cloneMirror(String sourceUrl, String localPath, String token);
-
-    // git ls-remote
-    String getRemoteHeadSha(String remoteUrl, String token);
-
-    // git remote update --prune
-    GitUpdateResult updateMirror(String localPath);
-
-    // git push --mirror
-    GitPushResult pushMirror(String localPath, String targetUrl, String token);
-
-    // git fsck --quick
-    boolean verifyRepository(String localPath);
-
-    // 获取本地 HEAD SHA
-    String getLocalHeadSha(String localPath);
-}
-```
+- cloneMirror() - git clone --mirror
+- getRemoteHeadSha() - git ls-remote 检查远程 HEAD SHA
+- updateMirror() - git remote update --prune 增量更新
+- pushMirror() - git push --mirror 推送到目标
+- verifyRepository() - git fsck --quick 仓库完整性检查
+- getLocalHeadSha() - 获取本地 HEAD SHA
 
 **验收标准**:
 - 所有 Git 命令正确执行
@@ -90,22 +75,14 @@ public class GitCommandExecutor {
 - 状态更新（pending → running → waiting）
   - 参考 [PULL_SYNC_DESIGN.md - 首次同步流程](../PULL_SYNC_DESIGN.md#流程-3-任务执行首次同步)
 
-**核心方法**:
-```java
-public class PullSyncExecutor {
-    // 执行首次同步
-    void executeFirstSync(SyncTask task) {
-        // 1. 更新状态: pending → running
-        // 2. 检查/创建目标项目
-        // 3. 检查磁盘空间
-        // 4. git clone --mirror 源仓库
-        // 5. git push --mirror 到目标
-        // 6. 更新任务状态和结果
-        // 7. 更新状态: running → waiting
-        // 8. 计算 next_run_at
-    }
-}
-```
+**执行流程**:
+1. 更新状态: pending → running
+2. 检查/创建目标项目
+3. 检查磁盘空间
+4. git clone --mirror 源仓库
+5. git push --mirror 到目标
+6. 更新任务状态和结果
+7. 更新状态: running → waiting, 计算 next_run_at
 
 **验收标准**:
 - 首次同步成功完成
@@ -138,22 +115,14 @@ public class PullSyncExecutor {
 - 状态和结果更新
   - 参考 [PULL_SYNC_DESIGN.md - 增量同步流程](../PULL_SYNC_DESIGN.md#流程-4-任务执行增量同步)
 
-**核心方法**:
-```java
-public class PullSyncExecutor {
-    // 执行增量同步
-    void executeIncrementalSync(SyncTask task) {
-        // 1. 更新状态: pending → running
-        // 2. 检查/创建目标项目
-        // 3. 检查本地仓库是否存在
-        // 4. git ls-remote 获取源 HEAD SHA
-        // 5. 对比 SHA，无变更则跳过
-        // 6. 有变更: git remote update + git push
-        // 7. 更新任务状态和结果
-        // 8. 更新状态: running → waiting
-    }
-}
-```
+**执行流程**:
+1. 更新状态: pending → running
+2. 检查本地仓库是否存在
+3. git ls-remote 获取源 HEAD SHA
+4. 对比 SHA，无变更则快速跳过（<1s）
+5. 有变更: git remote update + git push --mirror
+6. 更新任务状态和结果
+7. 更新状态: running → waiting
 
 **验收标准**:
 - 变更检测正确（git ls-remote）
@@ -185,30 +154,13 @@ public class PullSyncExecutor {
 - 错误信息详细记录
 
 **错误分类**:
-```java
-public enum ErrorType {
-    // 可重试
-    NETWORK_TIMEOUT,
-    DISK_FULL,
-    CONFLICT,
+- 可重试: NETWORK_TIMEOUT, DISK_FULL, CONFLICT
+- 不可重试: AUTH_FAILED, REPO_NOT_FOUND, UNKNOWN
 
-    // 不可重试
-    AUTH_FAILED,
-    REPO_NOT_FOUND,
-    UNKNOWN
-}
-```
-
-**重试策略**:
-```java
-// 指数退避: delay = 5min × 2^retry_count
-// 第1次失败: 5分钟后重试
-// 第2次失败: 10分钟后重试
-// 第3次失败: 20分钟后重试
-// 第4次失败: 40分钟后重试
-// 第5次失败: 80分钟后重试
-// ≥5次失败: 自动禁用
-```
+**重试策略** (指数退避):
+- delay = 5min × 2^retry_count
+- 第1-5次失败: 5min, 10min, 20min, 40min, 80min
+- ≥5次失败: 自动禁用项目
 
 **验收标准**:
 - 错误正确分类
@@ -240,24 +192,11 @@ public enum ErrorType {
 - 实现仓库删除功能
 
 **核心方法**:
-```java
-public class DiskManagementService {
-    // 检查可用空间
-    boolean checkAvailableSpace(long requiredBytes);
-
-    // 清理仓库（git gc）
-    long cleanupRepository(String localPath);
-
-    // 删除仓库
-    void deleteRepository(String localPath);
-
-    // 计算磁盘使用
-    DiskUsageStats calculateDiskUsage();
-
-    // 获取仓库大小
-    long getRepositorySize(String localPath);
-}
-```
+- checkAvailableSpace() - 检查可用空间是否充足
+- cleanupRepository() - git gc 清理仓库
+- deleteRepository() - 删除本地仓库
+- calculateDiskUsage() - 计算总体磁盘使用
+- getRepositorySize() - 获取单个仓库大小
 
 **验收标准**:
 - 磁盘空间检查准确

@@ -49,19 +49,10 @@
 - 创建 Mapper 接口 `PullSyncConfigMapper`
 - 配置 MyBatis-Plus 映射
 
-**字段说明**:
-```sql
-CREATE TABLE pull_sync_config (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    sync_project_id BIGINT NOT NULL UNIQUE COMMENT '关联项目ID',
-    priority VARCHAR(20) NOT NULL DEFAULT 'normal' COMMENT '优先级: critical/high/normal/low',
-    enabled BOOLEAN NOT NULL DEFAULT true COMMENT '是否启用',
-    local_repo_path VARCHAR(500) COMMENT '本地仓库路径',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (sync_project_id) REFERENCES sync_project(id) ON DELETE CASCADE
-);
-```
+**核心字段**:
+- id, sync_project_id (UK, FK), priority (critical/high/normal/low)
+- enabled, local_repo_path
+- created_at, updated_at
 
 **验收标准**:
 - 表创建成功，字段类型正确
@@ -90,34 +81,14 @@ CREATE TABLE pull_sync_config (
 - 创建 Mapper 接口 `SyncTaskMapper`
 - 配置 MyBatis-Plus 映射
 
-**字段说明**:
-```sql
-CREATE TABLE sync_task (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    sync_project_id BIGINT NOT NULL UNIQUE COMMENT '关联项目ID(唯一)',
-    task_type VARCHAR(20) NOT NULL COMMENT '任务类型: push/pull',
-    task_status VARCHAR(20) NOT NULL DEFAULT 'waiting' COMMENT '任务状态: waiting/pending/running',
-    next_run_at TIMESTAMP COMMENT '下次执行时间',
-    last_run_at TIMESTAMP COMMENT '上次执行时间',
-    started_at TIMESTAMP COMMENT '本次开始时间',
-    completed_at TIMESTAMP COMMENT '本次完成时间',
-    duration_seconds INT COMMENT '本次执行耗时',
-    has_changes BOOLEAN COMMENT '本次是否有变更',
-    changes_count INT COMMENT '本次变更数量',
-    source_commit_sha VARCHAR(64) COMMENT '本次源SHA',
-    target_commit_sha VARCHAR(64) COMMENT '本次目标SHA',
-    last_sync_status VARCHAR(20) COMMENT '最后同步状态: success/failed',
-    error_type VARCHAR(50) COMMENT '错误类型',
-    error_message TEXT COMMENT '错误信息',
-    consecutive_failures INT DEFAULT 0 COMMENT '连续失败次数',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (sync_project_id) REFERENCES sync_project(id) ON DELETE CASCADE,
-    INDEX idx_task_status (task_status),
-    INDEX idx_next_run_at (next_run_at),
-    INDEX idx_task_type (task_type)
-);
-```
+**核心字段**:
+- id, sync_project_id (UK, FK)
+- task_type (push/pull), task_status (waiting/pending/running)
+- next_run_at, last_run_at, started_at, completed_at, duration_seconds
+- has_changes, changes_count, source_commit_sha, target_commit_sha
+- last_sync_status (success/failed), error_type, error_message
+- consecutive_failures, created_at, updated_at
+- 索引: idx_task_status, idx_next_run_at, idx_task_type
 
 **验收标准**:
 - 表创建成功，字段类型正确
@@ -146,11 +117,8 @@ CREATE TABLE sync_task (
 - 更新实体类 `SourceProjectInfo`
 - 更新 Mapper 查询
 
-**字段说明**:
-```sql
-ALTER TABLE source_project_info
-ADD COLUMN repository_size BIGINT COMMENT '仓库大小(字节)' AFTER empty_repo;
-```
+**新增字段**:
+- repository_size (BIGINT) - 仓库大小(字节)
 
 **验收标准**:
 - 字段添加成功
@@ -174,25 +142,11 @@ ADD COLUMN repository_size BIGINT COMMENT '仓库大小(字节)' AFTER empty_rep
 - 为 Push Mirror 项目初始化 SYNC_TASK 记录
 - 数据一致性验证
 
-**迁移脚本内容**:
-```sql
--- V2.0__create_pull_sync_tables.sql
--- 1. 创建 PULL_SYNC_CONFIG 表
--- 2. 创建 SYNC_TASK 表
--- 3. 扩展 SOURCE_PROJECT_INFO 表
--- 4. 为现有 Push Mirror 项目初始化 SYNC_TASK 记录
-
--- 初始化 Push Mirror 任务
-INSERT INTO sync_task (sync_project_id, task_type, task_status, next_run_at)
-SELECT
-    id,
-    'push' as task_type,
-    'waiting' as task_status,
-    NOW() as next_run_at
-FROM sync_project
-WHERE sync_method = 'push_mirror'
-AND NOT EXISTS (SELECT 1 FROM sync_task WHERE sync_project_id = sync_project.id);
-```
+**迁移脚本内容** (V2.0__create_pull_sync_tables.sql):
+- 创建 PULL_SYNC_CONFIG 表
+- 创建 SYNC_TASK 表
+- 扩展 SOURCE_PROJECT_INFO 表（添加 repository_size）
+- 为现有 Push Mirror 项目初始化 SYNC_TASK 记录 (task_type='push')
 
 **验收标准**:
 - 迁移脚本执行成功

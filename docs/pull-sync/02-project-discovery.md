@@ -38,19 +38,10 @@
 - 配置默认优先级和本地仓库路径
   - 参考 [PULL_SYNC_DESIGN.md - 项目发现与任务初始化](../PULL_SYNC_DESIGN.md#流程-1-项目发现与任务初始化)
 
-**实现要点**:
-```java
-public int discoverProjects(String groupPath, SyncMethod syncMethod) {
-    // 1. 查询源 GitLab 项目
-    // 2. 应用过滤规则
-    // 3. 对于新项目:
-    //    - 创建 SYNC_PROJECT (sync_method = pull_sync)
-    //    - 创建 SOURCE_PROJECT_INFO (含 repository_size)
-    //    - 创建 PULL_SYNC_CONFIG (priority=normal, enabled=true)
-    //    - 创建 SYNC_TASK (task_type=pull, status=waiting, next_run_at=NOW)
-    // 4. 返回发现数量
-}
-```
+**核心逻辑**:
+- 查询源 GitLab 项目并应用过滤规则
+- 为新项目创建: SYNC_PROJECT, SOURCE_PROJECT_INFO, PULL_SYNC_CONFIG, SYNC_TASK
+- 默认配置: priority=normal, enabled=true, task_type=pull, status=waiting, next_run_at=NOW
 
 **验收标准**:
 - 支持指定同步方式（push_mirror/pull_sync）
@@ -79,20 +70,9 @@ public int discoverProjects(String groupPath, SyncMethod syncMethod) {
 - 支持按分组配置不同的同步方式
 - 更新配置类 `GitLabMirrorProperties`
 
-**配置示例**:
-```yaml
-gitlab:
-  mirror:
-    # 默认同步方式
-    default-sync-method: pull_sync  # push_mirror / pull_sync
-
-    # 按分组配置同步方式
-    sync-methods:
-      - group-path: "critical/*"
-        method: push_mirror
-      - group-path: "normal/*"
-        method: pull_sync
-```
+**配置项**:
+- default-sync-method: 默认同步方式 (push_mirror/pull_sync)
+- sync-methods: 按分组配置同步方式（支持通配符匹配）
 
 **验收标准**:
 - 配置正确解析
@@ -121,21 +101,10 @@ gitlab:
 - 实现启用/禁用方法
 
 **核心方法**:
-```java
-public class PullSyncConfigService {
-    // 初始化 Pull 配置
-    PullSyncConfig initializeConfig(Long syncProjectId, String projectKey);
-
-    // 更新优先级
-    void updatePriority(Long syncProjectId, Priority priority);
-
-    // 启用/禁用
-    void setEnabled(Long syncProjectId, boolean enabled);
-
-    // 查询配置
-    PullSyncConfig getConfig(Long syncProjectId);
-}
-```
+- initializeConfig() - 初始化 Pull 配置和本地仓库路径
+- updatePriority() - 更新优先级
+- setEnabled() - 启用/禁用
+- getConfig() - 查询配置
 
 **验收标准**:
 - 初始化方法正确创建配置
@@ -176,19 +145,9 @@ public class PullSyncConfigService {
 
 ## 配置示例
 
-```yaml
-sync:
-  # 默认同步方式
-  default-sync-method: pull_sync
-
-  pull:
-    # 本地仓库基础路径
-    local-repo:
-      base-path: ~/.gitlab-sync/repos
-
-    # 默认优先级
-    default-priority: normal
-```
+- default-sync-method: pull_sync
+- pull.local-repo.base-path: ~/.gitlab-sync/repos
+- pull.default-priority: normal
 
 ---
 

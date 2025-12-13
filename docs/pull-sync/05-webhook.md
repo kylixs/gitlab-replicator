@@ -39,21 +39,12 @@
   - 参考 [PULL_SYNC_DESIGN.md - Webhook 准实时同步](../PULL_SYNC_DESIGN.md#流程-5-webhook-准实时同步)
 
 **核心实现**:
-```java
-@RestController
-@RequestMapping("/api/webhook")
-public class WebhookController {
-    @PostMapping("/gitlab/push")
-    public ResponseEntity<WebhookResponse> handlePushEvent(
-            @RequestHeader("X-Gitlab-Token") String token,
-            @RequestBody GitLabPushEvent event) {
-        // 1. 验证 Secret Token
-        // 2. 解析项目路径
-        // 3. 异步处理（防止阻塞 GitLab）
-        // 4. 立即返回 202 Accepted
-    }
-}
-```
+- `WebhookController` - Webhook 接收控制器
+- `handlePushEvent()` - 处理 GitLab Push 事件
+  1. 从 Header 中验证 Secret Token（X-Gitlab-Token）
+  2. 解析项目路径
+  3. 异步处理事件（防止阻塞 GitLab）
+  4. 立即返回 202 Accepted
 
 **验收标准**:
 - Webhook 端点正确接收请求
@@ -84,36 +75,13 @@ public class WebhookController {
 - 触发立即调度
 
 **核心逻辑**:
-```java
-@Service
-public class WebhookEventService {
-    @Async
-    public void handlePushEvent(GitLabPushEvent event) {
-        String projectKey = event.getProject().getPathWithNamespace();
-
-        // 1. 检查项目是否已存在
-        SyncProject project = findProject(projectKey);
-
-        if (project == null) {
-            // 2. 自动初始化项目
-            project = initializeProject(event);
-        }
-
-        // 3. 防抖检查：最近成功同步 < 2分钟则忽略
-        SyncTask task = getTask(project.getId());
-        if (shouldDebounce(task)) {
-            log.debug("Debounce: recent sync < 2min, ignored");
-            return;
-        }
-
-        // 4. 更新 next_run_at=NOW 触发立即调度
-        updateTaskForImmediateSchedule(task);
-
-        // 5. 记录事件
-        recordWebhookEvent(project, event);
-    }
-}
-```
+- `WebhookEventService.handlePushEvent()` - 异步处理 Push 事件
+  1. 从事件中提取项目路径（project.pathWithNamespace）
+  2. 检查项目是否已存在
+  3. 如果项目不存在，自动初始化项目（调用 `initializeProject()`）
+  4. 防抖检查：如果最近成功同步 < 2分钟，则忽略本次事件
+  5. 更新任务的 `next_run_at=NOW` 触发立即调度
+  6. 记录 Webhook 事件到 SYNC_EVENT
 
 **验收标准**:
 - 项目自动初始化成功
@@ -144,43 +112,22 @@ public class WebhookEventService {
 - 事务一致性保证
 
 **初始化流程**:
-```java
-private SyncProject initializeProject(GitLabPushEvent event) {
-    return transactionTemplate.execute(status -> {
-        // 1. 创建 SYNC_PROJECT
-        SyncProject project = new SyncProject();
-        project.setProjectKey(event.getProject().getPathWithNamespace());
-        project.setSyncMethod(SyncMethod.PULL_SYNC);
-        project.setSyncStatus(SyncStatus.PENDING);
-        project.setEnabled(true);
-        syncProjectMapper.insert(project);
-
-        // 2. 创建 SOURCE_PROJECT_INFO（从 Webhook 数据）
-        SourceProjectInfo sourceInfo = new SourceProjectInfo();
-        sourceInfo.setSyncProjectId(project.getId());
-        sourceInfo.setGitlabProjectId(event.getProject().getId());
-        sourceInfo.setPathWithNamespace(event.getProject().getPathWithNamespace());
-        sourceInfo.setName(event.getProject().getName());
-        sourceInfo.setVisibility(event.getProject().getVisibility());
-        // ... 其他字段
-        sourceProjectInfoMapper.insert(sourceInfo);
-
-        // 3. 创建 PULL_SYNC_CONFIG
-        PullSyncConfig config = pullSyncConfigService.initializeConfig(
-            project.getId(), project.getProjectKey());
-
-        // 4. 创建 SYNC_TASK
-        SyncTask task = new SyncTask();
-        task.setSyncProjectId(project.getId());
-        task.setTaskType(TaskType.PULL);
-        task.setTaskStatus(TaskStatus.WAITING);
-        task.setNextRunAt(Instant.now()); // 立即调度
-        syncTaskMapper.insert(task);
-
-        return project;
-    });
-}
-```
+- `initializeProject()` - 从 Webhook 数据自动初始化项目（事务保证）
+  1. 创建 `SYNC_PROJECT` 记录
+     - `project_key`: 从 Webhook 提取
+     - `sync_method`: 设置为 PULL_SYNC
+     - `sync_status`: 设置为 PENDING
+     - `enabled`: 设置为 true
+  2. 创建 `SOURCE_PROJECT_INFO` 记录
+     - 从 Webhook event.project 中提取字段
+     - 包括：gitlab_project_id, path_with_namespace, name, visibility 等
+  3. 创建 `PULL_SYNC_CONFIG` 记录
+     - 调用 `pullSyncConfigService.initializeConfig()` 使用默认配置
+  4. 创建 `SYNC_TASK` 记录
+     - `task_type`: 设置为 PULL
+     - `task_status`: 设置为 WAITING
+     - `next_run_at`: 设置为当前时间（触发立即调度）
+  5. 返回创建的 SyncProject 对象
 
 **验收标准**:
 - 从 Webhook 数据正确提取字段
@@ -224,21 +171,14 @@ sync:
 ```
 
 **安全措施**:
-```java
-// 1. Secret Token 验证
-boolean verifyToken(String providedToken) {
-    return secureEquals(expectedToken, providedToken);
-}
-
-// 2. IP 白名单验证（可选）
-boolean verifyIpWhitelist(String remoteIp) {
-    return ipWhitelist.isEmpty() || ipWhitelist.contains(remoteIp);
-}
-
-// 3. 请求速率限制（防止 DDoS）
-@RateLimiter(key = "webhook", limit = 100, duration = 60)
-public void handlePushEvent(...) { ... }
-```
+- `verifyToken()` - Secret Token 验证
+  - 使用安全的字符串比较（防止时序攻击）
+- `verifyIpWhitelist()` - IP 白名单验证（可选）
+  - 如果未配置白名单，则允许所有 IP
+  - 如果配置了白名单，则只允许白名单中的 IP
+- 请求速率限制（防止 DDoS）
+  - 使用 `@RateLimiter` 注解
+  - 限制：100 次/分钟
 
 **验收标准**:
 - Secret Token 正确验证
@@ -269,32 +209,17 @@ public void handlePushEvent(...) { ... }
 - 实现故障诊断工具
 
 **监控指标**:
-```java
-- webhook_requests_total{status="accepted|ignored|rejected"}
-- webhook_processing_duration_seconds
-- webhook_initialization_total
-- webhook_debounce_skipped_total
-- webhook_errors_total{type="auth|parse|processing"}
-```
+- `webhook_requests_total{status}` - Webhook 请求总数（按状态分组：accepted/ignored/rejected）
+- `webhook_processing_duration_seconds` - Webhook 处理耗时
+- `webhook_initialization_total` - 自动初始化项目总数
+- `webhook_debounce_skipped_total` - 因防抖跳过的 Webhook 总数
+- `webhook_errors_total{type}` - Webhook 错误总数（按类型分组：auth/parse/processing）
 
 **日志设计**:
-```java
-// Webhook 接收
-log.info("Webhook received, projectKey={}, ref={}, commits={}",
-    projectKey, event.getRef(), event.getCommits().size());
-
-// 自动初始化
-log.info("Project auto-initialized from webhook, projectKey={}, priority={}",
-    projectKey, config.getPriority());
-
-// 防抖跳过
-log.debug("Webhook debounced, projectKey={}, lastSyncAt={}",
-    projectKey, task.getLastRunAt());
-
-// 触发调度
-log.info("Immediate schedule triggered by webhook, projectKey={}, nextRunAt={}",
-    projectKey, task.getNextRunAt());
-```
+- Webhook 接收：记录项目 key、分支、提交数量
+- 自动初始化：记录项目 key、优先级
+- 防抖跳过：记录项目 key、最近同步时间
+- 触发调度：记录项目 key、下次执行时间
 
 **验收标准**:
 - 监控指标正确采集

@@ -39,29 +39,16 @@
   - 参考 [PULL_SYNC_DESIGN.md - Pull 任务调度](../PULL_SYNC_DESIGN.md#流程-2-pull-任务调度)
 
 **核心方法**:
-```java
-@Component
-public class UnifiedSyncScheduler {
-    @Scheduled(cron = "${sync.scheduler.cron}")
-    public void scheduleTask() {
-        // 1. 判断当前时段（高峰/非高峰）
-        // 2. 获取可用并发槽位
-        // 3. 查询 waiting 状态任务
-        // 4. 按优先级排序
-        // 5. 更新状态: waiting → pending
-        // 6. 提交到执行器
-    }
-
-    // 判断高峰时段
-    boolean isPeakHours();
-
-    // 获取可用槽位
-    int getAvailableSlots();
-
-    // 查询待调度任务
-    List<SyncTask> queryPendingTasks(int limit);
-}
-```
+- `scheduleTask()` - 定时调度方法（通过 cron 触发）
+  1. 判断当前时段（高峰/非高峰）
+  2. 获取可用并发槽位
+  3. 查询 waiting 状态任务
+  4. 按优先级排序
+  5. 更新状态: waiting → pending
+  6. 提交到执行器
+- `isPeakHours()` - 判断当前是否为高峰时段
+- `getAvailableSlots()` - 获取可用的并发槽位数
+- `queryPendingTasks(limit)` - 查询待调度的任务列表
 
 **验收标准**:
 - 定时任务正常触发
@@ -92,48 +79,25 @@ public class UnifiedSyncScheduler {
 - 提交任务到 PullSyncExecutor
 
 **查询逻辑**:
-```java
-// 查询待调度的 Pull 任务
-SELECT * FROM sync_task
-WHERE task_type = 'pull'
-  AND task_status = 'waiting'
-  AND next_run_at <= NOW()
-  AND EXISTS (
-      SELECT 1 FROM pull_sync_config
-      WHERE sync_project_id = sync_task.sync_project_id
-      AND enabled = true
-  )
-  AND consecutive_failures < 5
-ORDER BY
-  CASE pull_sync_config.priority
-    WHEN 'critical' THEN 1
-    WHEN 'high' THEN 2
-    WHEN 'normal' THEN 3
-    WHEN 'low' THEN 4
-  END,
-  next_run_at ASC
-LIMIT ?;
-```
+- 查询条件：
+  - 任务类型为 `pull`
+  - 任务状态为 `waiting`
+  - `next_run_at` 已到期（<= 当前时间）
+  - 对应的 `pull_sync_config` 的 `enabled = true`
+  - 连续失败次数 `< 5`
+- 排序规则：
+  - 按优先级排序：critical > high > normal > low
+  - 相同优先级按 `next_run_at` 升序
+- 限制返回数量
 
 **next_run_at 计算**:
-```java
-// 成功后计算下次执行时间（按优先级）
-Instant calculateNextRunTime(Priority priority, Instant now) {
-    int intervalMinutes = switch (priority) {
-        case CRITICAL -> 10;
-        case HIGH -> 30;
-        case NORMAL -> 120;
-        case LOW -> 360;
-    };
-    return now.plusMinutes(intervalMinutes);
-}
-
-// 失败后计算重试时间（指数退避）
-Instant calculateRetryTime(int retryCount, Instant now) {
-    int delayMinutes = 5 * (int) Math.pow(2, retryCount);
-    return now.plusMinutes(delayMinutes);
-}
-```
+- `calculateNextRunTime()` - 成功后计算下次执行时间（按优先级）
+  - CRITICAL: 10 分钟
+  - HIGH: 30 分钟
+  - NORMAL: 120 分钟
+  - LOW: 360 分钟
+- `calculateRetryTime()` - 失败后计算重试时间（指数退避）
+  - 延迟时间 = 5 * 2^重试次数（分钟）
 
 **验收标准**:
 - 查询过滤条件正确
@@ -164,20 +128,16 @@ Instant calculateRetryTime(int retryCount, Instant now) {
 - 事件记录适配
 
 **适配要点**:
-```java
-@Scheduled(fixedDelayString = "${sync.push.poll-interval}")
-public void pollPushMirrorStatus() {
-    // 1. 查询所有 push 类型任务
-    // 2. 调用 GitLab API 获取 Mirror 状态
-    // 3. 对比状态变化
-    // 4. 更新 SYNC_TASK 字段:
-    //    - last_sync_status
-    //    - last_run_at
-    //    - source_commit_sha (from mirror API)
-    //    - error_message
-    // 5. 记录 SYNC_EVENT
-}
-```
+- `pollPushMirrorStatus()` - Push Mirror 轮询方法（定时触发）
+  1. 查询所有 `push` 类型任务
+  2. 调用 GitLab API 获取 Mirror 状态
+  3. 对比状态变化
+  4. 更新 SYNC_TASK 字段：
+     - `last_sync_status`
+     - `last_run_at`
+     - `source_commit_sha`（从 Mirror API 获取）
+     - `error_message`
+  5. 记录 SYNC_EVENT
 
 **验收标准**:
 - Push Mirror 轮询正常工作
@@ -206,36 +166,18 @@ public void pollPushMirrorStatus() {
 - 实现异常处理
 
 **核心实现**:
-```java
-@Component
-public class TaskExecutorService {
-    private final ThreadPoolTaskExecutor executor;
-
-    // 提交任务执行
-    public Future<Void> submitTask(SyncTask task) {
-        return executor.submit(() -> {
-            if (task.getTaskType() == TaskType.PULL) {
-                pullSyncExecutor.execute(task);
-            }
-            // Push 任务由轮询器处理，不需要执行
-        });
-    }
-
-    // 监控执行状态
-    public int getActiveTaskCount();
-    public int getAvailableThreads();
-}
-```
+- `submitTask(task)` - 提交任务到线程池执行
+  - 如果是 PULL 任务，调用 `pullSyncExecutor.execute()`
+  - Push 任务由轮询器处理，不需要执行
+  - 返回 Future 对象用于监控
+- `getActiveTaskCount()` - 获取当前活跃任务数
+- `getAvailableThreads()` - 获取可用线程数
 
 **线程池配置**:
-```yaml
-sync:
-  executor:
-    core-pool-size: 3
-    max-pool-size: 10
-    queue-capacity: 50
-    thread-name-prefix: "sync-exec-"
-```
+- `core-pool-size`: 核心线程数（3）
+- `max-pool-size`: 最大线程数（10）
+- `queue-capacity`: 队列容量（50）
+- `thread-name-prefix`: 线程名前缀（"sync-exec-"）
 
 **验收标准**:
 - 线程池正确配置
@@ -266,33 +208,21 @@ sync:
 - 实现告警机制
 
 **监控指标**:
-```java
-// 调度统计
-- scheduled_tasks_total
-- scheduled_tasks_by_type{type="push|pull"}
-- scheduled_tasks_by_priority{priority="critical|high|normal|low"}
-- active_sync_tasks
-- peak_hour_concurrent_limit
-- off_peak_concurrent_limit
-
-// 性能统计
-- schedule_duration_seconds
-- task_queue_size
-```
+- 调度统计：
+  - `scheduled_tasks_total` - 已调度任务总数
+  - `scheduled_tasks_by_type{type}` - 按类型分组（push/pull）
+  - `scheduled_tasks_by_priority{priority}` - 按优先级分组
+  - `active_sync_tasks` - 当前活跃任务数
+  - `peak_hour_concurrent_limit` - 高峰期并发限制
+  - `off_peak_concurrent_limit` - 非高峰期并发限制
+- 性能统计：
+  - `schedule_duration_seconds` - 调度耗时
+  - `task_queue_size` - 任务队列大小
 
 **日志设计**:
-```java
-// 调度开始
-log.info("Scheduler triggered, peak={}, availableSlots={}", isPeak, slots);
-
-// 任务调度
-log.debug("Task scheduled, projectKey={}, type={}, priority={}",
-    task.getProjectKey(), task.getTaskType(), config.getPriority());
-
-// 调度完成
-log.info("Scheduler completed, scheduled={}, skipped={}, duration={}ms",
-    scheduledCount, skippedCount, duration);
-```
+- 调度开始：记录是否高峰期、可用槽位数
+- 任务调度：记录项目 key、任务类型、优先级
+- 调度完成：记录已调度数量、跳过数量、耗时
 
 **验收标准**:
 - 监控指标正确采集
