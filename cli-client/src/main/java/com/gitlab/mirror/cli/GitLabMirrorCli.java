@@ -65,6 +65,15 @@ public class GitLabMirrorCli {
                 case "export":
                     new ExportCommand(apiClient).execute(commandArgs);
                     break;
+                case "pull":
+                    new PullSyncCommand(apiClient).execute(commandArgs);
+                    break;
+                case "task":
+                    new TaskCommand(apiClient).execute(commandArgs);
+                    break;
+                case "scheduler":
+                    new SchedulerCommand(apiClient).execute(commandArgs);
+                    break;
                 case "help":
                 case "--help":
                 case "-h":
@@ -106,6 +115,12 @@ public class GitLabMirrorCli {
         System.out.println("  sync <project>        Trigger push mirror sync for a project");
         System.out.println("  events                List events");
         System.out.println("  export                Export data");
+        System.out.println();
+        System.out.println(OutputFormatter.YELLOW + "Pull-Sync Commands:" + OutputFormatter.RESET);
+        System.out.println("  pull <subcommand>     Pull sync management");
+        System.out.println("  task <subcommand>     Task management");
+        System.out.println("  scheduler <subcommand> Scheduler management");
+        System.out.println();
         System.out.println("  help                  Show this help message");
         System.out.println("  version               Show version information");
         System.out.println();

@@ -148,6 +148,59 @@ public class ApiClient {
     }
 
     /**
+     * Simple GET request returning raw JSON string
+     */
+    public String get(String path) throws IOException, InterruptedException {
+        HttpRequest request = buildRequest(path)
+                .GET()
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() >= 400) {
+            throw new IOException("HTTP " + response.statusCode() + ": " + response.body());
+        }
+
+        return response.body();
+    }
+
+    /**
+     * Simple POST request returning raw JSON string
+     */
+    public String post(String path, String jsonBody) throws IOException, InterruptedException {
+        HttpRequest request = buildRequest(path)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() >= 400) {
+            throw new IOException("HTTP " + response.statusCode() + ": " + response.body());
+        }
+
+        return response.body();
+    }
+
+    /**
+     * Simple PUT request returning raw JSON string
+     */
+    public String put(String path, String jsonBody) throws IOException, InterruptedException {
+        HttpRequest request = buildRequest(path)
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() >= 400) {
+            throw new IOException("HTTP " + response.statusCode() + ": " + response.body());
+        }
+
+        return response.body();
+    }
+
+    /**
      * Create error response when parsing fails
      */
     @SuppressWarnings("unchecked")

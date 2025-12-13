@@ -216,4 +216,57 @@ public class OutputFormatter {
             System.out.println();
         }
     }
+
+    /**
+     * Print JSON response (pretty printed)
+     */
+    public static void printJson(String json) {
+        if (json == null || json.isEmpty()) {
+            printWarning("No data");
+            return;
+        }
+        // Simple pretty print by adding indentation
+        System.out.println(prettyPrintJson(json));
+    }
+
+    /**
+     * Simple JSON pretty printer
+     */
+    private static String prettyPrintJson(String json) {
+        StringBuilder result = new StringBuilder();
+        int indent = 0;
+        boolean inString = false;
+
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+
+            if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
+                inString = !inString;
+            }
+
+            if (!inString) {
+                if (c == '{' || c == '[') {
+                    result.append(c).append('\n');
+                    indent++;
+                    result.append("  ".repeat(indent));
+                } else if (c == '}' || c == ']') {
+                    result.append('\n');
+                    indent--;
+                    result.append("  ".repeat(indent));
+                    result.append(c);
+                } else if (c == ',') {
+                    result.append(c).append('\n');
+                    result.append("  ".repeat(indent));
+                } else if (c == ':') {
+                    result.append(c).append(' ');
+                } else if (!Character.isWhitespace(c)) {
+                    result.append(c);
+                }
+            } else {
+                result.append(c);
+            }
+        }
+
+        return result.toString();
+    }
 }
