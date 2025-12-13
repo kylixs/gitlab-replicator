@@ -5,6 +5,14 @@
 set -e  # Exit on error
 set -o pipefail  # Fail pipeline if any command fails
 
+# Disable git proxy for localhost/local network access
+# This prevents hang when git global config has proxy settings
+export GIT_CONFIG_COUNT=2
+export GIT_CONFIG_KEY_0=http.proxy
+export GIT_CONFIG_VALUE_0=""
+export GIT_CONFIG_KEY_1=https.proxy
+export GIT_CONFIG_VALUE_1=""
+
 # Function to log messages
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" >&2
