@@ -383,13 +383,15 @@ public class PullSyncExecutorService {
         task.setTargetCommitSha(targetSha);
         task.setLastSyncStatus("success");
         task.setLastRunAt(completedAt);
-        task.setErrorType(null);
-        task.setErrorMessage(null);
         task.setConsecutiveFailures(0);  // Reset failure count
 
         // Calculate next run time based on priority
         task.setNextRunAt(calculateNextRunTime(task));
         task.setUpdatedAt(LocalDateTime.now());
+
+        // Clear error fields on success
+        task.setErrorType("");
+        task.setErrorMessage("");
 
         syncTaskMapper.updateById(task);
     }
