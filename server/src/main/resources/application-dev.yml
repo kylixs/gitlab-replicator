@@ -27,16 +27,26 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
 
-# GitLab Mirror Configuration
+# GitLab Configuration
 gitlab:
+  source:
+    url: ${SOURCE_GITLAB_URL:http://localhost:8000}
+    token: ${SOURCE_GITLAB_TOKEN:glpat-QfaqawuLrzcPfJ3oEgiStG86MQp1OjEH.01.0w01363lq}
+  target:
+    url: ${TARGET_GITLAB_URL:http://localhost:9000}
+    token: ${TARGET_GITLAB_TOKEN:glpat-b2nrFAAy9q2SozZr3Dm0N286MQp1OjEH.01.0w0t2khzm}
+  api:
+    timeout: 30000
+    max-retries: 3
+    retry-delay: 1000
   mirror:
     source:
       url: ${SOURCE_GITLAB_URL:http://localhost:8000}
-      token: ${SOURCE_GITLAB_TOKEN}
+      token: ${SOURCE_GITLAB_TOKEN:glpat-QfaqawuLrzcPfJ3oEgiStG86MQp1OjEH.01.0w01363lq}
       timeout: 30
     target:
       url: ${TARGET_GITLAB_URL:http://localhost:9000}
-      token: ${TARGET_GITLAB_TOKEN}
+      token: ${TARGET_GITLAB_TOKEN:glpat-b2nrFAAy9q2SozZr3Dm0N286MQp1OjEH.01.0w0t2khzm}
       timeout: 30
     sync:
       enabled: true

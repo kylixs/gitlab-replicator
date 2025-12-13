@@ -39,6 +39,9 @@ class EventManagementServiceTest {
     @Mock
     private SyncEventMapper syncEventMapper;
 
+    @Mock
+    private com.gitlab.mirror.server.mapper.SyncProjectMapper syncProjectMapper;
+
     @InjectMocks
     private EventManagementService eventManagementService;
 
@@ -487,6 +490,146 @@ class EventManagementServiceTest {
         assertThat(result.get("sync_count")).isEqualTo(1);
         assertThat(result.get("total_pairs")).isEqualTo(1);
         assertThat(result.get("avg_delay_seconds")).isNotNull();
+    }
+
+    /**
+     * 测试获取单个项目路径
+     */
+    @Test
+    void testGetProjectKey_Success() {
+        // Given
+        Long syncProjectId = 100L;
+        com.gitlab.mirror.server.entity.SyncProject project = new com.gitlab.mirror.server.entity.SyncProject();
+        project.setId(syncProjectId);
+        project.setProjectKey("devops/gitlab-mirror");
+
+        when(syncProjectMapper.selectById(syncProjectId)).thenReturn(project);
+
+        // When
+        String result = eventManagementService.getProjectKey(syncProjectId);
+
+        // Then
+        assertThat(result).isEqualTo("devops/gitlab-mirror");
+        verify(syncProjectMapper).selectById(syncProjectId);
+    }
+
+    /**
+     * 测试获取项目路径 - 项目不存在
+     */
+    @Test
+    void testGetProjectKey_ProjectNotFound() {
+        // Given
+        Long syncProjectId = 999L;
+        when(syncProjectMapper.selectById(syncProjectId)).thenReturn(null);
+
+        // When
+        String result = eventManagementService.getProjectKey(syncProjectId);
+
+        // Then
+        assertThat(result).isNull();
+        verify(syncProjectMapper).selectById(syncProjectId);
+    }
+
+    /**
+     * 测试获取项目路径 - null ID
+     */
+    @Test
+    void testGetProjectKey_NullId() {
+        // When
+        String result = eventManagementService.getProjectKey(null);
+
+        // Then
+        assertThat(result).isNull();
+        verify(syncProjectMapper, never()).selectById(any());
+    }
+
+    /**
+     * 测试批量获取项目路径
+     */
+    @Test
+    void testGetProjectKeys_MultipleProjects() {
+        // Given
+        List<Long> projectIds = Arrays.asList(100L, 101L, 102L);
+
+        com.gitlab.mirror.server.entity.SyncProject project1 = new com.gitlab.mirror.server.entity.SyncProject();
+        project1.setId(100L);
+        project1.setProjectKey("devops/project1");
+
+        com.gitlab.mirror.server.entity.SyncProject project2 = new com.gitlab.mirror.server.entity.SyncProject();
+        project2.setId(101L);
+        project2.setProjectKey("devops/project2");
+
+        com.gitlab.mirror.server.entity.SyncProject project3 = new com.gitlab.mirror.server.entity.SyncProject();
+        project3.setId(102L);
+        project3.setProjectKey("devops/project3");
+
+        when(syncProjectMapper.selectById(100L)).thenReturn(project1);
+        when(syncProjectMapper.selectById(101L)).thenReturn(project2);
+        when(syncProjectMapper.selectById(102L)).thenReturn(project3);
+
+        // When
+        Map<Long, String> result = eventManagementService.getProjectKeys(projectIds);
+
+        // Then
+        assertThat(result).hasSize(3);
+        assertThat(result.get(100L)).isEqualTo("devops/project1");
+        assertThat(result.get(101L)).isEqualTo("devops/project2");
+        assertThat(result.get(102L)).isEqualTo("devops/project3");
+
+        verify(syncProjectMapper, times(3)).selectById(any());
+    }
+
+    /**
+     * 测试批量获取项目路径 - 包含null和不存在的项目
+     */
+    @Test
+    void testGetProjectKeys_WithNullAndMissingProjects() {
+        // Given
+        List<Long> projectIds = Arrays.asList(100L, null, 999L);
+
+        com.gitlab.mirror.server.entity.SyncProject project1 = new com.gitlab.mirror.server.entity.SyncProject();
+        project1.setId(100L);
+        project1.setProjectKey("devops/project1");
+
+        when(syncProjectMapper.selectById(100L)).thenReturn(project1);
+        when(syncProjectMapper.selectById(999L)).thenReturn(null);
+
+        // When
+        Map<Long, String> result = eventManagementService.getProjectKeys(projectIds);
+
+        // Then
+        assertThat(result).hasSize(1);
+        assertThat(result.get(100L)).isEqualTo("devops/project1");
+        assertThat(result.get(999L)).isNull();
+
+        // null ID should not trigger selectById
+        verify(syncProjectMapper, times(2)).selectById(any());
+    }
+
+    /**
+     * 测试批量获取项目路径 - 空列表
+     */
+    @Test
+    void testGetProjectKeys_EmptyList() {
+        // When
+        Map<Long, String> result = eventManagementService.getProjectKeys(new ArrayList<>());
+
+        // Then
+        assertThat(result).isEmpty();
+        verify(syncProjectMapper, never()).selectById(any());
+    }
+
+    /**
+     * 测试批量获取项目路径 - null列表
+     */
+    @Test
+    void testGetProjectKeys_NullList() {
+        // When
+        Map<Long, String> result = eventManagementService.getProjectKeys(null);
+
+        // Then
+        assertThat(result).isEmpty();
+        verify(syncProjectMapper, never()).selectById(any());
     }
 
     // Helper methods
