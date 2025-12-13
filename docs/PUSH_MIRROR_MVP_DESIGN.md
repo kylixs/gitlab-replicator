@@ -66,12 +66,13 @@ erDiagram
     SYNC_PROJECT ||--|| SOURCE_PROJECT_INFO : "关联源项目信息"
     SYNC_PROJECT ||--|| TARGET_PROJECT_INFO : "关联目标项目信息"
     SYNC_PROJECT ||--o| PUSH_MIRROR_CONFIG : "Push Mirror配置(可选)"
+    SYNC_PROJECT ||--o{ SYNC_TASK : "产生同步任务"
     SYNC_PROJECT ||--o{ SYNC_EVENT : "产生事件"
 
     SYNC_PROJECT {
         int id PK
         string project_key UK "项目唯一标识(源路径)"
-        string sync_method "同步方式: push_mirror/pull_mirror/clone_push"
+        string sync_method "同步方式: push_mirror/pull_sync"
         string sync_status "同步状态: pending/target_created/mirror_configured/active/failed"
         boolean enabled "是否启用同步"
         string error_message "错误信息"
@@ -90,6 +91,7 @@ erDiagram
         string visibility "可见性: private/internal/public"
         boolean archived "是否归档"
         boolean empty_repo "是否空仓库"
+        bigint repository_size "仓库大小(字节)"
         int star_count "星标数"
         int fork_count "Fork数"
         timestamp last_activity_at "最后活动时间"
@@ -118,11 +120,25 @@ erDiagram
         int sync_project_id FK "关联同步项目(唯一)"
         int gitlab_mirror_id "GitLab Remote Mirror ID"
         string mirror_url "镜像URL(不含token)"
-        string last_update_status "最后更新状态: finished/failed/started/pending"
-        timestamp last_update_at "最后更新时间"
-        timestamp last_successful_update_at "最后成功更新时间"
-        int consecutive_failures "连续失败次数"
+        boolean enabled "是否启用轮询"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    SYNC_TASK {
+        int id PK
+        int sync_project_id FK "关联项目"
+        string task_type "任务类型: push_mirror_poll/pull_sync"
+        string task_status "任务状态: pending/running/success/failed/skipped"
+        string trigger_source "触发来源: scheduled/manual/retry"
+        timestamp scheduled_at "调度时间"
+        timestamp started_at "开始时间"
+        timestamp completed_at "完成时间"
+        int duration_seconds "执行耗时"
+        string mirror_update_status "Mirror状态: finished/failed/started"
+        string error_type "错误类型"
         string error_message "错误信息"
+        json task_data "任务详细数据"
         timestamp created_at
         timestamp updated_at
     }
@@ -152,8 +168,7 @@ erDiagram
 - **project_key**: 项目唯一标识（源项目路径，如 `group1/project-a`）
 - **sync_method**: 同步方式标识
   - `push_mirror`: Push Mirror 方式（MVP）
-  - `pull_mirror`: Pull Mirror 方式（未来）
-  - `clone_push`: Clone & Push 方式（未来）
+  - `pull_sync`: Pull 同步方式（Clone & Push）
 - **sync_status**: 同步流程状态
   - `pending`: 待处理（刚发现）
   - `target_created`: 目标项目已创建
@@ -179,6 +194,7 @@ erDiagram
 - **path_with_namespace**: 完整路径
 - **group_path**: 分组路径
 - **archived/empty_repo**: 用于过滤决策
+- **repository_size**: 仓库大小（字节，来自 GitLab API statistics.repository_size）
 - **last_activity_at**: 判断项目活跃度
 - **synced_at**: 信息最后拉取时间
 
@@ -219,26 +235,46 @@ erDiagram
 - **sync_project_id**: 关联的同步项目（唯一外键）
 - **gitlab_mirror_id**: GitLab Remote Mirror ID（API 返回）
 - **mirror_url**: 镜像 URL（不含 token）
-- **last_update_status**: Mirror 最后更新状态（finished/failed/started/pending）
-- **last_update_at**: 最后更新时间
-- **last_successful_update_at**: 最后成功更新时间
-- **consecutive_failures**: 连续失败次数（用于告警）
-- **error_message**: Push Mirror 特定的错误信息
+- **enabled**: 是否启用状态轮询
 
 **职责**：
-- 存储 Push Mirror 特定配置
-- 记录 Mirror 同步状态和历史
+- 存储 Push Mirror 静态配置（mirror_id, mirror_url 等）
+- **不包含动态状态**（last_update_status, error_message 等）
+- 动态状态存储在 SYNC_TASK 表中
 - 与 SYNC_PROJECT 1:1 关系
 - 隔离 Push Mirror 特定字段
 
 **未来扩展**：
-- 可新增 `PULL_MIRROR_CONFIG` 表（Pull Mirror 配置）
-- 可新增 `CLONE_PUSH_CONFIG` 表（Clone & Push 配置）
+- 可新增 `PULL_SYNC_CONFIG` 表（Pull 同步配置）
 - 每种同步方式有自己的配置表
 
 ---
 
-### 5. **SYNC_EVENT（同步事件表）**
+### 5. **SYNC_TASK（统一任务表）**
+**任务表**，统一记录 Push Mirror 轮询和 Pull 同步任务
+
+**关键字段**：
+- **task_type**: 任务类型
+  - `push_mirror_poll`: Push Mirror 状态轮询
+  - `pull_sync`: Pull 同步任务（未来扩展）
+- **task_status**: 任务状态（pending/running/success/failed/skipped）
+- **trigger_source**: 触发来源（scheduled/manual/retry）
+- **mirror_update_status**: Mirror 状态（finished/failed/started）- Push Mirror 专用
+
+**职责**：
+- 记录每次轮询或同步任务的执行情况
+- 存储动态状态信息（last_update_status, error_message 等）
+- Push 和 Pull 任务统一管理，便于查询对比
+- 支持任务重试和错误追踪
+
+**设计优势**：
+- **统一视图**：Push 和 Pull 任务在同一表，方便对比
+- **历史追踪**：每次执行都有独立记录
+- **状态分离**：配置表只存静态配置，任务表存动态状态
+
+---
+
+### 6. **SYNC_EVENT（同步事件表）**
 **事件表**，记录所有同步相关事件
 
 **事件类型**：
@@ -337,18 +373,20 @@ graph TD
 ```mermaid
 graph TD
     A[定时轮询任务] --> B[查询所有已配置的 Mirror]
-    B --> C[批量调用 GitLab API 获取 Mirror 状态]
-    C --> D{对比数据库状态}
-    D -->|状态变化| E[记录同步事件]
-    D -->|无变化| F[跳过]
-    E --> G[更新 Mirror 状态]
-    F --> H{还有 Mirror?}
-    G --> H
-    H -->|是| C
-    H -->|否| I[完成本轮轮询]
+    B --> C[创建 SYNC_TASK<br/>task_type=push_mirror_poll<br/>status=running]
+    C --> D[批量调用 GitLab API<br/>获取 Mirror 状态]
+    D --> E{对比上次状态}
+    E -->|状态变化| F[更新任务<br/>mirror_update_status<br/>status=success]
+    E -->|无变化| G[更新任务<br/>status=skipped]
+    F --> H[记录同步事件]
+    G --> I{还有 Mirror?}
+    H --> I
+    I -->|是| C
+    I -->|否| J[完成本轮轮询]
 
-    style C fill:#87CEEB
-    style E fill:#90EE90
+    style D fill:#87CEEB
+    style F fill:#90EE90
+    style G fill:#FFD700
 ```
 
 **说明**：
