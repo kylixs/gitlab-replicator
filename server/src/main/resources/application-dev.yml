@@ -60,7 +60,7 @@ gitlab:
       exclude-archived: true
       exclude-empty: true
       # Default sync method: push_mirror or pull_sync
-      default-sync-method: push_mirror
+      default-sync-method: pull_sync
       # Sync method configurations by group path (optional)
       # sync-methods:
       #   - group-path: "critical/*"
