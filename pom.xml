@@ -26,7 +26,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!-- Spring Boot -->
-        <spring-boot.version>3.2.1</spring-boot.version>
+        <spring-boot.version>3.1.7</spring-boot.version>
 
         <!-- Database -->
         <mybatis-plus.version>3.5.6</mybatis-plus.version>

@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import org.apache.ibatis.reflection.MetaObject;
-import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -13,11 +12,13 @@ import java.time.LocalDateTime;
 
 /**
  * MyBatis-Plus Configuration
+ * <p>
+ * Note: Mapper scanning is done via @Mapper annotation on each mapper interface
+ * to avoid compatibility issues with Spring Boot 3.2+
  *
  * @author GitLab Mirror Team
  */
 @Configuration
-@MapperScan(basePackages = "com.gitlab.mirror.server.mapper")
 public class MybatisPlusConfig {
 
     /**
