@@ -28,6 +28,9 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 # GitLab Configuration
+# Note: Use gitlab-source.local and gitlab-target.local for browser access from host
+# Services running on host use localhost for API access
+# Mirror URL uses host.docker.internal so source GitLab container can reach target
 gitlab:
   source:
     url: ${SOURCE_GITLAB_URL:http://localhost:8000}
@@ -35,6 +38,8 @@ gitlab:
   target:
     url: ${TARGET_GITLAB_URL:http://localhost:9000}
     token: ${TARGET_GITLAB_TOKEN:glpat-b2nrFAAy9q2SozZr3Dm0N286MQp1OjEH.01.0w0t2khzm}
+    # Mirror URL for container-to-container access (source GitLab -> target GitLab)
+    mirror-url: ${TARGET_GITLAB_MIRROR_URL:http://host.docker.internal:9000}
   api:
     timeout: 30000
     max-retries: 3
@@ -47,6 +52,8 @@ gitlab:
     target:
       url: ${TARGET_GITLAB_URL:http://localhost:9000}
       token: ${TARGET_GITLAB_TOKEN:glpat-b2nrFAAy9q2SozZr3Dm0N286MQp1OjEH.01.0w0t2khzm}
+      # Mirror URL for container-to-container access (source GitLab -> target GitLab)
+      mirror-url: ${TARGET_GITLAB_MIRROR_URL:http://host.docker.internal:9000}
       timeout: 30
     sync:
       enabled: true

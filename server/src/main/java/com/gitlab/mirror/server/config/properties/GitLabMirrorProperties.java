@@ -58,6 +58,12 @@ public class GitLabMirrorProperties {
          * Connection timeout in seconds
          */
         private Integer timeout = 30;
+
+        /**
+         * GitLab Mirror URL (for push mirror, accessible from source GitLab container)
+         * If not set, falls back to url
+         */
+        private String mirrorUrl;
     }
 
     /**

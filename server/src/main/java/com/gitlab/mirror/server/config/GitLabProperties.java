@@ -32,7 +32,7 @@ public class GitLabProperties {
     @Data
     public static class GitLabInstance {
         /**
-         * GitLab URL
+         * GitLab URL (for API access from application)
          */
         private String url;
 
@@ -40,6 +40,12 @@ public class GitLabProperties {
          * GitLab access token
          */
         private String token;
+
+        /**
+         * GitLab Mirror URL (for push mirror, accessible from source GitLab container)
+         * If not set, falls back to url
+         */
+        private String mirrorUrl;
     }
 
     @Data

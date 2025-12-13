@@ -74,6 +74,9 @@ class PushMirrorManagementServiceTest {
     @Mock
     private GitLabMirrorProperties.SyncConfig syncConfig;
 
+    @Mock
+    private TargetProjectManagementService targetProjectManagementService;
+
     @InjectMocks
     private PushMirrorManagementService pushMirrorManagementService;
 
@@ -501,6 +504,143 @@ class PushMirrorManagementServiceTest {
         // Then: 应该跳过轮询
         verify(pushMirrorConfigMapper, never()).selectList(any());
         verify(sourceGitLabApiClient, never()).getMirror(any(), any());
+    }
+
+    /**
+     * 测试状态轮询 - 自动创建缺失的目标项目
+     */
+    @Test
+    void testPollMirrorStatus_AutoCreateTargetProjectOnNotFoundError() {
+        // Given: Mirror配置存在，但目标项目未创建
+        PushMirrorConfig config = new PushMirrorConfig();
+        config.setId(1L);
+        config.setSyncProjectId(100L);
+        config.setGitlabMirrorId(3001L);
+        config.setLastUpdateStatus("failed");
+        config.setConsecutiveFailures(1);
+
+        when(pushMirrorConfigMapper.selectBySyncProjectId(100L))
+                .thenReturn(config);
+        when(sourceProjectInfoMapper.selectOne(any(QueryWrapper.class)))
+                .thenReturn(sourceProjectInfo);
+
+        // Mock: 目标项目信息存在但状态不是CREATED
+        TargetProjectInfo targetInfo = new TargetProjectInfo();
+        targetInfo.setId(1L);
+        targetInfo.setSyncProjectId(100L);
+        targetInfo.setStatus(TargetProjectInfo.Status.NOT_EXIST);
+        targetInfo.setPathWithNamespace("group1/project1");
+
+        when(targetProjectInfoMapper.selectOne(any(QueryWrapper.class)))
+                .thenReturn(targetInfo);
+
+        // Mock: Mirror返回"not found"错误
+        remoteMirror.setUpdateStatus("failed");
+        remoteMirror.setLastError("remote: The project you were looking for could not be found or you don't have permission to view it.\n" +
+                "fatal: repository 'http://host.docker.internal:9000/devops/gitlab-mirror.git/' not found");
+        when(sourceGitLabApiClient.getMirror(1001L, 3001L))
+                .thenReturn(remoteMirror);
+
+        // Mock: 自动创建目标项目成功
+        TargetProjectInfo createdTarget = new TargetProjectInfo();
+        createdTarget.setId(2L);
+        createdTarget.setSyncProjectId(100L);
+        createdTarget.setStatus(TargetProjectInfo.Status.CREATED);
+        createdTarget.setGitlabProjectId(2001L);
+        when(targetProjectManagementService.createTargetProject(100L)).thenReturn(createdTarget);
+
+        // Mock: 触发同步成功
+        doNothing().when(sourceGitLabApiClient).triggerMirrorSync(1001L, 3001L);
+
+        // When: 轮询状态
+        boolean statusChanged = pushMirrorManagementService.pollMirrorStatus(100L);
+
+        // Then: 状态未变化（因为镜像仍然处于failed状态）
+        assertThat(statusChanged).isFalse();
+
+        // 验证目标项目被自动创建
+        verify(targetProjectManagementService).createTargetProject(100L);
+
+        // 验证同步被触发
+        verify(sourceGitLabApiClient).triggerMirrorSync(1001L, 3001L);
+
+        // 验证配置被更新
+        ArgumentCaptor<PushMirrorConfig> configCaptor = ArgumentCaptor.forClass(PushMirrorConfig.class);
+        verify(pushMirrorConfigMapper).updateById(configCaptor.capture());
+        PushMirrorConfig updatedConfig = configCaptor.getValue();
+        assertThat(updatedConfig.getLastUpdateStatus()).isEqualTo("failed");
+        assertThat(updatedConfig.getErrorMessage()).contains("not found");
+
+        // 验证成功事件被记录
+        ArgumentCaptor<SyncEvent> eventCaptor = ArgumentCaptor.forClass(SyncEvent.class);
+        verify(syncEventMapper, atLeastOnce()).insert(eventCaptor.capture());
+        List<SyncEvent> events = eventCaptor.getAllValues();
+
+        // 应该有一个target_project_created事件
+        boolean hasTargetCreatedEvent = events.stream()
+                .anyMatch(event -> "target_project_created".equals(event.getEventType()));
+        assertThat(hasTargetCreatedEvent).isTrue();
+    }
+
+    /**
+     * 测试状态轮询 - 自动创建目标项目失败时记录错误
+     */
+    @Test
+    void testPollMirrorStatus_AutoCreateTargetProjectFailure() {
+        // Given: Mirror配置存在
+        PushMirrorConfig config = new PushMirrorConfig();
+        config.setId(1L);
+        config.setSyncProjectId(100L);
+        config.setGitlabMirrorId(3001L);
+        config.setLastUpdateStatus("failed");
+        config.setConsecutiveFailures(1);
+
+        when(pushMirrorConfigMapper.selectBySyncProjectId(100L))
+                .thenReturn(config);
+        when(sourceProjectInfoMapper.selectOne(any(QueryWrapper.class)))
+                .thenReturn(sourceProjectInfo);
+
+        // Mock: 目标项目信息存在但状态不是CREATED
+        TargetProjectInfo targetInfo = new TargetProjectInfo();
+        targetInfo.setId(1L);
+        targetInfo.setSyncProjectId(100L);
+        targetInfo.setStatus(TargetProjectInfo.Status.NOT_EXIST);
+        targetInfo.setPathWithNamespace("group1/project1");
+
+        when(targetProjectInfoMapper.selectOne(any(QueryWrapper.class)))
+                .thenReturn(targetInfo);
+
+        // Mock: Mirror返回"not found"错误
+        remoteMirror.setUpdateStatus("failed");
+        remoteMirror.setLastError("remote: The project you were looking for could not be found");
+        when(sourceGitLabApiClient.getMirror(1001L, 3001L))
+                .thenReturn(remoteMirror);
+
+        // Mock: 自动创建目标项目失败
+        doThrow(new RuntimeException("Target GitLab API error"))
+                .when(targetProjectManagementService).createTargetProject(100L);
+
+        // When: 轮询状态
+        boolean statusChanged = pushMirrorManagementService.pollMirrorStatus(100L);
+
+        // Then: 状态未变化（因为镜像仍然处于failed状态）
+        assertThat(statusChanged).isFalse();
+
+        // 验证尝试创建目标项目
+        verify(targetProjectManagementService).createTargetProject(100L);
+
+        // 验证不应该触发同步（因为创建失败）
+        verify(sourceGitLabApiClient, never()).triggerMirrorSync(anyLong(), anyLong());
+
+        // 验证失败事件被记录
+        ArgumentCaptor<SyncEvent> eventCaptor = ArgumentCaptor.forClass(SyncEvent.class);
+        verify(syncEventMapper, atLeastOnce()).insert(eventCaptor.capture());
+        List<SyncEvent> events = eventCaptor.getAllValues();
+
+        // 应该有一个target_project_create_failed事件
+        boolean hasFailureEvent = events.stream()
+                .anyMatch(event -> "target_project_create_failed".equals(event.getEventType()));
+        assertThat(hasFailureEvent).isTrue();
     }
 
     // Helper methods

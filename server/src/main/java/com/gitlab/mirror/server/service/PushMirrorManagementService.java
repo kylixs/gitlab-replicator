@@ -49,6 +49,7 @@ public class PushMirrorManagementService {
     private final PushMirrorConfigMapper pushMirrorConfigMapper;
     private final SyncEventMapper syncEventMapper;
     private final GitLabMirrorProperties properties;
+    private final TargetProjectManagementService targetProjectManagementService;
     private final ExecutorService executorService;
 
     public PushMirrorManagementService(
@@ -58,7 +59,8 @@ public class PushMirrorManagementService {
             TargetProjectInfoMapper targetProjectInfoMapper,
             PushMirrorConfigMapper pushMirrorConfigMapper,
             SyncEventMapper syncEventMapper,
-            GitLabMirrorProperties properties) {
+            GitLabMirrorProperties properties,
+            TargetProjectManagementService targetProjectManagementService) {
         this.sourceGitLabApiClient = sourceGitLabApiClient;
         this.targetGitLabApiClient = targetGitLabApiClient;
         this.sourceProjectInfoMapper = sourceProjectInfoMapper;
@@ -66,6 +68,7 @@ public class PushMirrorManagementService {
         this.pushMirrorConfigMapper = pushMirrorConfigMapper;
         this.syncEventMapper = syncEventMapper;
         this.properties = properties;
+        this.targetProjectManagementService = targetProjectManagementService;
         this.executorService = Executors.newFixedThreadPool(BATCH_SIZE);
     }
 
@@ -272,19 +275,57 @@ public class PushMirrorManagementService {
                 config.setLastSuccessfulUpdateAt(mirror.getLastSuccessfulUpdateAt().toLocalDateTime());
             }
 
+            // 检查错误信息，判断是否需要创建目标项目
+            String errorMessage = mirror.getLastError();
+            boolean needsTargetProject = false;
+
+            if (errorMessage != null && (
+                errorMessage.contains("not found") ||
+                errorMessage.contains("could not be found") ||
+                errorMessage.contains("you don't have permission"))) {
+
+                log.warn("Mirror sync failed due to missing target project: syncProjectId={}", syncProjectId);
+                needsTargetProject = true;
+
+                // 检查目标项目状态
+                TargetProjectInfo targetInfo = getTargetProjectInfo(syncProjectId);
+                if (targetInfo != null && !TargetProjectInfo.Status.CREATED.equals(targetInfo.getStatus())) {
+                    log.info("Target project exists but status is {}, will attempt to create", targetInfo.getStatus());
+                    try {
+                        // 尝试创建目标项目
+                        targetProjectManagementService.createTargetProject(syncProjectId);
+                        log.info("Successfully created target project for syncProjectId={}", syncProjectId);
+
+                        // 创建成功后触发一次同步
+                        sourceGitLabApiClient.triggerMirrorSync(
+                            sourceInfo.getGitlabProjectId(),
+                            config.getGitlabMirrorId()
+                        );
+                        log.info("Triggered mirror sync after creating target project");
+
+                        recordMirrorEvent(syncProjectId, "target_project_created", "success",
+                            Map.of("action", "auto_created_on_mirror_error"));
+                    } catch (Exception ex) {
+                        log.error("Failed to auto-create target project for syncProjectId={}", syncProjectId, ex);
+                        recordMirrorEvent(syncProjectId, "target_project_create_failed", "error",
+                            Map.of("error", ex.getMessage()));
+                    }
+                }
+            }
+
             // 更新连续失败计数和错误信息
             if (PushMirrorConfig.UpdateStatus.FAILED.equals(newStatus)) {
                 config.setConsecutiveFailures(
                         config.getConsecutiveFailures() != null ? config.getConsecutiveFailures() + 1 : 1
                 );
-                config.setErrorMessage(mirror.getLastError());
+                config.setErrorMessage(errorMessage);
             } else if (PushMirrorConfig.UpdateStatus.FINISHED.equals(newStatus)) {
                 config.setConsecutiveFailures(0);
                 config.setErrorMessage(null);
             } else {
                 // 对于其他状态（to_retry, started等），也保存错误信息（如果有）
-                if (mirror.getLastError() != null && !mirror.getLastError().isEmpty()) {
-                    config.setErrorMessage(mirror.getLastError());
+                if (errorMessage != null && !errorMessage.isEmpty()) {
+                    config.setErrorMessage(errorMessage);
                 }
             }
 
@@ -337,7 +378,11 @@ public class PushMirrorManagementService {
      * 构建Mirror URL（不包含Token，用于数据库存储）
      */
     private String buildMirrorUrl(String pathWithNamespace) {
-        String targetUrl = properties.getTarget().getUrl();
+        // Use mirrorUrl if configured, otherwise fall back to url
+        String targetUrl = properties.getTarget().getMirrorUrl() != null
+            ? properties.getTarget().getMirrorUrl()
+            : properties.getTarget().getUrl();
+
         // Remove trailing slash if present
         if (targetUrl.endsWith("/")) {
             targetUrl = targetUrl.substring(0, targetUrl.length() - 1);
@@ -349,7 +394,10 @@ public class PushMirrorManagementService {
      * 构建Mirror URL（包含Token，用于API调用）
      */
     private String buildMirrorUrlWithToken(String pathWithNamespace) {
-        String targetUrl = properties.getTarget().getUrl();
+        // Use mirrorUrl if configured, otherwise fall back to url
+        String targetUrl = properties.getTarget().getMirrorUrl() != null
+            ? properties.getTarget().getMirrorUrl()
+            : properties.getTarget().getUrl();
         String token = properties.getTarget().getToken();
 
         // Remove trailing slash
