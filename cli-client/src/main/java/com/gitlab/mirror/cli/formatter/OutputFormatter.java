@@ -69,16 +69,16 @@ public class OutputFormatter {
             return;
         }
 
-        // Calculate column widths
+        // Calculate column widths (excluding ANSI color codes)
         int[] widths = new int[headers.length];
         for (int i = 0; i < headers.length; i++) {
-            widths[i] = headers[i].length();
+            widths[i] = getVisibleLength(headers[i]);
         }
 
         for (String[] row : rows) {
             for (int i = 0; i < Math.min(row.length, widths.length); i++) {
                 if (row[i] != null) {
-                    widths[i] = Math.max(widths[i], row[i].length());
+                    widths[i] = Math.max(widths[i], getVisibleLength(row[i]));
                 }
             }
         }
@@ -122,7 +122,11 @@ public class OutputFormatter {
         System.out.print("│");
         for (int i = 0; i < widths.length; i++) {
             String cell = i < row.length && row[i] != null ? row[i] : "";
-            String formatted = String.format(" %-" + widths[i] + "s ", cell);
+            // Calculate padding needed (accounting for ANSI codes)
+            int visibleLength = getVisibleLength(cell);
+            int paddingNeeded = widths[i] - visibleLength;
+            String formatted = " " + cell + " ".repeat(paddingNeeded + 1);
+
             if (isHeader) {
                 System.out.print(BOLD + formatted + RESET);
             } else {
@@ -131,6 +135,18 @@ public class OutputFormatter {
             System.out.print("│");
         }
         System.out.println();
+    }
+
+    /**
+     * Get visible length of string (excluding ANSI color codes)
+     */
+    private static int getVisibleLength(String str) {
+        if (str == null) {
+            return 0;
+        }
+        // Remove ANSI escape codes to get actual visible length
+        String withoutAnsi = str.replaceAll("\u001B\\[[0-9;]*[mGKH]", "");
+        return withoutAnsi.length();
     }
 
     /**

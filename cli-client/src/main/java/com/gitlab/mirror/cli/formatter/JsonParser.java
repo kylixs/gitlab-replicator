@@ -70,6 +70,20 @@ public class JsonParser {
     }
 
     /**
+     * Get double value from JSON path
+     */
+    public static double getDouble(JsonNode node, String... path) {
+        JsonNode current = node;
+        for (String key : path) {
+            if (current == null || current.isNull()) {
+                return 0.0;
+            }
+            current = current.get(key);
+        }
+        return current != null && !current.isNull() ? current.asDouble() : 0.0;
+    }
+
+    /**
      * Get boolean value from JSON path
      */
     public static boolean getBoolean(JsonNode node, String... path) {

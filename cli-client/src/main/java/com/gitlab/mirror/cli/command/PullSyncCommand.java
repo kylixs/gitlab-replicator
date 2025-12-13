@@ -1,7 +1,12 @@
 package com.gitlab.mirror.cli.command;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.gitlab.mirror.cli.client.ApiClient;
+import com.gitlab.mirror.cli.formatter.JsonParser;
 import com.gitlab.mirror.cli.formatter.OutputFormatter;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Pull Sync Management Command
@@ -57,6 +62,7 @@ public class PullSyncCommand {
         Boolean enabled = null;
         int page = 1;
         int size = 20;
+        String format = "table"; // Default format
 
         // Parse options
         for (int i = 1; i < args.length; i++) {
@@ -70,6 +76,8 @@ public class PullSyncCommand {
                 page = Integer.parseInt(args[i].substring("--page=".length()));
             } else if (args[i].startsWith("--size=")) {
                 size = Integer.parseInt(args[i].substring("--size=".length()));
+            } else if (args[i].startsWith("--format=")) {
+                format = args[i].substring("--format=".length());
             }
         }
 
@@ -82,7 +90,12 @@ public class PullSyncCommand {
         }
 
         String response = apiClient.get(url.toString());
-        OutputFormatter.printJson(response);
+
+        if ("json".equalsIgnoreCase(format)) {
+            OutputFormatter.printJson(response);
+        } else {
+            printConfigTable(response);
+        }
     }
 
     private void showConfig(String[] args) throws Exception {
@@ -152,6 +165,68 @@ public class PullSyncCommand {
         OutputFormatter.printJson(response);
     }
 
+    private void printConfigTable(String json) {
+        JsonNode root = JsonParser.parse(json);
+
+        if (!JsonParser.getBoolean(root, "success")) {
+            OutputFormatter.printError("Request failed: " + JsonParser.getString(root, "message"));
+            return;
+        }
+
+        List<JsonNode> items = JsonParser.getArray(root, "data", "items");
+        if (items.isEmpty()) {
+            OutputFormatter.printWarning("No pull sync configurations found");
+            return;
+        }
+
+        // Prepare table data
+        String[] headers = {"ID", "Project", "Priority", "Sync Interval", "Last Sync", "Status", "Enabled"};
+        List<String[]> rows = new ArrayList<>();
+
+        for (JsonNode item : items) {
+            String[] row = {
+                String.valueOf(JsonParser.getInt(item, "syncProjectId")),
+                OutputFormatter.truncate(JsonParser.getString(item, "projectKey"), 30),
+                JsonParser.formatPriority(JsonParser.getString(item, "priority")),
+                formatInterval(JsonParser.getInt(item, "syncIntervalMinutes")),
+                formatLastSync(JsonParser.getString(item, "lastSyncAt")),
+                OutputFormatter.formatStatus(JsonParser.getString(item, "syncStatus")),
+                JsonParser.formatEnabled(JsonParser.getBoolean(item, "enabled"))
+            };
+            rows.add(row);
+        }
+
+        // Print summary
+        long total = JsonParser.getLong(root, "data", "total");
+        int currentPage = JsonParser.getInt(root, "data", "page");
+        OutputFormatter.printInfo(String.format("Pull Sync Configurations (Total: %d, Page: %d)", total, currentPage));
+        System.out.println();
+
+        // Print table
+        OutputFormatter.printTable(headers, rows);
+    }
+
+    private String formatInterval(int minutes) {
+        if (minutes < 60) {
+            return minutes + "m";
+        } else if (minutes < 1440) {
+            return (minutes / 60) + "h";
+        } else {
+            return (minutes / 1440) + "d";
+        }
+    }
+
+    private String formatLastSync(String lastSyncAt) {
+        if (lastSyncAt == null || lastSyncAt.equals("-")) {
+            return "-";
+        }
+        // Extract date and time
+        if (lastSyncAt.length() > 16) {
+            return lastSyncAt.substring(0, 16).replace("T", " ");
+        }
+        return lastSyncAt;
+    }
+
     private void printUsage() {
         System.out.println(OutputFormatter.CYAN + "Pull Sync Management" + OutputFormatter.RESET);
         System.out.println();
@@ -171,6 +246,7 @@ public class PullSyncCommand {
         System.out.println("  --disabled            Filter disabled only");
         System.out.println("  --page=<n>            Page number (default: 1)");
         System.out.println("  --size=<n>            Page size (default: 20)");
+        System.out.println("  --format=<fmt>        Output format (table|json, default: table)");
         System.out.println();
         System.out.println(OutputFormatter.YELLOW + "Examples:" + OutputFormatter.RESET);
         System.out.println("  gitlab-mirror pull list --priority=high --enabled");
