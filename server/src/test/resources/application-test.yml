@@ -14,15 +14,37 @@ mybatis-plus:
     db-config:
       id-type: auto
 
-# GitLab Mirror Configuration
+# GitLab API Configuration
 gitlab:
+  source:
+    url: http://localhost:8000
+    token: glpat-QfaqawuLrzcPfJ3oEgiStG86MQp1OjEH.01.0w01363lq
+  target:
+    url: http://localhost:9000
+    token: glpat-b2nrFAAy9q2SozZr3Dm0N286MQp1OjEH.01.0w0t2khzm
+  api:
+    timeout: 30000
+    max-retries: 3
+    retry-delay: 1000
+  # GitLab Mirror Configuration (for old properties class)
   mirror:
     source:
       url: http://localhost:8000
-      token: test-source-token
+      token: glpat-QfaqawuLrzcPfJ3oEgiStG86MQp1OjEH.01.0w01363lq
+      timeout: 30
     target:
       url: http://localhost:9000
-      token: test-target-token
+      token: glpat-b2nrFAAy9q2SozZr3Dm0N286MQp1OjEH.01.0w0t2khzm
+      timeout: 30
+    sync:
+      enabled: true
+      exclude-archived: true
+      exclude-empty: true
+    performance:
+      project-discovery-concurrency: 5
+      mirror-setup-concurrency: 10
+      mirror-polling-batch-size: 50
+      api-rate-limit-delay: 100
 
 logging:
   level:

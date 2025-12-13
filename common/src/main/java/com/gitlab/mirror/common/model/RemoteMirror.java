@@ -3,7 +3,7 @@ package com.gitlab.mirror.common.model;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 /**
  * GitLab Remote Mirror Model
@@ -23,13 +23,13 @@ public class RemoteMirror {
     private String updateStatus;
 
     @JsonProperty("last_update_at")
-    private LocalDateTime lastUpdateAt;
+    private OffsetDateTime lastUpdateAt;
 
     @JsonProperty("last_update_started_at")
-    private LocalDateTime lastUpdateStartedAt;
+    private OffsetDateTime lastUpdateStartedAt;
 
     @JsonProperty("last_successful_update_at")
-    private LocalDateTime lastSuccessfulUpdateAt;
+    private OffsetDateTime lastSuccessfulUpdateAt;
 
     @JsonProperty("last_error")
     private String lastError;

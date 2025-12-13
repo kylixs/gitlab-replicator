@@ -3,7 +3,7 @@ package com.gitlab.mirror.common.model;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 /**
  * GitLab Project Model
@@ -50,10 +50,10 @@ public class GitLabProject {
     private Integer forksCount;
 
     @JsonProperty("last_activity_at")
-    private LocalDateTime lastActivityAt;
+    private OffsetDateTime lastActivityAt;
 
     @JsonProperty("created_at")
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
 
     private Namespace namespace;
 
