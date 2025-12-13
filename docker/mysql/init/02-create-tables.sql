@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS source_project_info (
     visibility VARCHAR(50) COMMENT '可见性: private/internal/public',
     archived TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否归档',
     empty_repo TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否空仓库',
+    repository_size BIGINT COMMENT '仓库大小(字节)',
     star_count INT DEFAULT 0 COMMENT '星标数',
     fork_count INT DEFAULT 0 COMMENT 'Fork数',
     last_activity_at DATETIME COMMENT '最后活动时间',
@@ -82,7 +83,48 @@ CREATE TABLE IF NOT EXISTS push_mirror_config (
     INDEX idx_last_update_at (last_update_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Push Mirror配置表';
 
--- ==================== 5. SYNC_EVENT (依赖 SYNC_PROJECT) ====================
+-- ==================== 5. PULL_SYNC_CONFIG (依赖 SYNC_PROJECT) ====================
+CREATE TABLE IF NOT EXISTS pull_sync_config (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    sync_project_id BIGINT NOT NULL UNIQUE COMMENT '关联同步项目ID',
+    priority VARCHAR(20) NOT NULL DEFAULT 'normal' COMMENT '优先级: critical/high/normal/low',
+    enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+    local_repo_path VARCHAR(500) COMMENT '本地仓库路径',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    FOREIGN KEY (sync_project_id) REFERENCES sync_project(id) ON DELETE CASCADE,
+    INDEX idx_priority (priority),
+    INDEX idx_enabled (enabled)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Pull同步配置表';
+
+-- ==================== 6. SYNC_TASK (依赖 SYNC_PROJECT) ====================
+CREATE TABLE IF NOT EXISTS sync_task (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    sync_project_id BIGINT NOT NULL UNIQUE COMMENT '关联同步项目ID(唯一)',
+    task_type VARCHAR(20) NOT NULL COMMENT '任务类型: push/pull',
+    task_status VARCHAR(20) NOT NULL DEFAULT 'waiting' COMMENT '任务状态: waiting/pending/running',
+    next_run_at TIMESTAMP(6) NULL COMMENT '下次执行时间',
+    last_run_at TIMESTAMP(6) NULL COMMENT '上次执行时间',
+    started_at TIMESTAMP(6) NULL COMMENT '本次开始时间',
+    completed_at TIMESTAMP(6) NULL COMMENT '本次完成时间',
+    duration_seconds INT COMMENT '本次执行耗时(秒)',
+    has_changes TINYINT(1) COMMENT '本次是否有变更',
+    changes_count INT COMMENT '本次变更数量',
+    source_commit_sha VARCHAR(64) COMMENT '本次源SHA',
+    target_commit_sha VARCHAR(64) COMMENT '本次目标SHA',
+    last_sync_status VARCHAR(20) COMMENT '最后同步状态: success/failed',
+    error_type VARCHAR(50) COMMENT '错误类型',
+    error_message TEXT COMMENT '错误信息',
+    consecutive_failures INT DEFAULT 0 COMMENT '连续失败次数',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    FOREIGN KEY (sync_project_id) REFERENCES sync_project(id) ON DELETE CASCADE,
+    INDEX idx_task_status (task_status),
+    INDEX idx_next_run_at (next_run_at),
+    INDEX idx_task_type (task_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='统一同步任务表';
+
+-- ==================== 7. SYNC_EVENT (依赖 SYNC_PROJECT) ====================
 CREATE TABLE IF NOT EXISTS sync_event (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
     sync_project_id BIGINT NOT NULL COMMENT '关联同步项目ID',

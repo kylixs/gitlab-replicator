@@ -81,6 +81,12 @@ public class SourceProjectInfo {
     private Boolean emptyRepo;
 
     /**
+     * Repository size in bytes
+     */
+    @TableField("repository_size")
+    private Long repositorySize;
+
+    /**
      * Star count
      */
     @TableField("star_count")
