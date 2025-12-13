@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
  * @author GitLab Mirror Team
  */
 @Configuration
-@MapperScan("com.gitlab.mirror.server.mapper")
+@MapperScan(basePackages = "com.gitlab.mirror.server.mapper")
 public class MybatisPlusConfig {
 
     /**
