@@ -87,11 +87,12 @@ public class UnifiedSyncScheduler {
 
             for (SyncTask task : tasks) {
                 try {
-                    // Update status: waiting → pending → (executor will set to running)
+                    // Update status: waiting → pending (mark as scheduled)
                     task.setTaskStatus("pending");
                     syncTaskMapper.updateById(task);
 
                     // Submit to executor (async)
+                    // Executor will update: pending → running → waiting
                     submitTaskAsync(task);
                     scheduled++;
 

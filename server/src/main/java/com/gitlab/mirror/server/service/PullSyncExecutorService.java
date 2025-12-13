@@ -50,7 +50,7 @@ public class PullSyncExecutorService {
             task.getId(), task.getSyncProjectId());
 
         try {
-            // Update task status: waiting → running
+            // Update task status: pending → running
             updateTaskStatus(task, "running", Instant.now());
 
             // Get project and config
