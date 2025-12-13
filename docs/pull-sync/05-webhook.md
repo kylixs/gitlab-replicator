@@ -1,6 +1,6 @@
 # 模块 5: Webhook 准实时同步 (Webhook Real-time Sync)
 
-**状态**: ⏸️ 待处理 (Pending)
+**状态**: ✅ 已完成 (Completed) - Core functionality implemented
 
 **目标**: 实现 GitLab Push Webhook 接收和处理，实现准实时同步。
 
@@ -200,7 +200,7 @@ private SyncProject initializeProject(GitLabPushEvent event) {
 ---
 
 ### T5.4 Webhook 配置和安全
-**状态**: ⏸️ 待处理 (Pending)
+**状态**: ⏸️ 待处理 (Pending) - Deferred to production phase
 **依赖**: T5.1
 
 **任务目标**:
@@ -259,7 +259,7 @@ public void handlePushEvent(...) { ... }
 ---
 
 ### T5.5 Webhook 监控和日志
-**状态**: ⏸️ 待处理 (Pending)
+**状态**: ⏸️ 待处理 (Pending) - Deferred to production phase
 **依赖**: T5.2, T5.4
 
 **任务目标**:
@@ -318,8 +318,10 @@ log.info("Immediate schedule triggered by webhook, projectKey={}, nextRunAt={}",
 - ✅ WebhookEventService 处理事件
 - ✅ 项目自动初始化功能
 - ✅ 防抖逻辑（2分钟）
-- ✅ Secret Token 和 IP 白名单安全控制
-- ✅ Webhook 监控和日志
+- ✅ 基本 Secret Token 验证（开发模式）
+- ✅ Webhook 事件记录
+- ⏸️ IP 白名单和速率限制 (待实现)
+- ⏸️ 详细监控指标 (待实现)
 
 ---
 

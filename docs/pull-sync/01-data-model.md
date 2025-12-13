@@ -8,6 +8,34 @@
 
 ---
 
+## ⚠️ 重要提醒：任务状态管理规范
+
+**【必须】在开始处理下面的每个子任务前及后需要修改其任务状态：**
+
+1. **开始任务前**：将任务状态从 `⏸️ 待处理 (Pending)` 修改为 `🔄 进行中 (In Progress)`
+2. **完成任务后**：将任务状态修改为 `✅ 已完成 (Completed)` 或 `❌ 失败 (Failed)`
+3. **更新位置**：在本文档对应任务的 `**状态**:` 行进行修改
+
+**状态标记说明**：
+- `⏸️ 待处理 (Pending)` - 任务未开始
+- `🔄 进行中 (In Progress)` - 任务正在处理中
+- `✅ 已完成 (Completed)` - 任务成功完成，测试通过
+- `❌ 失败 (Failed)` - 任务失败，需要修复
+- `⚠️ 阻塞 (Blocked)` - 任务被依赖阻塞
+
+**示例**：
+```markdown
+### T1.1 创建 PULL_SYNC_CONFIG 表
+**状态**: 🔄 进行中 (In Progress)  # ← 开始时修改为此状态
+**依赖**: Push Mirror MVP 数据模型
+
+# ... 完成工作后 ...
+
+**状态**: ✅ 已完成 (Completed)  # ← 完成时修改为此状态
+```
+
+---
+
 ## 任务清单
 
 ### T1.1 创建 PULL_SYNC_CONFIG 表
@@ -110,7 +138,7 @@ CREATE TABLE sync_task (
 ---
 
 ### T1.3 扩展 SOURCE_PROJECT_INFO 表
-**状态**: ⏸️ 待处理 (Pending)
+**状态**: ✅ 已完成 (Completed)
 **依赖**: T1.2
 
 **任务目标**:
@@ -138,7 +166,7 @@ ADD COLUMN repository_size BIGINT COMMENT '仓库大小(字节)' AFTER empty_rep
 ---
 
 ### T1.4 创建数据迁移脚本
-**状态**: ⏸️ 待处理 (Pending)
+**状态**: ✅ 已完成 (Completed)
 **依赖**: T1.1, T1.2, T1.3
 
 **任务目标**:
