@@ -49,12 +49,13 @@ public class PullSyncExecutorService {
         log.info("Executing Pull sync task, taskId={}, projectId={}",
             task.getId(), task.getSyncProjectId());
 
+        SyncProject project = null;
         try {
             // Update task status: pending → running
             updateTaskStatus(task, "running", Instant.now());
 
             // Get project and config
-            SyncProject project = syncProjectMapper.selectById(task.getSyncProjectId());
+            project = syncProjectMapper.selectById(task.getSyncProjectId());
             if (project == null) {
                 throw new IllegalStateException("Sync project not found: " + task.getSyncProjectId());
             }
@@ -73,6 +74,10 @@ public class PullSyncExecutorService {
                 updateTaskStatusToWaiting(task, null, "Disabled");
                 return;
             }
+
+            // Record sync started event
+            recordSyncEvent(project, SyncEvent.EventType.SYNC_STARTED, SyncEvent.Status.RUNNING,
+                String.format("Starting sync for project: %s", project.getProjectKey()));
 
             // Determine if first sync or incremental
             boolean isFirstSync = config.getLocalRepoPath() == null ||
@@ -150,9 +155,8 @@ public class PullSyncExecutorService {
         String finalSha = result.getParsedValue("FINAL_SHA");
         updateTaskAfterSuccess(task, true, finalSha, finalSha);
 
-        // 8. Record event
-        recordSyncEvent(project, "first_sync_completed", "success",
-            String.format("First sync completed, SHA: %s", finalSha));
+        // 8. Record sync finished event
+        recordSyncFinishedEvent(project, task, finalSha, "First sync completed");
 
         log.info("First sync completed successfully for project: {}", project.getProjectKey());
     }
@@ -211,8 +215,8 @@ public class PullSyncExecutorService {
         if (remoteHeadSha != null && remoteHeadSha.equals(lastSyncedSha)) {
             log.info("No changes detected for project: {}, skipping sync", project.getProjectKey());
             updateTaskAfterSuccess(task, false, remoteHeadSha, remoteHeadSha);
-            recordSyncEvent(project, "incremental_sync_skipped", "success",
-                "No changes detected, SHA: " + remoteHeadSha);
+            recordSyncFinishedEvent(project, task, remoteHeadSha,
+                "No changes detected, sync skipped");
             return;
         }
 
@@ -229,8 +233,8 @@ public class PullSyncExecutorService {
         String finalSha = result.getParsedValue("FINAL_SHA");
         updateTaskAfterSuccess(task, true, finalSha, finalSha);
 
-        // 9. Record event
-        recordSyncEvent(project, "incremental_sync_completed", "success",
+        // 9. Record sync finished event
+        recordSyncFinishedEvent(project, task, finalSha,
             String.format("Incremental sync completed, SHA: %s → %s", lastSyncedSha, finalSha));
 
         log.info("Incremental sync completed successfully for project: {}", project.getProjectKey());
@@ -441,10 +445,22 @@ public class PullSyncExecutorService {
 
         syncTaskMapper.updateById(task);
 
-        // Record failure event
+        // Record sync failed event with details
         if (project != null) {
-            recordSyncEvent(project, "sync_failed", "failed",
-                String.format("Error: %s, Failures: %d", e.getMessage(), task.getConsecutiveFailures()));
+            SyncEvent event = new SyncEvent();
+            event.setSyncProjectId(project.getId());
+            event.setEventType(SyncEvent.EventType.SYNC_FAILED);
+            event.setEventSource("pull_sync_executor");
+            event.setStatus(SyncEvent.Status.FAILED);
+            event.setErrorMessage(e.getMessage());
+            event.setDurationSeconds(task.getDurationSeconds());
+            event.setEventData(java.util.Map.of(
+                "errorType", errorType,
+                "consecutiveFailures", task.getConsecutiveFailures(),
+                "shouldDisable", shouldDisable
+            ));
+            event.setEventTime(LocalDateTime.now());
+            syncEventMapper.insert(event);
         }
     }
 
@@ -542,6 +558,32 @@ public class PullSyncExecutorService {
         event.setEventSource("pull_sync_executor");
         event.setStatus(status);
         event.setEventData(java.util.Map.of("message", eventData));
+        event.setEventTime(LocalDateTime.now());
+        syncEventMapper.insert(event);
+    }
+
+    /**
+     * Record sync finished event with detailed information
+     *
+     * @param project Sync project
+     * @param task    Sync task
+     * @param commitSha Final commit SHA
+     * @param message Event message
+     */
+    private void recordSyncFinishedEvent(SyncProject project, SyncTask task, String commitSha, String message) {
+        SyncEvent event = new SyncEvent();
+        event.setSyncProjectId(project.getId());
+        event.setEventType(SyncEvent.EventType.SYNC_FINISHED);
+        event.setEventSource("pull_sync_executor");
+        event.setStatus(SyncEvent.Status.SUCCESS);
+        event.setCommitSha(commitSha);
+        event.setDurationSeconds(task.getDurationSeconds());
+        event.setEventData(java.util.Map.of(
+            "message", message,
+            "hasChanges", task.getHasChanges() != null ? task.getHasChanges() : false,
+            "sourceSha", task.getSourceCommitSha() != null ? task.getSourceCommitSha() : "",
+            "targetSha", task.getTargetCommitSha() != null ? task.getTargetCommitSha() : ""
+        ));
         event.setEventTime(LocalDateTime.now());
         syncEventMapper.insert(event);
     }
