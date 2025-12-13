@@ -235,6 +235,51 @@ docker exec gitlab-source gitlab-ctl reconfigure
 - Target GitLab HTTP: 9000
 - Target GitLab SSH: 2223
 
+## Task Management Guidelines
+
+**IMPORTANT**: When working on development tasks, you MUST use the TodoWrite tool to track progress:
+
+### Required Task Tracking Workflow
+
+1. **Before starting a task**: Mark it as `in_progress`
+   ```
+   Mark task as in_progress BEFORE beginning any work
+   ```
+
+2. **After completing a task successfully**: Mark it as `completed`
+   ```
+   Mark task as completed IMMEDIATELY after finishing
+   ```
+
+3. **If a task fails or is blocked**: Keep it as `in_progress` and document the issue
+   ```
+   Do NOT mark as completed if tests fail or errors occur
+   Create a new task for the blocker if needed
+   ```
+
+### Task Status Rules
+
+- **EXACTLY ONE** task must be `in_progress` at any time (not less, not more)
+- **NEVER** batch multiple completions - update status after each task
+- **ALWAYS** use both forms for task descriptions:
+  - `content`: Imperative form (e.g., "Create database schema")
+  - `activeForm`: Present continuous (e.g., "Creating database schema")
+
+### Example Workflow
+
+```
+1. User asks to implement feature X
+2. TodoWrite: Mark "Implement feature X" as in_progress
+3. Do the work...
+4. TodoWrite: Mark "Implement feature X" as completed
+5. TodoWrite: Mark "Test feature X" as in_progress
+6. Run tests...
+7. If tests pass: TodoWrite: Mark "Test feature X" as completed
+8. If tests fail: Keep "Test feature X" as in_progress, fix issues
+```
+
+**Failure to follow this workflow will result in lost track of progress and incomplete task management.**
+
 ## Important Notes
 
 1. **Client/Server Communication**: CLI client communicates with sync service via HTTP REST API with token authentication
