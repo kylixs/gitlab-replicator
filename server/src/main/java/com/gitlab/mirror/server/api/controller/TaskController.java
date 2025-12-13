@@ -1,6 +1,7 @@
 package com.gitlab.mirror.server.api.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.gitlab.mirror.server.api.dto.*;
@@ -183,6 +184,63 @@ public class TaskController {
         log.info("Failure count reset and project re-enabled: taskId={}", taskId);
 
         return ApiResponse.success(toDTO(task));
+    }
+
+    /**
+     * Trigger pull tasks for immediate scheduling
+     *
+     * POST /api/tasks/trigger-pull?pattern=devops/*&taskId=123
+     */
+    @PostMapping("/trigger-pull")
+    public ApiResponse<java.util.Map<String, Object>> triggerPullTasks(
+            @RequestParam(required = false) String pattern,
+            @RequestParam(required = false) Long taskId) {
+
+        log.info("Triggering pull tasks: pattern={}, taskId={}", pattern, taskId);
+
+        LambdaUpdateWrapper<SyncTask> updateWrapper = new LambdaUpdateWrapper<SyncTask>()
+                .eq(SyncTask::getTaskType, "pull")
+                .eq(SyncTask::getTaskStatus, "waiting")
+                .set(SyncTask::getNextRunAt, Instant.now())
+                .set(SyncTask::getUpdatedAt, LocalDateTime.now());
+
+        // Filter by taskId if specified
+        if (taskId != null) {
+            updateWrapper.eq(SyncTask::getId, taskId);
+        }
+
+        // Filter by project pattern if specified
+        if (pattern != null && !pattern.isEmpty()) {
+            // Get matching project IDs
+            LambdaQueryWrapper<SyncProject> projectQuery = new LambdaQueryWrapper<SyncProject>();
+
+            if (pattern.contains("*") || pattern.contains("%")) {
+                // Wildcard pattern matching
+                String likePattern = pattern.replace("*", "%");
+                projectQuery.like(SyncProject::getProjectKey, likePattern);
+            } else {
+                // Exact match
+                projectQuery.eq(SyncProject::getProjectKey, pattern);
+            }
+
+            java.util.List<SyncProject> projects = syncProjectMapper.selectList(projectQuery);
+            java.util.List<Long> projectIds = projects.stream()
+                    .map(SyncProject::getId)
+                    .collect(java.util.stream.Collectors.toList());
+
+            if (projectIds.isEmpty()) {
+                log.warn("No projects found matching pattern: {}", pattern);
+                return ApiResponse.success(java.util.Map.of("triggered", 0));
+            }
+
+            updateWrapper.in(SyncTask::getSyncProjectId, projectIds);
+        }
+
+        int count = syncTaskMapper.update(null, updateWrapper);
+
+        log.info("Triggered {} pull tasks for immediate scheduling", count);
+
+        return ApiResponse.success(java.util.Map.of("triggered", count));
     }
 
     /**

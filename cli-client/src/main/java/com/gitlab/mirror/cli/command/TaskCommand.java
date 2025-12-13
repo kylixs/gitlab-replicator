@@ -45,6 +45,9 @@ public class TaskCommand {
             case "reset":
                 resetFailures(args);
                 break;
+            case "trigger":
+                triggerPullTasks(args);
+                break;
             case "stats":
                 showStats(args);
                 break;
@@ -267,6 +270,67 @@ public class TaskCommand {
         OutputFormatter.printJson(response);
     }
 
+    private void triggerPullTasks(String[] args) throws Exception {
+        String pattern = null;
+        String taskId = null;
+
+        // Parse options
+        for (int i = 1; i < args.length; i++) {
+            if (args[i].startsWith("--pattern=")) {
+                pattern = args[i].substring("--pattern=".length());
+            } else if (args[i].startsWith("--id=")) {
+                taskId = args[i].substring("--id=".length());
+            } else {
+                // If no flag, treat as pattern
+                pattern = args[i];
+            }
+        }
+
+        if (pattern == null && taskId == null) {
+            OutputFormatter.printError("Missing pattern or task ID");
+            OutputFormatter.printInfo("Usage: gitlab-mirror task trigger [--pattern=<pattern>] [--id=<task-id>]");
+            OutputFormatter.printInfo("  or:  gitlab-mirror task trigger <pattern>");
+            OutputFormatter.printInfo("");
+            OutputFormatter.printInfo("Examples:");
+            OutputFormatter.printInfo("  gitlab-mirror task trigger --pattern=devops/*");
+            OutputFormatter.printInfo("  gitlab-mirror task trigger --id=389");
+            OutputFormatter.printInfo("  gitlab-mirror task trigger devops/gitlab-mirror");
+            System.exit(1);
+        }
+
+        StringBuilder url = new StringBuilder("/api/tasks/trigger-pull?");
+        if (pattern != null) {
+            url.append("pattern=").append(java.net.URLEncoder.encode(pattern, "UTF-8"));
+        }
+        if (taskId != null) {
+            url.append("taskId=").append(taskId);
+        }
+
+        OutputFormatter.printInfo("Triggering pull tasks" +
+            (pattern != null ? " matching pattern: " + pattern : "") +
+            (taskId != null ? " with ID: " + taskId : "") + "...");
+
+        String response = apiClient.post(url.toString(), "{}");
+
+        JsonNode root = JsonParser.parse(response);
+
+        if (!JsonParser.getBoolean(root, "success")) {
+            OutputFormatter.printError("Request failed: " + JsonParser.getString(root, "message"));
+            return;
+        }
+
+        JsonNode data = root.get("data");
+        int triggered = data != null ? JsonParser.getInt(data, "triggered") : 0;
+
+        if (triggered == 0) {
+            OutputFormatter.printWarning("No matching tasks found");
+        } else {
+            OutputFormatter.printSuccess("Successfully triggered " + triggered + " pull task(s) for immediate scheduling");
+            System.out.println();
+            OutputFormatter.printInfo("Tasks will be picked up by the scheduler within 10 seconds");
+        }
+    }
+
     private void showStats(String[] args) throws Exception {
         String format = "table";
 
@@ -431,6 +495,7 @@ public class TaskCommand {
         System.out.println("  history <task-id>     Show task execution history");
         System.out.println("  retry <task-id>       Manually retry a task");
         System.out.println("  reset <task-id>       Reset failure count");
+        System.out.println("  trigger <pattern>     Trigger matching pull tasks for immediate scheduling");
         System.out.println("  stats                 Show task statistics");
         System.out.println();
         System.out.println(OutputFormatter.YELLOW + "List Options:" + OutputFormatter.RESET);
@@ -448,12 +513,19 @@ public class TaskCommand {
         System.out.println("  --size=<n>            Page size (default: 20)");
         System.out.println("  --format=<fmt>        Output format (table|json, default: table)");
         System.out.println();
+        System.out.println(OutputFormatter.YELLOW + "Trigger Options:" + OutputFormatter.RESET);
+        System.out.println("  --pattern=<p>         Project path pattern (supports * wildcard)");
+        System.out.println("  --id=<id>             Specific task ID");
+        System.out.println();
         System.out.println(OutputFormatter.YELLOW + "Examples:" + OutputFormatter.RESET);
         System.out.println("  gitlab-mirror task list --type=pull --status=waiting");
         System.out.println("  gitlab-mirror task show 123");
         System.out.println("  gitlab-mirror task history 123");
         System.out.println("  gitlab-mirror task retry 123");
         System.out.println("  gitlab-mirror task reset 123");
+        System.out.println("  gitlab-mirror task trigger devops/gitlab-mirror");
+        System.out.println("  gitlab-mirror task trigger --pattern=devops/*");
+        System.out.println("  gitlab-mirror task trigger --id=389");
         System.out.println("  gitlab-mirror task stats");
         System.out.println();
     }

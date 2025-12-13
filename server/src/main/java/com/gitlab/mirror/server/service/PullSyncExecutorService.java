@@ -533,11 +533,11 @@ public class PullSyncExecutorService {
 
         String priority = config.getPriority();
         long intervalMinutes = switch (priority.toLowerCase()) {
-            case "critical" -> 10;
-            case "high" -> 30;
-            case "normal" -> 120;
-            case "low" -> 360;
-            default -> 120;
+            case "critical" -> 1;    // 1 minute
+            case "high" -> 3;        // 3 minutes
+            case "normal" -> 3;      // 3 minutes (default)
+            case "low" -> 10;        // 10 minutes
+            default -> 3;            // Default: 3 minutes
         };
 
         return Instant.now().plus(intervalMinutes, ChronoUnit.MINUTES);
