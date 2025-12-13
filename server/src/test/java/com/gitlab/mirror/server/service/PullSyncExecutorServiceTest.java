@@ -242,4 +242,124 @@ class PullSyncExecutorServiceTest {
         // Second retry: 5 × 2^1 = 10 minutes
         assertThat(task2.getNextRunAt()).isAfter(before2.plusSeconds(10 * 60 - 5));
     }
+
+    @Test
+    void testExecuteIncrementalSync_NoChanges() {
+        // Set up for incremental sync (local repo exists)
+        config.setLocalRepoPath("/Users/test/.gitlab-sync/repos/test-group/test-project");
+        pullSyncConfigMapper.updateById(config);
+
+        // Set previous sync SHA
+        task.setSourceCommitSha("abc123def456");
+        syncTaskMapper.updateById(task);
+
+        // Mock git operations - no changes
+        when(gitCommandExecutor.isValidRepository(anyString())).thenReturn(true);
+
+        GitCommandExecutor.GitResult lsRemoteResult = new GitCommandExecutor.GitResult(
+            true, "abc123def456\n", "", 0
+        );
+        lsRemoteResult.parsedData.put("HEAD_SHA", "abc123def456");
+        when(gitCommandExecutor.getRemoteHeadSha(anyString())).thenReturn(lsRemoteResult);
+
+        // Execute
+        service.executeSync(task);
+
+        // Verify task updated with no changes
+        SyncTask updatedTask = syncTaskMapper.selectById(task.getId());
+        assertThat(updatedTask.getTaskStatus()).isEqualTo("waiting");
+        assertThat(updatedTask.getLastSyncStatus()).isEqualTo("success");
+        assertThat(updatedTask.getHasChanges()).isFalse();
+        assertThat(updatedTask.getSourceCommitSha()).isEqualTo("abc123def456");
+
+        // Verify no git sync was called
+        verify(gitCommandExecutor, never()).syncIncremental(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void testExecuteIncrementalSync_WithChanges() {
+        // Set up for incremental sync
+        config.setLocalRepoPath("/Users/test/.gitlab-sync/repos/test-group/test-project");
+        pullSyncConfigMapper.updateById(config);
+
+        task.setSourceCommitSha("abc123def456");
+        syncTaskMapper.updateById(task);
+
+        // Mock git operations - has changes
+        when(gitCommandExecutor.isValidRepository(anyString())).thenReturn(true);
+
+        GitCommandExecutor.GitResult lsRemoteResult = new GitCommandExecutor.GitResult(
+            true, "xyz789ghi012\n", "", 0
+        );
+        lsRemoteResult.parsedData.put("HEAD_SHA", "xyz789ghi012");
+        when(gitCommandExecutor.getRemoteHeadSha(anyString())).thenReturn(lsRemoteResult);
+
+        GitCommandExecutor.GitResult syncResult = new GitCommandExecutor.GitResult(
+            true, "FINAL_SHA=xyz789ghi012\n", "", 0
+        );
+        when(gitCommandExecutor.syncIncremental(anyString(), anyString(), anyString())).thenReturn(syncResult);
+
+        // Execute
+        service.executeSync(task);
+
+        // Verify task updated with changes
+        SyncTask updatedTask = syncTaskMapper.selectById(task.getId());
+        assertThat(updatedTask.getTaskStatus()).isEqualTo("waiting");
+        assertThat(updatedTask.getLastSyncStatus()).isEqualTo("success");
+        assertThat(updatedTask.getHasChanges()).isTrue();
+        assertThat(updatedTask.getSourceCommitSha()).isEqualTo("xyz789ghi012");
+
+        // Verify git sync-incremental was called
+        verify(gitCommandExecutor).syncIncremental(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void testExecuteIncrementalSync_FallbackToFirstSync() {
+        // Set up with missing local repo
+        config.setLocalRepoPath(null);
+        pullSyncConfigMapper.updateById(config);
+
+        // Mock git operations for first sync
+        when(gitCommandExecutor.isValidRepository(anyString())).thenReturn(false);
+
+        GitCommandExecutor.GitResult result = new GitCommandExecutor.GitResult(
+            true, "FINAL_SHA=abc123def456\n", "", 0
+        );
+        when(gitCommandExecutor.syncFirst(anyString(), anyString(), anyString())).thenReturn(result);
+
+        // Execute
+        service.executeSync(task);
+
+        // Verify first sync was performed
+        verify(gitCommandExecutor).syncFirst(anyString(), anyString(), anyString());
+        verify(gitCommandExecutor, never()).syncIncremental(anyString(), anyString(), anyString());
+
+        // Verify config updated with local repo path
+        PullSyncConfig updatedConfig = pullSyncConfigMapper.selectById(config.getId());
+        assertThat(updatedConfig.getLocalRepoPath()).isNotNull();
+    }
+
+    @Test
+    void testExecuteIncrementalSync_LsRemoteFailure() {
+        // Set up for incremental sync
+        config.setLocalRepoPath("/Users/test/.gitlab-sync/repos/test-group/test-project");
+        pullSyncConfigMapper.updateById(config);
+
+        // Mock git ls-remote failure
+        when(gitCommandExecutor.isValidRepository(anyString())).thenReturn(true);
+
+        GitCommandExecutor.GitResult lsRemoteResult = new GitCommandExecutor.GitResult(
+            false, "", "Network timeout", 128
+        );
+        when(gitCommandExecutor.getRemoteHeadSha(anyString())).thenReturn(lsRemoteResult);
+
+        // Execute
+        service.executeSync(task);
+
+        // Verify task marked as failed
+        SyncTask updatedTask = syncTaskMapper.selectById(task.getId());
+        assertThat(updatedTask.getLastSyncStatus()).isEqualTo("failed");
+        assertThat(updatedTask.getConsecutiveFailures()).isEqualTo(1);
+        assertThat(updatedTask.getErrorMessage()).contains("Failed to get remote HEAD SHA");
+    }
 }

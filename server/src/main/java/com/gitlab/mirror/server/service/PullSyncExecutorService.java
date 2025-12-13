@@ -158,8 +158,73 @@ public class PullSyncExecutorService {
     private void executeIncrementalSync(SyncTask task, SyncProject project, PullSyncConfig config) {
         log.info("Executing incremental sync for project: {}", project.getProjectKey());
 
-        // This will be implemented in T3.3
-        throw new UnsupportedOperationException("Incremental sync not yet implemented");
+        // 1. Ensure target project exists
+        ensureTargetProjectExists(project);
+
+        // 2. Get local repository path
+        String localRepoPath = config.getLocalRepoPath();
+        if (localRepoPath == null || localRepoPath.isEmpty()) {
+            log.warn("Local repo path is empty, falling back to first sync");
+            executeFirstSync(task, project, config);
+            return;
+        }
+
+        // 3. Get source project info
+        SourceProjectInfo sourceInfo = sourceProjectInfoMapper.selectOne(
+            new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<SourceProjectInfo>()
+                .eq("sync_project_id", project.getId())
+        );
+        TargetProjectInfo targetInfo = targetProjectInfoMapper.selectOne(
+            new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<TargetProjectInfo>()
+                .eq("sync_project_id", project.getId())
+        );
+
+        if (sourceInfo == null || targetInfo == null) {
+            throw new IllegalStateException("Source or target project info not found");
+        }
+
+        // 4. Build URLs
+        String sourceUrl = buildGitUrl(properties.getSource().getUrl(),
+            properties.getSource().getToken(), sourceInfo.getPathWithNamespace());
+        String targetUrl = buildGitUrl(properties.getTarget().getUrl(),
+            properties.getTarget().getToken(), targetInfo.getPathWithNamespace());
+
+        // 5. Check for changes using git ls-remote (optimization)
+        GitCommandExecutor.GitResult lsRemoteResult = gitCommandExecutor.getRemoteHeadSha(sourceUrl);
+        if (!lsRemoteResult.isSuccess()) {
+            throw new RuntimeException("Failed to get remote HEAD SHA: " + lsRemoteResult.getError());
+        }
+
+        String remoteHeadSha = lsRemoteResult.getParsedValue("HEAD_SHA");
+        String lastSyncedSha = task.getSourceCommitSha();
+
+        // 6. If no changes, skip sync
+        if (remoteHeadSha != null && remoteHeadSha.equals(lastSyncedSha)) {
+            log.info("No changes detected for project: {}, skipping sync", project.getProjectKey());
+            updateTaskAfterSuccess(task, false, remoteHeadSha, remoteHeadSha);
+            recordSyncEvent(project, "incremental_sync_skipped", "success",
+                "No changes detected, SHA: " + remoteHeadSha);
+            return;
+        }
+
+        // 7. Execute git sync-incremental (remote update + push)
+        GitCommandExecutor.GitResult result = gitCommandExecutor.syncIncremental(
+            sourceUrl, targetUrl, localRepoPath
+        );
+
+        if (!result.isSuccess()) {
+            throw new RuntimeException("Incremental sync failed: " + result.getError());
+        }
+
+        // 8. Update task with sync result
+        String finalSha = result.getParsedValue("FINAL_SHA");
+        updateTaskAfterSuccess(task, true, finalSha, finalSha);
+
+        // 9. Record event
+        recordSyncEvent(project, "incremental_sync_completed", "success",
+            String.format("Incremental sync completed, SHA: %s → %s", lastSyncedSha, finalSha));
+
+        log.info("Incremental sync completed successfully for project: {}", project.getProjectKey());
     }
 
     /**

@@ -45,7 +45,7 @@ public class GitCommandExecutor {
         private final String output;
         private final String error;
         private final int exitCode;
-        private final Map<String, String> parsedData;
+        public final Map<String, String> parsedData;
 
         public GitResult(boolean success, String output, String error, int exitCode) {
             this.success = success;
@@ -170,6 +170,27 @@ public class GitCommandExecutor {
 
         return executeScript("sync-first", CLONE_TIMEOUT_SECONDS,
             sourceUrl, targetUrl, localPath);
+    }
+
+    /**
+     * Get remote HEAD SHA using ls-remote (returns GitResult)
+     *
+     * @param remoteUrl Remote repository URL
+     * @return GitResult with HEAD_SHA parsed value
+     */
+    public GitResult getRemoteHeadSha(String remoteUrl) {
+        log.debug("Getting remote SHA for {}", maskToken(remoteUrl));
+
+        GitResult result = executeScript("get-remote-sha", DEFAULT_TIMEOUT_SECONDS,
+            remoteUrl, "HEAD");
+
+        // Parse SHA from output and add to parsed data
+        if (result.isSuccess() && result.getOutput() != null) {
+            String sha = result.getOutput().trim();
+            result.parsedData.put("HEAD_SHA", sha);
+        }
+
+        return result;
     }
 
     /**
