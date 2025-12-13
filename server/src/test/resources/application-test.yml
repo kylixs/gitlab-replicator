@@ -1,6 +1,28 @@
 spring:
-  # Test profile configuration
-  # Database will be configured with TestContainers in T1.2
+  # Database Configuration for Testing
+  datasource:
+    url: jdbc:mysql://localhost:3306/gitlab_mirror?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: gitlab_mirror
+    password: mirror_pass_123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+# MyBatis-Plus Configuration
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+# GitLab Mirror Configuration
+gitlab:
+  mirror:
+    source:
+      url: http://localhost:8000
+      token: test-source-token
+    target:
+      url: http://localhost:9000
+      token: test-target-token
 
 logging:
   level:

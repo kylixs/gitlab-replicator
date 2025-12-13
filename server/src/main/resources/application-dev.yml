@@ -1,9 +1,56 @@
 spring:
-  # Development specific configuration will be added here
-  # Database, GitLab API configs will be added in T1.2
+  # Database Configuration
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:gitlab_mirror}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME:gitlab_mirror}
+    password: ${DB_PASSWORD:mirror_pass_123}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+    # HikariCP Configuration
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 600000
+      connection-timeout: 30000
+      max-lifetime: 1800000
+      pool-name: GitLabMirrorHikariPool
+
+# MyBatis-Plus Configuration
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# GitLab Mirror Configuration
+gitlab:
+  mirror:
+    source:
+      url: ${SOURCE_GITLAB_URL:http://localhost:8000}
+      token: ${SOURCE_GITLAB_TOKEN}
+      timeout: 30
+    target:
+      url: ${TARGET_GITLAB_URL:http://localhost:9000}
+      token: ${TARGET_GITLAB_TOKEN}
+      timeout: 30
+    sync:
+      enabled: true
+      exclude-archived: true
+      exclude-empty: true
+    performance:
+      project-discovery-concurrency: 5
+      mirror-setup-concurrency: 10
+      mirror-polling-batch-size: 50
+      api-rate-limit-delay: 100
 
 # Logging for development
 logging:
   level:
     com.gitlab.mirror: DEBUG
     org.springframework.web: DEBUG
+    com.baomidou.mybatisplus: DEBUG
