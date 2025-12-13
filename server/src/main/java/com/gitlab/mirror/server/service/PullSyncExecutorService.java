@@ -44,54 +44,64 @@ public class PullSyncExecutorService {
      *
      * @param task Sync task
      */
-    @Transactional
     public void executeSync(SyncTask task) {
         log.info("Executing Pull sync task, taskId={}, projectId={}",
             task.getId(), task.getSyncProjectId());
 
         SyncProject project = null;
         try {
-            // Update task status: pending → running
-            updateTaskStatus(task, "running", Instant.now());
+            // Update task status: pending → running (in separate transaction to ensure it persists)
+            updateTaskStatusInNewTransaction(task, "running", Instant.now());
 
-            // Get project and config
-            project = syncProjectMapper.selectById(task.getSyncProjectId());
-            if (project == null) {
-                throw new IllegalStateException("Sync project not found: " + task.getSyncProjectId());
-            }
+            // Execute sync in transaction
+            executeSyncInternal(task);
 
-            PullSyncConfig config = pullSyncConfigMapper.selectOne(
-                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<PullSyncConfig>()
-                    .eq("sync_project_id", project.getId())
-            );
-            if (config == null) {
-                throw new IllegalStateException("Pull sync config not found: " + project.getId());
-            }
-
-            // Check if enabled
-            if (!config.getEnabled()) {
-                log.warn("Pull sync disabled for project: {}", project.getProjectKey());
-                updateTaskStatusToWaiting(task, null, "Disabled");
-                return;
-            }
-
-            // Record sync started event
-            recordSyncEvent(project, SyncEvent.EventType.SYNC_STARTED, SyncEvent.Status.RUNNING,
-                String.format("Starting sync for project: %s", project.getProjectKey()));
-
-            // Determine if first sync or incremental
-            boolean isFirstSync = config.getLocalRepoPath() == null ||
-                !gitCommandExecutor.isValidRepository(config.getLocalRepoPath());
-
-            if (isFirstSync) {
-                executeFirstSync(task, project, config);
-            } else {
-                executeIncrementalSync(task, project, config);
-            }
-
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("Pull sync failed, taskId={}", task.getId(), e);
             handleSyncFailure(task, e);
+        }
+    }
+
+    /**
+     * Execute sync internal logic (transactional)
+     *
+     * @param task Sync task
+     */
+    @Transactional
+    private void executeSyncInternal(SyncTask task) {
+        // Get project and config
+        SyncProject project = syncProjectMapper.selectById(task.getSyncProjectId());
+        if (project == null) {
+            throw new IllegalStateException("Sync project not found: " + task.getSyncProjectId());
+        }
+
+        PullSyncConfig config = pullSyncConfigMapper.selectOne(
+            new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<PullSyncConfig>()
+                .eq("sync_project_id", project.getId())
+        );
+        if (config == null) {
+            throw new IllegalStateException("Pull sync config not found: " + project.getId());
+        }
+
+        // Check if enabled
+        if (!config.getEnabled()) {
+            log.warn("Pull sync disabled for project: {}", project.getProjectKey());
+            updateTaskStatusToWaitingInNewTransaction(task, null, "Disabled");
+            return;
+        }
+
+        // Record sync started event
+        recordSyncEvent(project, SyncEvent.EventType.SYNC_STARTED, SyncEvent.Status.RUNNING,
+            String.format("Starting sync for project: %s", project.getProjectKey()));
+
+        // Determine if first sync or incremental
+        boolean isFirstSync = config.getLocalRepoPath() == null ||
+            !gitCommandExecutor.isValidRepository(config.getLocalRepoPath());
+
+        if (isFirstSync) {
+            executeFirstSync(task, project, config);
+        } else {
+            executeIncrementalSync(task, project, config);
         }
     }
 
@@ -320,6 +330,24 @@ public class PullSyncExecutorService {
     }
 
     /**
+     * Update task status in new transaction (ensures status persists even if main transaction rolls back)
+     *
+     * @param task      Task
+     * @param status    New status
+     * @param startedAt Started timestamp
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void updateTaskStatusInNewTransaction(SyncTask task, String status, Instant startedAt) {
+        task.setTaskStatus(status);
+        if (startedAt != null) {
+            task.setStartedAt(startedAt);
+        }
+        task.setUpdatedAt(LocalDateTime.now());
+        syncTaskMapper.updateById(task);
+        log.debug("Updated task status in new transaction: taskId={}, status={}", task.getId(), status);
+    }
+
+    /**
      * Update task status
      *
      * @param task      Task
@@ -369,6 +397,23 @@ public class PullSyncExecutorService {
     }
 
     /**
+     * Update task status to waiting in new transaction
+     *
+     * @param task   Task
+     * @param reason Reason (optional)
+     * @param status Last sync status
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void updateTaskStatusToWaitingInNewTransaction(SyncTask task, String reason, String status) {
+        task.setTaskStatus("waiting");
+        task.setLastSyncStatus(status);
+        task.setNextRunAt(calculateNextRunTime(task));
+        task.setUpdatedAt(LocalDateTime.now());
+        syncTaskMapper.updateById(task);
+        log.debug("Updated task to waiting in new transaction: taskId={}, reason={}", task.getId(), reason);
+    }
+
+    /**
      * Update task status to waiting
      *
      * @param task   Task
@@ -384,12 +429,13 @@ public class PullSyncExecutorService {
     }
 
     /**
-     * Handle sync failure
+     * Handle sync failure (in new transaction to ensure status update persists)
      *
      * @param task Sync task
      * @param e    Exception
      */
-    private void handleSyncFailure(SyncTask task, Exception e) {
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void handleSyncFailure(SyncTask task, Exception e) {
         Instant now = Instant.now();
         Instant completedAt = now;
         long durationSeconds = task.getStartedAt() != null ?
