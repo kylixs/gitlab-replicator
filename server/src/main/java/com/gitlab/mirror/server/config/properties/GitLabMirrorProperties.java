@@ -85,6 +85,34 @@ public class GitLabMirrorProperties {
          * Exclude empty repositories
          */
         private Boolean excludeEmpty = true;
+
+        /**
+         * Default sync method: push_mirror or pull_sync
+         */
+        private String defaultSyncMethod = "push_mirror";
+
+        /**
+         * Sync method configurations by group path
+         */
+        private java.util.List<SyncMethodConfig> syncMethods = new java.util.ArrayList<>();
+    }
+
+    /**
+     * Sync Method Configuration for specific group paths
+     */
+    @Data
+    public static class SyncMethodConfig {
+        /**
+         * Group path pattern (supports wildcards like "critical/*")
+         */
+        @NotBlank(message = "Group path is required")
+        private String groupPath;
+
+        /**
+         * Sync method: push_mirror or pull_sync
+         */
+        @NotBlank(message = "Sync method is required")
+        private String method;
     }
 
     /**

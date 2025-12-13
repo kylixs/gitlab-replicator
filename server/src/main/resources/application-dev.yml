@@ -59,6 +59,14 @@ gitlab:
       enabled: true
       exclude-archived: true
       exclude-empty: true
+      # Default sync method: push_mirror or pull_sync
+      default-sync-method: push_mirror
+      # Sync method configurations by group path (optional)
+      # sync-methods:
+      #   - group-path: "critical/*"
+      #     method: pull_sync
+      #   - group-path: "devops/**"
+      #     method: pull_sync
     performance:
       project-discovery-concurrency: 5
       mirror-setup-concurrency: 10

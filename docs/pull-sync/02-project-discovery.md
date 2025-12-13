@@ -54,7 +54,7 @@ public int discoverProjects(String groupPath, SyncMethod syncMethod) {
 ---
 
 ### T2.2 配置项目同步方式选择
-**状态**: ⏸️ 待处理 (Pending)
+**状态**: ✅ 已完成 (Completed)
 **依赖**: T2.1
 
 **任务目标**:
