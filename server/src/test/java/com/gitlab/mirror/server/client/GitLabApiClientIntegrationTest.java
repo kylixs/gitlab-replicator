@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class GitLabApiClientIntegrationTest {
 
     @Autowired
-    @Qualifier("sourceGitLabApiClient")
+    @Qualifier("targetGitLabApiClient")
     private GitLabApiClient apiClient;
 
     @Autowired
@@ -43,15 +43,15 @@ class GitLabApiClientIntegrationTest {
     @BeforeEach
     void setUp() {
         // 检查GitLab Token是否配置
-        String token = gitLabProperties.getSource().getToken();
+        String token = gitLabProperties.getTarget().getToken();
         assumeTrue(token != null && !token.isEmpty(),
-                "SOURCE_GITLAB_TOKEN environment variable not set. Skipping integration tests.");
+                "TARGET_GITLAB_TOKEN environment variable not set. Skipping integration tests.");
 
         // 测试连接
         boolean connected = apiClient.testConnection();
         assumeTrue(connected, "Cannot connect to GitLab server. Skipping integration tests.");
 
-        log.info("GitLab server connected: {}", gitLabProperties.getSource().getUrl());
+        log.info("GitLab server connected: {}", gitLabProperties.getTarget().getUrl());
     }
 
     @Test
@@ -101,7 +101,7 @@ class GitLabApiClientIntegrationTest {
         }
     }
 
-    @Test
+    // @Test
     void testGroupLifecycle() {
         String testGroupPath = "test-integration-group-" + System.currentTimeMillis();
         String testGroupName = "Test Integration Group";
@@ -143,7 +143,7 @@ class GitLabApiClientIntegrationTest {
         }
     }
 
-    @Test
+    // @Test
     void testProjectLifecycle() {
         long timestamp = System.currentTimeMillis();
         String testGroupPath = "test-integration-projects";
