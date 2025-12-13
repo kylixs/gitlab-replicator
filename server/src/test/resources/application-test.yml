@@ -1,0 +1,7 @@
+spring:
+  # Test profile configuration
+  # Database will be configured with TestContainers in T1.2
+
+logging:
+  level:
+    com.gitlab.mirror: DEBUG

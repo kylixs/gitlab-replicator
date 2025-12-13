@@ -1,0 +1,9 @@
+spring:
+  # Development specific configuration will be added here
+  # Database, GitLab API configs will be added in T1.2
+
+# Logging for development
+logging:
+  level:
+    com.gitlab.mirror: DEBUG
+    org.springframework.web: DEBUG
