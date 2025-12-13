@@ -95,6 +95,21 @@ public class GitLabMirrorProperties {
          * Sync method configurations by group path
          */
         private java.util.List<SyncMethodConfig> syncMethods = new java.util.ArrayList<>();
+
+        /**
+         * Peak hours (format: "9-18")
+         */
+        private String peakHours = "9-18";
+
+        /**
+         * Peak concurrent limit
+         */
+        private Integer peakConcurrent = 3;
+
+        /**
+         * Off-peak concurrent limit
+         */
+        private Integer offPeakConcurrent = 8;
     }
 
     /**
