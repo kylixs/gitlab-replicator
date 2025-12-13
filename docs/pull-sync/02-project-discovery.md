@@ -1,5 +1,7 @@
 # 模块 2: 项目发现扩展 (Project Discovery Extension)
 
+**状态**: ✅ 已完成 (Completed)
+
 **目标**: 扩展项目发现功能，支持自动发现和初始化 pull_sync 类型项目。
 
 **预计时间**: 1天
@@ -9,6 +11,7 @@
 ## 任务清单
 
 ### T2.1 扩展 ProjectDiscoveryService 支持 Pull 同步
+**状态**: ✅ 已完成
 **依赖**: 模块1 - 数据模型扩展
 
 **任务目标**:
@@ -51,6 +54,7 @@ public int discoverProjects(String groupPath, SyncMethod syncMethod) {
 ---
 
 ### T2.2 配置项目同步方式选择
+**状态**: ⏸️ 待处理 (Pending)
 **依赖**: T2.1
 
 **任务目标**:
@@ -90,6 +94,7 @@ gitlab:
 ---
 
 ### T2.3 添加 Pull 配置初始化服务
+**状态**: ✅ 已完成
 **依赖**: T2.1
 
 **任务目标**:

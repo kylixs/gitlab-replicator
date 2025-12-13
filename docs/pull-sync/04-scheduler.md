@@ -1,5 +1,7 @@
 # 模块 4: 统一任务调度器 (Unified Task Scheduler)
 
+**状态**: ⏸️ 待处理 (Pending)
+
 **目标**: 实现统一的任务调度器，同时调度 Push Mirror 轮询和 Pull 同步任务。
 
 **预计时间**: 2-3天
@@ -9,6 +11,7 @@
 ## 任务清单
 
 ### T4.1 创建统一调度器核心
+**状态**: ⏸️ 待处理 (Pending)
 **依赖**: 模块3 - Pull 同步执行器
 
 **任务目标**:
@@ -62,6 +65,7 @@ public class UnifiedSyncScheduler {
 ---
 
 ### T4.2 Pull 任务调度逻辑
+**状态**: ⏸️ 待处理 (Pending)
 **依赖**: T4.1
 
 **任务目标**:
@@ -133,6 +137,7 @@ Instant calculateRetryTime(int retryCount, Instant now) {
 ---
 
 ### T4.3 Push Mirror 轮询适配
+**状态**: ⏸️ 待处理 (Pending)
 **依赖**: T4.1
 
 **任务目标**:
@@ -174,6 +179,7 @@ public void pollPushMirrorStatus() {
 ---
 
 ### T4.4 任务执行器集成
+**状态**: ⏸️ 待处理 (Pending)
 **依赖**: T4.2, T4.3, 模块3
 
 **任务目标**:
@@ -233,6 +239,7 @@ sync:
 ---
 
 ### T4.5 调度器监控和日志
+**状态**: ⏸️ 待处理 (Pending)
 **依赖**: T4.4
 
 **任务目标**:

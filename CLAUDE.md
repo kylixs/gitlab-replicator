@@ -237,46 +237,95 @@ docker exec gitlab-source gitlab-ctl reconfigure
 
 ## Task Management Guidelines
 
-**IMPORTANT**: When working on development tasks, you MUST use the TodoWrite tool to track progress:
+**IMPORTANT**: When working on development tasks, you MUST use the TodoWrite tool to track progress AND update task document status:
 
 ### Required Task Tracking Workflow
 
-1. **Before starting a task**: Mark it as `in_progress`
+1. **Before starting a task**:
+   - Mark it as `in_progress` in TodoWrite
+   - Update the task document status to `🔄 进行中 (In Progress)`
    ```
    Mark task as in_progress BEFORE beginning any work
+   Update task document: **状态**: 🔄 进行中 (In Progress)
    ```
 
-2. **After completing a task successfully**: Mark it as `completed`
+2. **After completing a task successfully**:
+   - Mark it as `completed` in TodoWrite
+   - Update the task document status to `✅ 已完成 (Completed)`
+   - Ensure all unit tests pass
    ```
    Mark task as completed IMMEDIATELY after finishing
+   Update task document: **状态**: ✅ 已完成 (Completed)
    ```
 
-3. **If a task fails or is blocked**: Keep it as `in_progress` and document the issue
+3. **If a task fails or is blocked**:
+   - Keep it as `in_progress` in TodoWrite
+   - Update the task document status to `❌ 失败 (Failed)` or `⚠️ 阻塞 (Blocked)`
+   - Document the issue
    ```
    Do NOT mark as completed if tests fail or errors occur
+   Update task document with failure status and error details
    Create a new task for the blocker if needed
    ```
 
-### Task Status Rules
+### Task Document Status Markers
 
-- **EXACTLY ONE** task must be `in_progress` at any time (not less, not more)
-- **NEVER** batch multiple completions - update status after each task
-- **ALWAYS** use both forms for task descriptions:
-  - `content`: Imperative form (e.g., "Create database schema")
-  - `activeForm`: Present continuous (e.g., "Creating database schema")
+Use these status markers in task documents (e.g., `docs/pull-sync/*.md`):
 
-### Example Workflow
+- `⏸️ 待处理 (Pending)` - Task not started
+- `🔄 进行中 (In Progress)` - Task currently being worked on
+- `✅ 已完成 (Completed)` - Task successfully completed with tests passing
+- `❌ 失败 (Failed)` - Task failed, needs fixing
+- `⚠️ 阻塞 (Blocked)` - Task blocked by dependencies
+
+### Task Status Update Rules
+
+1. **Update BOTH TodoWrite AND task documents** - Keep them in sync
+2. **EXACTLY ONE** task must be `in_progress` at any time (not less, not more)
+3. **NEVER** batch multiple completions - update status after each task
+4. **ALWAYS** use both forms for task descriptions:
+   - `content`: Imperative form (e.g., "Create database schema")
+   - `activeForm`: Present continuous (e.g., "Creating database schema")
+
+### Example Workflow with Document Updates
 
 ```
 1. User asks to implement feature X
 2. TodoWrite: Mark "Implement feature X" as in_progress
-3. Do the work...
-4. TodoWrite: Mark "Implement feature X" as completed
-5. TodoWrite: Mark "Test feature X" as in_progress
-6. Run tests...
-7. If tests pass: TodoWrite: Mark "Test feature X" as completed
-8. If tests fail: Keep "Test feature X" as in_progress, fix issues
+3. Edit task document: Change status to 🔄 进行中 (In Progress)
+4. Do the work...
+5. Run tests to verify...
+6. TodoWrite: Mark "Implement feature X" as completed
+7. Edit task document: Change status to ✅ 已完成 (Completed)
+8. TodoWrite: Mark "Test feature X" as in_progress
+9. Edit task document: Change status to 🔄 进行中 (In Progress)
+10. Run tests...
+11. If tests pass:
+    - TodoWrite: Mark "Test feature X" as completed
+    - Edit task document: Change status to ✅ 已完成 (Completed)
+12. If tests fail:
+    - Keep "Test feature X" as in_progress in TodoWrite
+    - Edit task document: Change status to ❌ 失败 (Failed)
+    - Fix issues and repeat
 ```
+
+### Task Document Location
+
+For Pull-Sync tasks, update status in these files:
+- `docs/pull-sync/01-data-model.md`
+- `docs/pull-sync/02-project-discovery.md`
+- `docs/pull-sync/03-pull-executor.md`
+- `docs/pull-sync/04-scheduler.md`
+- `docs/pull-sync/05-webhook.md`
+
+Each task has a status line like:
+```markdown
+### T3.2 Pull 同步服务 - 首次同步
+**状态**: ⏸️ 待处理 (Pending)
+**依赖**: T3.1, 模块2 - 项目发现扩展
+```
+
+Update the `**状态**:` line before and after working on the task.
 
 **Failure to follow this workflow will result in lost track of progress and incomplete task management.**
 

@@ -1,5 +1,7 @@
 # 模块 1: 数据模型扩展 (Data Model Extension)
 
+**状态**: ✅ 已完成 (Completed)
+
 **目标**: 创建 Pull 同步相关的数据表，扩展统一任务模型。
 
 **预计时间**: 1-2天
@@ -9,6 +11,7 @@
 ## 任务清单
 
 ### T1.1 创建 PULL_SYNC_CONFIG 表
+**状态**: ✅ 已完成
 **依赖**: Push Mirror MVP 数据模型
 
 **任务目标**:
@@ -49,6 +52,7 @@ CREATE TABLE pull_sync_config (
 ---
 
 ### T1.2 创建 SYNC_TASK 统一任务表
+**状态**: ✅ 已完成
 **依赖**: T1.1
 
 **任务目标**:
@@ -106,6 +110,7 @@ CREATE TABLE sync_task (
 ---
 
 ### T1.3 扩展 SOURCE_PROJECT_INFO 表
+**状态**: ⏸️ 待处理 (Pending)
 **依赖**: T1.2
 
 **任务目标**:
@@ -133,6 +138,7 @@ ADD COLUMN repository_size BIGINT COMMENT '仓库大小(字节)' AFTER empty_rep
 ---
 
 ### T1.4 创建数据迁移脚本
+**状态**: ⏸️ 待处理 (Pending)
 **依赖**: T1.1, T1.2, T1.3
 
 **任务目标**:

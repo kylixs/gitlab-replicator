@@ -1,5 +1,7 @@
 # 模块 5: Webhook 准实时同步 (Webhook Real-time Sync)
 
+**状态**: ⏸️ 待处理 (Pending)
+
 **目标**: 实现 GitLab Push Webhook 接收和处理，实现准实时同步。
 
 **预计时间**: 1-2天
@@ -9,6 +11,7 @@
 ## 任务清单
 
 ### T5.1 Webhook Controller 实现
+**状态**: ⏸️ 待处理 (Pending)
 **依赖**: 模块2 - 项目发现扩展, 模块4 - 统一任务调度器
 
 **任务目标**:
@@ -54,6 +57,7 @@ public class WebhookController {
 ---
 
 ### T5.2 Webhook 事件处理服务
+**状态**: ⏸️ 待处理 (Pending)
 **依赖**: T5.1
 
 **任务目标**:
@@ -113,6 +117,7 @@ public class WebhookEventService {
 ---
 
 ### T5.3 项目自动初始化逻辑
+**状态**: ⏸️ 待处理 (Pending)
 **依赖**: T5.2
 
 **任务目标**:
@@ -178,6 +183,7 @@ private SyncProject initializeProject(GitLabPushEvent event) {
 ---
 
 ### T5.4 Webhook 配置和安全
+**状态**: ⏸️ 待处理 (Pending)
 **依赖**: T5.1
 
 **任务目标**:
@@ -236,6 +242,7 @@ public void handlePushEvent(...) { ... }
 ---
 
 ### T5.5 Webhook 监控和日志
+**状态**: ⏸️ 待处理 (Pending)
 **依赖**: T5.2, T5.4
 
 **任务目标**:
