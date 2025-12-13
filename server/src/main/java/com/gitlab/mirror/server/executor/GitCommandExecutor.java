@@ -27,8 +27,15 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class GitCommandExecutor {
 
-    private static final int DEFAULT_TIMEOUT_SECONDS = 300; // 5 minutes
-    private static final int CLONE_TIMEOUT_SECONDS = 1800; // 30 minutes
+    // Timeout constants for different git operations
+    private static final int REMOTE_SHA_TIMEOUT_SECONDS = 30;    // ls-remote - quick network call
+    private static final int LOCAL_SHA_TIMEOUT_SECONDS = 10;     // local git operations
+    private static final int CHECK_CHANGES_TIMEOUT_SECONDS = 60; // ls-remote + local SHA
+    private static final int SYNC_TIMEOUT_SECONDS = 300;         // git push/pull - 5 minutes
+    private static final int CLONE_TIMEOUT_SECONDS = 1800;       // git clone - 30 minutes
+    private static final int VERIFY_TIMEOUT_SECONDS = 120;       // git fsck - 2 minutes
+    private static final int CLEANUP_TIMEOUT_SECONDS = 300;      // git gc - 5 minutes
+
     private static final String SCRIPT_NAME = "git-sync.sh";
 
     private final String scriptPath;
@@ -139,7 +146,7 @@ public class GitCommandExecutor {
     public GitResult checkChanges(String remoteUrl, String localPath) {
         log.debug("Checking for changes: {}", localPath);
 
-        return executeScript("check-changes", DEFAULT_TIMEOUT_SECONDS, remoteUrl, localPath);
+        return executeScript("check-changes", CHECK_CHANGES_TIMEOUT_SECONDS, remoteUrl, localPath);
     }
 
     /**
@@ -153,7 +160,7 @@ public class GitCommandExecutor {
     public GitResult syncIncremental(String sourceUrl, String targetUrl, String localPath) {
         log.info("Performing incremental sync at {}", localPath);
 
-        return executeScript("sync-incremental", DEFAULT_TIMEOUT_SECONDS,
+        return executeScript("sync-incremental", SYNC_TIMEOUT_SECONDS,
             sourceUrl, targetUrl, localPath);
     }
 
@@ -181,7 +188,7 @@ public class GitCommandExecutor {
     public GitResult getRemoteHeadSha(String remoteUrl) {
         log.debug("Getting remote SHA for {}", maskToken(remoteUrl));
 
-        GitResult result = executeScript("get-remote-sha", DEFAULT_TIMEOUT_SECONDS,
+        GitResult result = executeScript("get-remote-sha", REMOTE_SHA_TIMEOUT_SECONDS,
             remoteUrl, "HEAD");
 
         // Parse SHA from output and add to parsed data
@@ -203,7 +210,7 @@ public class GitCommandExecutor {
     public String getRemoteHeadSha(String remoteUrl, String ref) {
         log.debug("Getting remote SHA for {}", maskToken(remoteUrl));
 
-        GitResult result = executeScript("get-remote-sha", DEFAULT_TIMEOUT_SECONDS,
+        GitResult result = executeScript("get-remote-sha", REMOTE_SHA_TIMEOUT_SECONDS,
             remoteUrl, ref != null ? ref : "HEAD");
 
         if (result.isSuccess() && result.getOutput() != null) {
@@ -222,7 +229,7 @@ public class GitCommandExecutor {
     public String getLocalHeadSha(String localPath) {
         log.debug("Getting local HEAD SHA at {}", localPath);
 
-        GitResult result = executeScript("get-local-sha", DEFAULT_TIMEOUT_SECONDS, localPath);
+        GitResult result = executeScript("get-local-sha", LOCAL_SHA_TIMEOUT_SECONDS, localPath);
 
         if (result.isSuccess() && result.getOutput() != null) {
             return result.getOutput().trim();
@@ -240,7 +247,7 @@ public class GitCommandExecutor {
     public GitResult verifyRepository(String localPath) {
         log.debug("Verifying repository at {}", localPath);
 
-        return executeScript("verify", DEFAULT_TIMEOUT_SECONDS, localPath);
+        return executeScript("verify", VERIFY_TIMEOUT_SECONDS, localPath);
     }
 
     /**
@@ -252,7 +259,7 @@ public class GitCommandExecutor {
     public GitResult cleanup(String localPath) {
         log.info("Running cleanup on {}", localPath);
 
-        return executeScript("cleanup", DEFAULT_TIMEOUT_SECONDS, localPath);
+        return executeScript("cleanup", CLEANUP_TIMEOUT_SECONDS, localPath);
     }
 
     /**

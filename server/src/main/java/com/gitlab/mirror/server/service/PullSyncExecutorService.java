@@ -1,11 +1,14 @@
 package com.gitlab.mirror.server.service;
 
+import com.gitlab.mirror.common.model.RepositoryBranch;
+import com.gitlab.mirror.server.client.GitLabApiClient;
 import com.gitlab.mirror.server.config.properties.GitLabMirrorProperties;
 import com.gitlab.mirror.server.entity.*;
 import com.gitlab.mirror.server.executor.GitCommandExecutor;
 import com.gitlab.mirror.server.mapper.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,10 +28,10 @@ import java.time.temporal.ChronoUnit;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class PullSyncExecutorService {
 
     private final GitCommandExecutor gitCommandExecutor;
+    private final GitLabApiClient sourceGitLabApiClient;
     private final TargetProjectManagementService targetProjectManagementService;
     private final DiskManagementService diskManagementService;
     private final SyncTaskMapper syncTaskMapper;
@@ -38,6 +41,34 @@ public class PullSyncExecutorService {
     private final TargetProjectInfoMapper targetProjectInfoMapper;
     private final SyncEventMapper syncEventMapper;
     private final GitLabMirrorProperties properties;
+    private final TaskStatusUpdateService taskStatusUpdateService;
+
+    public PullSyncExecutorService(
+            GitCommandExecutor gitCommandExecutor,
+            @Qualifier("sourceGitLabApiClient") GitLabApiClient sourceGitLabApiClient,
+            TargetProjectManagementService targetProjectManagementService,
+            DiskManagementService diskManagementService,
+            SyncTaskMapper syncTaskMapper,
+            SyncProjectMapper syncProjectMapper,
+            PullSyncConfigMapper pullSyncConfigMapper,
+            SourceProjectInfoMapper sourceProjectInfoMapper,
+            TargetProjectInfoMapper targetProjectInfoMapper,
+            SyncEventMapper syncEventMapper,
+            GitLabMirrorProperties properties,
+            TaskStatusUpdateService taskStatusUpdateService) {
+        this.gitCommandExecutor = gitCommandExecutor;
+        this.sourceGitLabApiClient = sourceGitLabApiClient;
+        this.targetProjectManagementService = targetProjectManagementService;
+        this.diskManagementService = diskManagementService;
+        this.syncTaskMapper = syncTaskMapper;
+        this.syncProjectMapper = syncProjectMapper;
+        this.pullSyncConfigMapper = pullSyncConfigMapper;
+        this.sourceProjectInfoMapper = sourceProjectInfoMapper;
+        this.targetProjectInfoMapper = targetProjectInfoMapper;
+        this.syncEventMapper = syncEventMapper;
+        this.properties = properties;
+        this.taskStatusUpdateService = taskStatusUpdateService;
+    }
 
     /**
      * Execute Pull sync task
@@ -48,10 +79,9 @@ public class PullSyncExecutorService {
         log.info("Executing Pull sync task, taskId={}, projectId={}",
             task.getId(), task.getSyncProjectId());
 
-        SyncProject project = null;
         try {
             // Update task status: pending → running (in separate transaction to ensure it persists)
-            updateTaskStatusInNewTransaction(task, "running", Instant.now());
+            taskStatusUpdateService.updateStatus(task, "running", Instant.now());
 
             // Execute sync in transaction
             executeSyncInternal(task);
@@ -86,7 +116,7 @@ public class PullSyncExecutorService {
         // Check if enabled
         if (!config.getEnabled()) {
             log.warn("Pull sync disabled for project: {}", project.getProjectKey());
-            updateTaskStatusToWaitingInNewTransaction(task, null, "Disabled");
+            taskStatusUpdateService.updateToWaiting(task, null, "Disabled");
             return;
         }
 
@@ -212,17 +242,18 @@ public class PullSyncExecutorService {
         String targetUrl = buildGitUrl(properties.getTarget().getUrl(),
             properties.getTarget().getToken(), targetInfo.getPathWithNamespace());
 
-        // 5. Check for changes using git ls-remote (optimization)
-        GitCommandExecutor.GitResult lsRemoteResult = gitCommandExecutor.getRemoteHeadSha(sourceUrl);
-        if (!lsRemoteResult.isSuccess()) {
-            throw new RuntimeException("Failed to get remote HEAD SHA: " + lsRemoteResult.getError());
+        // 5. Check for changes using GitLab API (optimization - avoid git ls-remote hang)
+        String remoteHeadSha = getRemoteHeadShaViaApi(sourceInfo.getPathWithNamespace());
+        if (remoteHeadSha == null) {
+            // Fallback: try direct git fetch (will fail fast with timeout)
+            log.warn("Failed to get remote SHA via API, will proceed with direct sync");
+            remoteHeadSha = "unknown";
         }
 
-        String remoteHeadSha = lsRemoteResult.getParsedValue("HEAD_SHA");
         String lastSyncedSha = task.getSourceCommitSha();
 
         // 6. If no changes, skip sync
-        if (remoteHeadSha != null && remoteHeadSha.equals(lastSyncedSha)) {
+        if (!"unknown".equals(remoteHeadSha) && remoteHeadSha.equals(lastSyncedSha)) {
             log.info("No changes detected for project: {}, skipping sync", project.getProjectKey());
             updateTaskAfterSuccess(task, false, remoteHeadSha, remoteHeadSha);
             recordSyncFinishedEvent(project, task, remoteHeadSha,
@@ -329,39 +360,6 @@ public class PullSyncExecutorService {
         return url + "/" + projectPath + ".git";
     }
 
-    /**
-     * Update task status in new transaction (ensures status persists even if main transaction rolls back)
-     *
-     * @param task      Task
-     * @param status    New status
-     * @param startedAt Started timestamp
-     */
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
-    public void updateTaskStatusInNewTransaction(SyncTask task, String status, Instant startedAt) {
-        task.setTaskStatus(status);
-        if (startedAt != null) {
-            task.setStartedAt(startedAt);
-        }
-        task.setUpdatedAt(LocalDateTime.now());
-        syncTaskMapper.updateById(task);
-        log.debug("Updated task status in new transaction: taskId={}, status={}", task.getId(), status);
-    }
-
-    /**
-     * Update task status
-     *
-     * @param task      Task
-     * @param status    New status
-     * @param startedAt Started timestamp
-     */
-    private void updateTaskStatus(SyncTask task, String status, Instant startedAt) {
-        task.setTaskStatus(status);
-        if (startedAt != null) {
-            task.setStartedAt(startedAt);
-        }
-        task.setUpdatedAt(LocalDateTime.now());
-        syncTaskMapper.updateById(task);
-    }
 
     /**
      * Update task after successful sync
@@ -396,46 +394,14 @@ public class PullSyncExecutorService {
         syncTaskMapper.updateById(task);
     }
 
-    /**
-     * Update task status to waiting in new transaction
-     *
-     * @param task   Task
-     * @param reason Reason (optional)
-     * @param status Last sync status
-     */
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
-    public void updateTaskStatusToWaitingInNewTransaction(SyncTask task, String reason, String status) {
-        task.setTaskStatus("waiting");
-        task.setLastSyncStatus(status);
-        task.setNextRunAt(calculateNextRunTime(task));
-        task.setUpdatedAt(LocalDateTime.now());
-        syncTaskMapper.updateById(task);
-        log.debug("Updated task to waiting in new transaction: taskId={}, reason={}", task.getId(), reason);
-    }
 
     /**
-     * Update task status to waiting
-     *
-     * @param task   Task
-     * @param reason Reason (optional)
-     * @param status Last sync status
-     */
-    private void updateTaskStatusToWaiting(SyncTask task, String reason, String status) {
-        task.setTaskStatus("waiting");
-        task.setLastSyncStatus(status);
-        task.setNextRunAt(calculateNextRunTime(task));
-        task.setUpdatedAt(LocalDateTime.now());
-        syncTaskMapper.updateById(task);
-    }
-
-    /**
-     * Handle sync failure (in new transaction to ensure status update persists)
+     * Handle sync failure (uses separate transaction service to ensure status update persists)
      *
      * @param task Sync task
      * @param e    Exception
      */
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
-    public void handleSyncFailure(SyncTask task, Exception e) {
+    private void handleSyncFailure(SyncTask task, Throwable e) {
         Instant now = Instant.now();
         Instant completedAt = now;
         long durationSeconds = task.getStartedAt() != null ?
@@ -487,9 +453,9 @@ public class PullSyncExecutorService {
 
         // Calculate retry time with exponential backoff
         task.setNextRunAt(calculateRetryTime(task.getConsecutiveFailures()));
-        task.setUpdatedAt(LocalDateTime.now());
 
-        syncTaskMapper.updateById(task);
+        // Update task status in new transaction to ensure it persists
+        taskStatusUpdateService.updateAfterFailure(task);
 
         // Record sync failed event with details
         if (project != null) {
@@ -526,7 +492,7 @@ public class PullSyncExecutorService {
      * @param e Exception
      * @return Error type
      */
-    private String classifyError(Exception e) {
+    private String classifyError(Throwable e) {
         String message = e.getMessage();
         if (message == null) {
             return "unknown";
@@ -632,5 +598,35 @@ public class PullSyncExecutorService {
         ));
         event.setEventTime(LocalDateTime.now());
         syncEventMapper.insert(event);
+    }
+
+    /**
+     * Get remote HEAD SHA using GitLab API
+     * <p>
+     * This method uses GitLab API instead of git ls-remote to avoid network hang issues
+     *
+     * @param projectPath Source project path
+     * @return Commit SHA or null if failed
+     */
+    private String getRemoteHeadShaViaApi(String projectPath) {
+        try {
+            log.debug("Getting remote HEAD SHA via GitLab API for: {}", projectPath);
+
+            // Get default branch info via API
+            RepositoryBranch defaultBranch = sourceGitLabApiClient.getDefaultBranch(projectPath);
+
+            if (defaultBranch == null || defaultBranch.getCommit() == null) {
+                log.warn("Failed to get default branch info via API for: {}", projectPath);
+                return null;
+            }
+
+            String commitSha = defaultBranch.getCommit().getId();
+            log.debug("Got remote HEAD SHA via API: {} for {}", commitSha, projectPath);
+            return commitSha;
+
+        } catch (Exception e) {
+            log.error("Failed to get remote HEAD SHA via API for: {}", projectPath, e);
+            return null;
+        }
     }
 }

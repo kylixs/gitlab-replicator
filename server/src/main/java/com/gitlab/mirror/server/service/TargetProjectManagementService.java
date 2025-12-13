@@ -112,11 +112,32 @@ public class TargetProjectManagementService {
 
             // 5. 创建目标项目
             String projectPath = extractProjectPath(sourceInfo.getPathWithNamespace());
-            GitLabProject createdProject = targetGitLabApiClient.createProject(
-                    projectPath,
-                    sourceInfo.getName(),
-                    groupPath
-            );
+            GitLabProject createdProject = null;
+
+            try {
+                createdProject = targetGitLabApiClient.createProject(
+                        projectPath,
+                        sourceInfo.getName(),
+                        groupPath
+                );
+                log.info("Target project created successfully: {}", targetInfo.getPathWithNamespace());
+            } catch (GitLabClientException e) {
+                // Check if project already exists (400 error with "has already been taken")
+                if (e.getMessage() != null && e.getMessage().contains("has already been taken")) {
+                    log.info("Target project already exists, fetching existing project: {}", targetInfo.getPathWithNamespace());
+                    try {
+                        // Get existing project by path
+                        createdProject = targetGitLabApiClient.getProject(targetInfo.getPathWithNamespace());
+                        log.info("Found existing target project: id={}, path={}",
+                            createdProject.getId(), createdProject.getPathWithNamespace());
+                    } catch (Exception fetchEx) {
+                        log.error("Failed to fetch existing project: {}", targetInfo.getPathWithNamespace(), fetchEx);
+                        throw e; // Throw original creation error
+                    }
+                } else {
+                    throw e; // Re-throw if not a "already exists" error
+                }
+            }
 
             // 6. 更新目标项目信息（状态：created）
             targetInfo.setGitlabProjectId(createdProject.getId());
@@ -130,7 +151,7 @@ public class TargetProjectManagementService {
                     Map.of("project_path", targetInfo.getPathWithNamespace(),
                            "gitlab_project_id", createdProject.getId()));
 
-            log.info("Target project created successfully: {}", targetInfo.getPathWithNamespace());
+            log.info("Target project ready: {}", targetInfo.getPathWithNamespace());
             return targetInfo;
 
         } catch (GitLabClientException e) {

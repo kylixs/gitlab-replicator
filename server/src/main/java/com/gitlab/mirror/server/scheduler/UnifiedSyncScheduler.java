@@ -51,9 +51,9 @@ public class UnifiedSyncScheduler {
     }
 
     /**
-     * Schedule pull sync tasks every minute
+     * Schedule pull sync tasks every 10 seconds
      */
-    @Scheduled(cron = "0 * * * * ?")
+    @Scheduled(cron = "*/10 * * * * ?")
     public void schedulePullTasks() {
         long startTime = System.currentTimeMillis();
 
