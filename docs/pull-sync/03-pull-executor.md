@@ -63,7 +63,7 @@ public class GitCommandExecutor {
 ---
 
 ### T3.2 Pull 同步服务 - 首次同步
-**状态**: ⚠️ 阻塞 (Blocked) - 测试需要修复
+**状态**: ✅ 已完成
 **依赖**: T3.1, 模块2 - 项目发现扩展
 
 **任务目标**:
