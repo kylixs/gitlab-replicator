@@ -235,42 +235,9 @@ docker exec gitlab-source gitlab-ctl reconfigure
 - Target GitLab HTTP: 9000
 - Target GitLab SSH: 2223
 
-## Task Management Guidelines
+### Task Document Status Markers - [CRITICAL REQUIREMENT]
 
-**IMPORTANT**: When working on development tasks, you MUST use the TodoWrite tool to track progress AND update task document status:
-
-### Required Task Tracking Workflow
-
-1. **Before starting a task**:
-   - Mark it as `in_progress` in TodoWrite
-   - Update the task document status to `🔄 进行中 (In Progress)`
-   ```
-   Mark task as in_progress BEFORE beginning any work
-   Update task document: **状态**: 🔄 进行中 (In Progress)
-   ```
-
-2. **After completing a task successfully**:
-   - Mark it as `completed` in TodoWrite
-   - Update the task document status to `✅ 已完成 (Completed)`
-   - Ensure all unit tests pass
-   ```
-   Mark task as completed IMMEDIATELY after finishing
-   Update task document: **状态**: ✅ 已完成 (Completed)
-   ```
-
-3. **If a task fails or is blocked**:
-   - Keep it as `in_progress` in TodoWrite
-   - Update the task document status to `❌ 失败 (Failed)` or `⚠️ 阻塞 (Blocked)`
-   - Document the issue
-   ```
-   Do NOT mark as completed if tests fail or errors occur
-   Update task document with failure status and error details
-   Create a new task for the blocker if needed
-   ```
-
-### Task Document Status Markers
-
-Use these status markers in task documents (e.g., `docs/pull-sync/*.md`):
+Use these status markers of subtask in task documents before and after process every subtask (e.g., `docs/pull-sync/*.md`):
 
 - `⏸️ 待处理 (Pending)` - Task not started
 - `🔄 进行中 (In Progress)` - Task currently being worked on
@@ -288,8 +255,6 @@ Use these status markers in task documents (e.g., `docs/pull-sync/*.md`):
    - `activeForm`: Present continuous (e.g., "Creating database schema")
 
 ### Example Workflow with Document Updates
-
-```
 1. User asks to implement feature X
 2. TodoWrite: Mark "Implement feature X" as in_progress
 3. Edit task document: Change status to 🔄 进行中 (In Progress)
@@ -303,20 +268,17 @@ Use these status markers in task documents (e.g., `docs/pull-sync/*.md`):
 11. If tests pass:
     - TodoWrite: Mark "Test feature X" as completed
     - Edit task document: Change status to ✅ 已完成 (Completed)
+    - git commit changed files with simple message
 12. If tests fail:
     - Keep "Test feature X" as in_progress in TodoWrite
     - Edit task document: Change status to ❌ 失败 (Failed)
     - Fix issues and repeat
-```
 
 ### Task Document Location
 
 For Pull-Sync tasks, update status in these files:
 - `docs/pull-sync/01-data-model.md`
 - `docs/pull-sync/02-project-discovery.md`
-- `docs/pull-sync/03-pull-executor.md`
-- `docs/pull-sync/04-scheduler.md`
-- `docs/pull-sync/05-webhook.md`
 
 Each task has a status line like:
 ```markdown

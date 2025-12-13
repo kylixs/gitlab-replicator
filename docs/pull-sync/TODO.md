@@ -257,19 +257,7 @@
   - Operations guide: Monitoring, troubleshooting, maintenance
   - Performance tuning
 
-### ⏸️ Deployment Tasks
 
-- [ ] T9.4: Update Docker deployment configuration
-  - Update docker-compose.yml with new configs
-  - Environment variables for Pull sync
-  - Volume mounts for local repos
-  - Resource limits and health checks
-
-- [ ] T9.5: Create migration guide from Push to Pull sync
-  - When to use Pull sync vs Push Mirror
-  - Migration steps
-  - Rollback procedure
-  - Troubleshooting common issues
 
 ---
 

@@ -78,14 +78,18 @@ public class ProjectDiscoveryService {
     }
 
     /**
-     * 执行项目发现 (默认使用 Push Mirror)
+     * 执行项目发现 (使用配置的默认同步方式)
      *
      * @param groupPath 要发现的分组路径，null表示发现所有项目
      * @return 发现的项目数量
      */
     @Transactional
     public int discoverProjects(String groupPath) {
-        return discoverProjects(groupPath, SyncProject.SyncMethod.PUSH_MIRROR);
+        String defaultMethod = properties.getSync().getDefaultSyncMethod();
+        if (defaultMethod == null || defaultMethod.isBlank()) {
+            defaultMethod = "pull_sync";  // Use string literal instead of constant
+        }
+        return discoverProjects(groupPath, defaultMethod);
     }
 
     /**
