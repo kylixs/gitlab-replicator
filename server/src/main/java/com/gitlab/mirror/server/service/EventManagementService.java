@@ -26,9 +26,12 @@ import java.util.Map;
 public class EventManagementService {
 
     private final SyncEventMapper syncEventMapper;
+    private final com.gitlab.mirror.server.mapper.SyncProjectMapper syncProjectMapper;
 
-    public EventManagementService(SyncEventMapper syncEventMapper) {
+    public EventManagementService(SyncEventMapper syncEventMapper,
+                                 com.gitlab.mirror.server.mapper.SyncProjectMapper syncProjectMapper) {
         this.syncEventMapper = syncEventMapper;
+        this.syncProjectMapper = syncProjectMapper;
     }
 
     /**
@@ -149,6 +152,48 @@ public class EventManagementService {
                                          LocalDateTime startTime, LocalDateTime endTime) {
         Page<SyncEvent> page = new Page<>(pageNum, pageSize);
         return syncEventMapper.selectPageWithFilters(page, syncProjectId, eventType, status, startTime, endTime);
+    }
+
+    /**
+     * 根据项目ID获取项目路径
+     *
+     * @param syncProjectId 同步项目ID
+     * @return 项目路径
+     */
+    public String getProjectKey(Long syncProjectId) {
+        if (syncProjectId == null) {
+            return null;
+        }
+
+        com.gitlab.mirror.server.entity.SyncProject project =
+            syncProjectMapper.selectById(syncProjectId);
+
+        return project != null ? project.getProjectKey() : null;
+    }
+
+    /**
+     * 批量获取项目路径
+     *
+     * @param syncProjectIds 同步项目ID列表
+     * @return 项目ID到路径的映射
+     */
+    public Map<Long, String> getProjectKeys(List<Long> syncProjectIds) {
+        Map<Long, String> projectKeyMap = new HashMap<>();
+
+        if (syncProjectIds == null || syncProjectIds.isEmpty()) {
+            return projectKeyMap;
+        }
+
+        for (Long syncProjectId : syncProjectIds) {
+            if (syncProjectId != null) {
+                String projectKey = getProjectKey(syncProjectId);
+                if (projectKey != null) {
+                    projectKeyMap.put(syncProjectId, projectKey);
+                }
+            }
+        }
+
+        return projectKeyMap;
     }
 
     /**

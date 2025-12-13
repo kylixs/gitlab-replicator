@@ -76,15 +76,15 @@ public class EventCommand {
         }
 
         // Print table
-        String[] headers = {"Event Type", "Status", "Project ID", "Created At", "Duration(s)"};
+        String[] headers = {"Event Type", "Status", "Project", "Event Time", "Duration(s)"};
         List<String[]> rows = new ArrayList<>();
 
         for (Map<String, Object> item : items) {
             String[] row = new String[5];
             row[0] = String.valueOf(item.get("eventType"));
             row[1] = String.valueOf(item.get("status"));
-            row[2] = String.valueOf(item.get("syncProjectId"));
-            row[3] = String.valueOf(item.get("createdAt"));
+            row[2] = String.valueOf(item.get("projectKey"));
+            row[3] = String.valueOf(item.get("eventTime"));
             row[4] = String.valueOf(item.get("durationSeconds"));
             rows.add(row);
         }

@@ -2,6 +2,7 @@ package com.gitlab.mirror.server.api.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.gitlab.mirror.server.api.dto.ApiResponse;
+import com.gitlab.mirror.server.api.dto.EventDTO;
 import com.gitlab.mirror.server.api.dto.PageResponse;
 import com.gitlab.mirror.server.entity.SyncEvent;
 import com.gitlab.mirror.server.service.EventManagementService;
@@ -13,6 +14,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Event Query API Controller
@@ -34,7 +38,7 @@ public class EventController {
      * Query events with multi-dimensional filters and pagination
      */
     @GetMapping
-    public ApiResponse<PageResponse<SyncEvent>> getEvents(
+    public ApiResponse<PageResponse<EventDTO>> getEvents(
             @RequestParam(required = false) Long projectId,
             @RequestParam(required = false) String eventType,
             @RequestParam(required = false) String status,
@@ -46,6 +50,30 @@ public class EventController {
         IPage<SyncEvent> result = eventManagementService.queryEvents(
                 page, size, projectId, eventType, status, startTime, endTime);
 
-        return ApiResponse.success(PageResponse.of(result));
+        // Load all unique project IDs
+        List<Long> projectIds = result.getRecords().stream()
+                .map(SyncEvent::getSyncProjectId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Batch load projects via service
+        Map<Long, String> projectKeyMap = eventManagementService.getProjectKeys(projectIds);
+
+        // Convert to DTOs
+        List<EventDTO> eventDTOs = result.getRecords().stream()
+                .map(event -> {
+                    String projectKey = projectKeyMap.get(event.getSyncProjectId());
+                    return EventDTO.from(event, projectKey);
+                })
+                .collect(Collectors.toList());
+
+        PageResponse<EventDTO> pageResponse = new PageResponse<>();
+        pageResponse.setItems(eventDTOs);
+        pageResponse.setTotal(result.getTotal());
+        pageResponse.setPage((int) result.getCurrent());
+        pageResponse.setPageSize((int) result.getSize());
+        pageResponse.setTotalPages((int) result.getPages());
+
+        return ApiResponse.success(pageResponse);
     }
 }
