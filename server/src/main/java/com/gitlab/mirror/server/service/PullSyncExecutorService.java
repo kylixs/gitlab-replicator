@@ -528,19 +528,25 @@ public class PullSyncExecutorService {
         );
 
         if (config == null) {
-            return Instant.now().plus(120, ChronoUnit.MINUTES);  // Default: 2 hours
+            // Default: use normal priority interval
+            int defaultInterval = properties.getSync().getPullInterval().getNormalSeconds();
+            return Instant.now().plus(defaultInterval, ChronoUnit.SECONDS);
         }
 
+        // Get interval from configuration based on priority
+        GitLabMirrorProperties.PullSyncIntervalConfig intervalConfig =
+            properties.getSync().getPullInterval();
+
         String priority = config.getPriority();
-        long intervalMinutes = switch (priority.toLowerCase()) {
-            case "critical" -> 1;    // 1 minute
-            case "high" -> 3;        // 3 minutes
-            case "normal" -> 3;      // 3 minutes (default)
-            case "low" -> 10;        // 10 minutes
-            default -> 3;            // Default: 3 minutes
+        int intervalSeconds = switch (priority.toLowerCase()) {
+            case "critical" -> intervalConfig.getCriticalSeconds();
+            case "high" -> intervalConfig.getHighSeconds();
+            case "normal" -> intervalConfig.getNormalSeconds();
+            case "low" -> intervalConfig.getLowSeconds();
+            default -> intervalConfig.getNormalSeconds();  // Default: normal priority
         };
 
-        return Instant.now().plus(intervalMinutes, ChronoUnit.MINUTES);
+        return Instant.now().plus(intervalSeconds, ChronoUnit.SECONDS);
     }
 
     /**

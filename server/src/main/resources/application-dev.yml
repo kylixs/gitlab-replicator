@@ -67,6 +67,14 @@ gitlab:
       #     method: pull_sync
       #   - group-path: "devops/**"
       #     method: pull_sync
+      # Pull sync interval configuration
+      # Supports time units: s(seconds), m(minutes), h(hours)
+      # Examples: 60s, 3m, 1h
+      pull-interval:
+        critical: 1m    # 1 minute
+        high: 3m        # 3 minutes
+        normal: 3m      # 3 minutes (default)
+        low: 10m        # 10 minutes
     performance:
       project-discovery-concurrency: 5
       mirror-setup-concurrency: 10
