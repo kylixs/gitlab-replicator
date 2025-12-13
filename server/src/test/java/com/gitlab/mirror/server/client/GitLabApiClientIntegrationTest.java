@@ -105,6 +105,7 @@ class GitLabApiClientIntegrationTest {
     void testGroupLifecycle() {
         String testGroupPath = "test-integration-group-" + System.currentTimeMillis();
         String testGroupName = "Test Integration Group";
+        Long createdGroupId = null;
 
         try {
             // 1. 检查分组不存在
@@ -118,6 +119,7 @@ class GitLabApiClientIntegrationTest {
             assertThat(createdGroup.getId()).isNotNull();
             assertThat(createdGroup.getPath()).isEqualTo(testGroupPath);
             assertThat(createdGroup.getName()).isEqualTo(testGroupName);
+            createdGroupId = createdGroup.getId();
             log.info("Group created: id={}, path={}", createdGroup.getId(), createdGroup.getPath());
 
             // 3. 检查分组存在
@@ -128,9 +130,17 @@ class GitLabApiClientIntegrationTest {
         } catch (Exception e) {
             log.error("Group lifecycle test failed", e);
             throw e;
+        } finally {
+            // 4. 清理：删除创建的分组
+            if (createdGroupId != null) {
+                try {
+                    apiClient.deleteGroup(createdGroupId);
+                    log.info("Cleaned up test group: id={}", createdGroupId);
+                } catch (Exception e) {
+                    log.warn("Failed to clean up test group: id={}", createdGroupId, e);
+                }
+            }
         }
-
-        log.info("Group lifecycle test completed. Note: Group not deleted, please clean up manually.");
     }
 
     @Test
@@ -138,13 +148,16 @@ class GitLabApiClientIntegrationTest {
         long timestamp = System.currentTimeMillis();
         String testGroupPath = "test-integration-projects";
         String testProjectPath = "test-project-" + timestamp;
-        String testProjectName = "Test Project " + timestamp;  // Also include timestamp in name to avoid conflict
+        String testProjectName = "Test Project " + timestamp;
+        Long createdGroupId = null;
+        Long createdProjectId = null;
 
         try {
             // 1. 确保测试分组存在
             if (!apiClient.groupExists(testGroupPath)) {
-                apiClient.createGroup(testGroupPath, "Test Integration Projects", null);
-                log.info("Created test group: {}", testGroupPath);
+                GitLabGroup testGroup = apiClient.createGroup(testGroupPath, "Test Integration Projects", null);
+                createdGroupId = testGroup.getId();
+                log.info("Created test group: id={}, path={}", testGroup.getId(), testGroupPath);
             }
 
             // 2. 检查项目不存在
@@ -168,6 +181,7 @@ class GitLabApiClientIntegrationTest {
             assertThat(createdProject.getId()).isNotNull();
             assertThat(createdProject.getPath()).isEqualTo(testProjectPath);
             assertThat(createdProject.getName()).isEqualTo(testProjectName);
+            createdProjectId = createdProject.getId();
             log.info("Project created: id={}, path={}, pathWithNamespace={}",
                     createdProject.getId(), createdProject.getPath(), createdProject.getPathWithNamespace());
 
@@ -202,8 +216,25 @@ class GitLabApiClientIntegrationTest {
         } catch (Exception e) {
             log.error("Project lifecycle test failed", e);
             throw e;
-        }
+        } finally {
+            // 6. 清理：删除创建的项目和分组
+            if (createdProjectId != null) {
+                try {
+                    apiClient.deleteProject(createdProjectId);
+                    log.info("Cleaned up test project: id={}", createdProjectId);
+                } catch (Exception e) {
+                    log.warn("Failed to clean up test project: id={}", createdProjectId, e);
+                }
+            }
 
-        log.info("Project lifecycle test completed. Note: Project not deleted, please clean up manually.");
+            if (createdGroupId != null) {
+                try {
+                    apiClient.deleteGroup(createdGroupId);
+                    log.info("Cleaned up test group: id={}", createdGroupId);
+                } catch (Exception e) {
+                    log.warn("Failed to clean up test group: id={}", createdGroupId, e);
+                }
+            }
+        }
     }
 }

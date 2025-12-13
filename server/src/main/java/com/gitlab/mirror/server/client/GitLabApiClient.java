@@ -225,6 +225,22 @@ public class GitLabApiClient {
         return client.post("/api/v4/projects", body, GitLabProject.class);
     }
 
+    /**
+     * Delete group by ID
+     */
+    public void deleteGroup(Long groupId) {
+        log.info("Deleting group: id={}", groupId);
+        client.delete("/api/v4/groups/" + groupId);
+    }
+
+    /**
+     * Delete project by ID
+     */
+    public void deleteProject(Long projectId) {
+        log.info("Deleting project: id={}", projectId);
+        client.delete("/api/v4/projects/" + projectId);
+    }
+
     // ==================== Push Mirror Management API ====================
 
     /**
