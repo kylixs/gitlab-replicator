@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncEvent;
 import com.gitlab.mirror.server.entity.SyncProject;
+import com.gitlab.mirror.server.entity.SyncTask;
 import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
 import com.gitlab.mirror.server.mapper.SyncEventMapper;
 import com.gitlab.mirror.server.mapper.SyncProjectMapper;
@@ -36,18 +37,24 @@ public class ProjectDiscoveryService {
     private final SourceProjectInfoMapper sourceProjectInfoMapper;
     private final SyncEventMapper syncEventMapper;
     private final GitLabMirrorProperties properties;
+    private final PullSyncConfigService pullSyncConfigService;
+    private final SyncTaskService syncTaskService;
 
     public ProjectDiscoveryService(
             @Qualifier("sourceGitLabApiClient") GitLabApiClient sourceGitLabApiClient,
             SyncProjectMapper syncProjectMapper,
             SourceProjectInfoMapper sourceProjectInfoMapper,
             SyncEventMapper syncEventMapper,
-            GitLabMirrorProperties properties) {
+            GitLabMirrorProperties properties,
+            PullSyncConfigService pullSyncConfigService,
+            SyncTaskService syncTaskService) {
         this.sourceGitLabApiClient = sourceGitLabApiClient;
         this.syncProjectMapper = syncProjectMapper;
         this.sourceProjectInfoMapper = sourceProjectInfoMapper;
         this.syncEventMapper = syncEventMapper;
         this.properties = properties;
+        this.pullSyncConfigService = pullSyncConfigService;
+        this.syncTaskService = syncTaskService;
     }
 
     /**
@@ -71,14 +78,26 @@ public class ProjectDiscoveryService {
     }
 
     /**
-     * 执行项目发现
+     * 执行项目发现 (默认使用 Push Mirror)
      *
      * @param groupPath 要发现的分组路径，null表示发现所有项目
      * @return 发现的项目数量
      */
     @Transactional
     public int discoverProjects(String groupPath) {
-        log.info("Discovering projects from source GitLab, groupPath={}", groupPath);
+        return discoverProjects(groupPath, SyncProject.SyncMethod.PUSH_MIRROR);
+    }
+
+    /**
+     * 执行项目发现 (指定同步方式)
+     *
+     * @param groupPath  要发现的分组路径，null表示发现所有项目
+     * @param syncMethod 同步方式 (push_mirror/pull_sync)
+     * @return 发现的项目数量
+     */
+    @Transactional
+    public int discoverProjects(String groupPath, String syncMethod) {
+        log.info("Discovering projects from source GitLab, groupPath={}, syncMethod={}", groupPath, syncMethod);
 
         // 1. 从GitLab获取项目列表
         List<GitLabProject> gitlabProjects = sourceGitLabApiClient.getAllProjects(groupPath);
@@ -94,7 +113,7 @@ public class ProjectDiscoveryService {
 
         for (GitLabProject gitlabProject : filteredProjects) {
             try {
-                boolean isNew = processProject(gitlabProject);
+                boolean isNew = processProject(gitlabProject, syncMethod);
                 if (isNew) {
                     newCount++;
                 } else {
@@ -105,7 +124,7 @@ public class ProjectDiscoveryService {
             }
         }
 
-        log.info("Project discovery completed: new={}, updated={}", newCount, updatedCount);
+        log.info("Project discovery completed: new={}, updated={}, syncMethod={}", newCount, updatedCount, syncMethod);
         return filteredProjects.size();
     }
 
@@ -140,9 +159,10 @@ public class ProjectDiscoveryService {
      * 处理单个项目
      *
      * @param gitlabProject GitLab项目信息
+     * @param syncMethod    同步方式
      * @return true表示新创建，false表示更新
      */
-    private boolean processProject(GitLabProject gitlabProject) {
+    private boolean processProject(GitLabProject gitlabProject, String syncMethod) {
         String projectPath = gitlabProject.getPathWithNamespace();
 
         // 1. 查找或创建SyncProject记录
@@ -155,11 +175,22 @@ public class ProjectDiscoveryService {
         if (isNew) {
             syncProject = new SyncProject();
             syncProject.setProjectKey(projectPath);
-            syncProject.setSyncMethod(SyncProject.SyncMethod.PUSH_MIRROR);
+            syncProject.setSyncMethod(syncMethod);
             syncProject.setSyncStatus(SyncProject.SyncStatus.PENDING);
             syncProject.setEnabled(true);
             syncProjectMapper.insert(syncProject);
-            log.info("Created new sync project: {}", projectPath);
+            log.info("Created new sync project: {}, syncMethod={}", projectPath, syncMethod);
+
+            // Create configuration and task based on sync method
+            if ("pull_sync".equals(syncMethod)) {
+                // Create Pull sync config
+                pullSyncConfigService.initializeConfig(syncProject.getId(), projectPath);
+
+                // Create Pull sync task
+                syncTaskService.initializeTask(syncProject.getId(), SyncTask.TaskType.PULL);
+
+                log.info("Initialized Pull sync for project: {}", projectPath);
+            }
         } else {
             syncProject.setUpdatedAt(LocalDateTime.now());
             syncProjectMapper.updateById(syncProject);
@@ -195,6 +226,7 @@ public class ProjectDiscoveryService {
         info.setVisibility(gitlabProject.getVisibility());
         info.setArchived(gitlabProject.getArchived());
         info.setEmptyRepo(gitlabProject.getEmptyRepo());
+        info.setRepositorySize(gitlabProject.getStatistics() != null ? gitlabProject.getStatistics().getRepositorySize() : null);
         info.setStarCount(gitlabProject.getStarCount());
         info.setForkCount(gitlabProject.getForksCount());
         info.setLastActivityAt(gitlabProject.getLastActivityAt() != null ?

@@ -57,6 +57,8 @@ public class GitLabProject {
 
     private Namespace namespace;
 
+    private Statistics statistics;
+
     @Data
     public static class Namespace {
         private Long id;
@@ -65,5 +67,20 @@ public class GitLabProject {
 
         @JsonProperty("full_path")
         private String fullPath;
+    }
+
+    @Data
+    public static class Statistics {
+        @JsonProperty("repository_size")
+        private Long repositorySize;
+
+        @JsonProperty("storage_size")
+        private Long storageSize;
+
+        @JsonProperty("lfs_objects_size")
+        private Long lfsObjectsSize;
+
+        @JsonProperty("job_artifacts_size")
+        private Long jobArtifactsSize;
     }
 }
