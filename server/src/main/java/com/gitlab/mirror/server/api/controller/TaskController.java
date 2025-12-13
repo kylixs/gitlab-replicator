@@ -6,9 +6,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.gitlab.mirror.server.api.dto.*;
 import com.gitlab.mirror.server.api.exception.ResourceNotFoundException;
 import com.gitlab.mirror.server.entity.PullSyncConfig;
+import com.gitlab.mirror.server.entity.SyncEvent;
 import com.gitlab.mirror.server.entity.SyncProject;
 import com.gitlab.mirror.server.entity.SyncTask;
 import com.gitlab.mirror.server.mapper.PullSyncConfigMapper;
+import com.gitlab.mirror.server.mapper.SyncEventMapper;
 import com.gitlab.mirror.server.mapper.SyncProjectMapper;
 import com.gitlab.mirror.server.mapper.SyncTaskMapper;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +36,7 @@ public class TaskController {
     private final SyncTaskMapper syncTaskMapper;
     private final SyncProjectMapper syncProjectMapper;
     private final PullSyncConfigMapper pullSyncConfigMapper;
+    private final SyncEventMapper syncEventMapper;
 
     /**
      * List tasks with filters and pagination
@@ -180,6 +183,55 @@ public class TaskController {
         log.info("Failure count reset and project re-enabled: taskId={}", taskId);
 
         return ApiResponse.success(toDTO(task));
+    }
+
+    /**
+     * Get task execution history
+     *
+     * GET /api/tasks/{taskId}/history?page=1&size=20
+     */
+    @GetMapping("/{taskId}/history")
+    public ApiResponse<PageResponse<EventDTO>> getTaskHistory(
+            @PathVariable Long taskId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+
+        log.info("Getting execution history for taskId={}, page={}, size={}", taskId, page, size);
+
+        // Verify task exists
+        SyncTask task = syncTaskMapper.selectById(taskId);
+        if (task == null) {
+            throw new ResourceNotFoundException("Task not found: " + taskId);
+        }
+
+        // Query events for this task's project
+        Page<SyncEvent> pageRequest = new Page<>(page, size);
+        IPage<SyncEvent> result = syncEventMapper.selectPageWithFilters(
+                pageRequest,
+                task.getSyncProjectId(),
+                null,  // eventType (all types)
+                null,  // status (all statuses)
+                null,  // startTime
+                null   // endTime
+        );
+
+        // Get project key
+        SyncProject project = syncProjectMapper.selectById(task.getSyncProjectId());
+        String projectKey = project != null ? project.getProjectKey() : null;
+
+        // Convert to DTOs
+        List<EventDTO> eventDTOs = result.getRecords().stream()
+                .map(event -> EventDTO.from(event, projectKey))
+                .collect(Collectors.toList());
+
+        PageResponse<EventDTO> pageResponse = new PageResponse<>();
+        pageResponse.setItems(eventDTOs);
+        pageResponse.setTotal(result.getTotal());
+        pageResponse.setPage((int) result.getCurrent());
+        pageResponse.setPageSize((int) result.getSize());
+        pageResponse.setTotalPages((int) result.getPages());
+
+        return ApiResponse.success(pageResponse);
     }
 
     /**

@@ -36,6 +36,9 @@ public class TaskCommand {
             case "show":
                 showTask(args);
                 break;
+            case "history":
+                showHistory(args);
+                break;
             case "retry":
                 retryTask(args);
                 break;
@@ -328,6 +331,94 @@ public class TaskCommand {
         System.out.println();
     }
 
+    private void showHistory(String[] args) throws Exception {
+        if (args.length < 2) {
+            OutputFormatter.printError("Missing task ID");
+            OutputFormatter.printInfo("Usage: gitlab-mirror task history <task-id> [--page=1] [--size=20] [--format=table]");
+            System.exit(1);
+        }
+
+        String taskId = args[1];
+        int page = 1;
+        int size = 20;
+        String format = "table";
+
+        // Parse options
+        for (int i = 2; i < args.length; i++) {
+            if (args[i].startsWith("--page=")) {
+                page = Integer.parseInt(args[i].substring("--page=".length()));
+            } else if (args[i].startsWith("--size=")) {
+                size = Integer.parseInt(args[i].substring("--size=".length()));
+            } else if (args[i].startsWith("--format=")) {
+                format = args[i].substring("--format=".length());
+            }
+        }
+
+        String response = apiClient.get("/api/tasks/" + taskId + "/history?page=" + page + "&size=" + size);
+
+        if ("json".equalsIgnoreCase(format)) {
+            OutputFormatter.printJson(response);
+        } else {
+            printHistoryTable(response);
+        }
+    }
+
+    private void printHistoryTable(String json) {
+        JsonNode root = JsonParser.parse(json);
+
+        if (!JsonParser.getBoolean(root, "success")) {
+            OutputFormatter.printError("Request failed: " + JsonParser.getString(root, "message"));
+            return;
+        }
+
+        List<JsonNode> items = JsonParser.getArray(root, "data", "items");
+        if (items.isEmpty()) {
+            OutputFormatter.printWarning("No execution history found");
+            return;
+        }
+
+        // Prepare table data
+        String[] headers = {"Event Time", "Event Type", "Status", "Duration(s)", "Commit SHA", "Branch", "Error"};
+        List<String[]> rows = new ArrayList<>();
+
+        for (JsonNode item : items) {
+            String eventTime = JsonParser.getString(item, "eventTime");
+            if (eventTime != null && eventTime.length() > 19) {
+                eventTime = eventTime.substring(0, 19).replace("T", " ");
+            }
+
+            String commitSha = JsonParser.getString(item, "commitSha");
+            if (!"-".equals(commitSha) && commitSha.length() > 8) {
+                commitSha = commitSha.substring(0, 8);
+            }
+
+            String errorMsg = JsonParser.getString(item, "errorMessage");
+            if (!"-".equals(errorMsg)) {
+                errorMsg = OutputFormatter.truncate(errorMsg, 30);
+            }
+
+            String[] row = {
+                eventTime,
+                JsonParser.getString(item, "eventType"),
+                OutputFormatter.formatStatus(JsonParser.getString(item, "status")),
+                String.valueOf(JsonParser.getInt(item, "durationSeconds")),
+                commitSha,
+                OutputFormatter.truncate(JsonParser.getString(item, "branchName"), 20),
+                errorMsg
+            };
+            rows.add(row);
+        }
+
+        // Print summary
+        long total = JsonParser.getLong(root, "data", "total");
+        int currentPage = JsonParser.getInt(root, "data", "page");
+        OutputFormatter.printInfo(String.format("Task Execution History (Total: %d, Page: %d)", total, currentPage));
+        System.out.println();
+
+        // Print table
+        OutputFormatter.printTable(headers, rows);
+    }
+
     private void printUsage() {
         System.out.println(OutputFormatter.CYAN + "Task Management" + OutputFormatter.RESET);
         System.out.println();
@@ -337,6 +428,7 @@ public class TaskCommand {
         System.out.println(OutputFormatter.YELLOW + "Subcommands:" + OutputFormatter.RESET);
         System.out.println("  list                  List tasks");
         System.out.println("  show <task-id>        Show task details");
+        System.out.println("  history <task-id>     Show task execution history");
         System.out.println("  retry <task-id>       Manually retry a task");
         System.out.println("  reset <task-id>       Reset failure count");
         System.out.println("  stats                 Show task statistics");
@@ -351,9 +443,15 @@ public class TaskCommand {
         System.out.println("  --size=<n>            Page size (default: 20)");
         System.out.println("  --format=<fmt>        Output format (table|json, default: table)");
         System.out.println();
+        System.out.println(OutputFormatter.YELLOW + "History Options:" + OutputFormatter.RESET);
+        System.out.println("  --page=<n>            Page number (default: 1)");
+        System.out.println("  --size=<n>            Page size (default: 20)");
+        System.out.println("  --format=<fmt>        Output format (table|json, default: table)");
+        System.out.println();
         System.out.println(OutputFormatter.YELLOW + "Examples:" + OutputFormatter.RESET);
         System.out.println("  gitlab-mirror task list --type=pull --status=waiting");
         System.out.println("  gitlab-mirror task show 123");
+        System.out.println("  gitlab-mirror task history 123");
         System.out.println("  gitlab-mirror task retry 123");
         System.out.println("  gitlab-mirror task reset 123");
         System.out.println("  gitlab-mirror task stats");
