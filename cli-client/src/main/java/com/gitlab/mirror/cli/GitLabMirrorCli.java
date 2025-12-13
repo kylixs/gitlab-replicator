@@ -74,6 +74,9 @@ public class GitLabMirrorCli {
                 case "scheduler":
                     new SchedulerCommand(apiClient).execute(commandArgs);
                     break;
+                case "webhook":
+                    new WebhookCommand(apiClient).execute(commandArgs);
+                    break;
                 case "help":
                 case "--help":
                 case "-h":
@@ -117,16 +120,27 @@ public class GitLabMirrorCli {
         System.out.println("  export                Export data");
         System.out.println();
         System.out.println(OutputFormatter.YELLOW + "Pull-Sync Commands:" + OutputFormatter.RESET);
-        System.out.println("  pull <subcommand>     Pull sync management");
-        System.out.println("  task <subcommand>     Task management");
-        System.out.println("  scheduler <subcommand> Scheduler management");
+        System.out.println("  pull <subcommand>     Pull sync management (list/show/priority/enable/disable)");
+        System.out.println("  task <subcommand>     Task management (list/show/retry/reset/stats)");
+        System.out.println("  scheduler <subcommand> Scheduler management (status/trigger/metrics)");
+        System.out.println("  webhook <subcommand>  Webhook monitoring (list/show/stats)");
         System.out.println();
+        System.out.println(OutputFormatter.YELLOW + "General Commands:" + OutputFormatter.RESET);
         System.out.println("  help                  Show this help message");
         System.out.println("  version               Show version information");
+        System.out.println();
+        System.out.println(OutputFormatter.YELLOW + "Examples:" + OutputFormatter.RESET);
+        System.out.println("  gitlab-mirror pull list --priority=high --enabled");
+        System.out.println("  gitlab-mirror task list --type=pull --status=waiting");
+        System.out.println("  gitlab-mirror task retry 123");
+        System.out.println("  gitlab-mirror scheduler status");
+        System.out.println("  gitlab-mirror webhook stats");
         System.out.println();
         System.out.println(OutputFormatter.YELLOW + "Environment Variables:" + OutputFormatter.RESET);
         System.out.println("  GITLAB_MIRROR_API_URL      API base URL (default: http://localhost:8080)");
         System.out.println("  GITLAB_MIRROR_TOKEN        API authentication token");
+        System.out.println();
+        System.out.println("For detailed help on each command, use: gitlab-mirror <command> --help");
         System.out.println();
     }
 
