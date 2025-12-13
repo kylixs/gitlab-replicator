@@ -183,6 +183,24 @@ public class ApiClient {
     }
 
     /**
+     * Simple POST request with no body, returning raw JSON string
+     * Used for POST endpoints that only accept query parameters
+     */
+    public String postNoBody(String path) throws IOException, InterruptedException {
+        HttpRequest request = buildRequest(path)
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() >= 400) {
+            throw new IOException("HTTP " + response.statusCode() + ": " + response.body());
+        }
+
+        return response.body();
+    }
+
+    /**
      * Simple PUT request returning raw JSON string
      */
     public String put(String path, String jsonBody) throws IOException, InterruptedException {

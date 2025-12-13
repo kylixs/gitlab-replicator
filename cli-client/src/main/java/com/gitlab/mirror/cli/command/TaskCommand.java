@@ -298,19 +298,23 @@ public class TaskCommand {
             System.exit(1);
         }
 
-        StringBuilder url = new StringBuilder("/api/tasks/trigger-pull?");
+        StringBuilder url = new StringBuilder("/api/tasks/trigger-pull");
+        boolean hasParams = false;
+
         if (pattern != null) {
-            url.append("pattern=").append(java.net.URLEncoder.encode(pattern, "UTF-8"));
+            url.append("?pattern=").append(java.net.URLEncoder.encode(pattern, "UTF-8"));
+            hasParams = true;
         }
         if (taskId != null) {
-            url.append("taskId=").append(taskId);
+            url.append(hasParams ? "&" : "?").append("taskId=").append(taskId);
         }
 
         OutputFormatter.printInfo("Triggering pull tasks" +
             (pattern != null ? " matching pattern: " + pattern : "") +
             (taskId != null ? " with ID: " + taskId : "") + "...");
 
-        String response = apiClient.post(url.toString(), "{}");
+        // Call ApiClient with empty request body (query params are in URL)
+        String response = apiClient.postNoBody(url.toString());
 
         JsonNode root = JsonParser.parse(response);
 
