@@ -249,7 +249,7 @@ gitlab-mirror scheduler metrics
 ---
 
 ### T7.4 CLI 集成测试
-**状态**: ⏸️ 待处理 (Pending)
+**状态**: ✅ 已完成 (Completed)
 **依赖**: T7.1, T7.2, T7.3
 
 **任务目标**:
@@ -288,7 +288,8 @@ gitlab-mirror scheduler metrics
 - ✅ OutputFormatter.printJson() - JSON 格式化输出
 - ✅ 主 CLI 类更新（新增 3 个命令分类）
 - ✅ Build Status: SUCCESS
-- ⏸️ CLI 集成测试（待实现）
+- ✅ CLI 集成测试（已完成）
+- ✅ Shell 脚本集成（所有命令可通过 ./scripts/gitlab-mirror 调用）
 
 ---
 
