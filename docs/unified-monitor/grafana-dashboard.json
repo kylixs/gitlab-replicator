@@ -1,0 +1,385 @@
+{
+  "dashboard": {
+    "title": "GitLab Mirror - Unified Project Monitor",
+    "tags": ["gitlab", "mirror", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 27,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "项目总数趋势",
+        "type": "graph",
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "gitlab_mirror_projects_total",
+            "legendFormat": "总项目数",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "项目数"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "同步状态分布",
+        "type": "piechart",
+        "gridPos": {
+          "x": 12,
+          "y": 0,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "gitlab_mirror_sync_status",
+            "legendFormat": "{{status}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "活跃告警数",
+        "type": "bargauge",
+        "gridPos": {
+          "x": 0,
+          "y": 8,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "gitlab_mirror_alerts_active",
+            "legendFormat": "{{severity}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        }
+      },
+      {
+        "id": 4,
+        "title": "扫描耗时趋势",
+        "type": "graph",
+        "gridPos": {
+          "x": 12,
+          "y": 8,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "gitlab_mirror_scan_duration_seconds",
+            "legendFormat": "扫描耗时",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "s",
+            "label": "耗时（秒）"
+          }
+        ],
+        "alert": {
+          "name": "扫描耗时过长告警",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [15],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ]
+        }
+      },
+      {
+        "id": 5,
+        "title": "Top 10 Commit差异项目",
+        "type": "table",
+        "gridPos": {
+          "x": 0,
+          "y": 16,
+          "w": 24,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "topk(10, abs(gitlab_mirror_project_commits{type=\"source\"} - gitlab_mirror_project_commits{type=\"target\"}))",
+            "legendFormat": "{{project}}",
+            "refId": "A",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {
+                "project": 0,
+                "Value": 1
+              },
+              "renameByName": {
+                "project": "项目",
+                "Value": "Commit差异"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "项目大小 Top 10",
+        "type": "bargauge",
+        "gridPos": {
+          "x": 0,
+          "y": 24,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "topk(10, gitlab_mirror_project_size_bytes{type=\"source\"})",
+            "legendFormat": "{{project}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes"
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "告警触发趋势",
+        "type": "graph",
+        "gridPos": {
+          "x": 12,
+          "y": 24,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(gitlab_mirror_alerts_active[5m])) by (severity)",
+            "legendFormat": "{{severity}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "告警数/5分钟"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "API调用频率",
+        "type": "graph",
+        "gridPos": {
+          "x": 0,
+          "y": 32,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(gitlab_mirror_api_calls_total[5m])",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "调用次数/秒"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "项目发现统计",
+        "type": "stat",
+        "gridPos": {
+          "x": 12,
+          "y": 32,
+          "w": 6,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "gitlab_mirror_projects_discovered{type=\"new\"}",
+            "legendFormat": "新增项目",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto"
+        }
+      },
+      {
+        "id": 10,
+        "title": "项目更新统计",
+        "type": "stat",
+        "gridPos": {
+          "x": 18,
+          "y": 32,
+          "w": 6,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "gitlab_mirror_projects_discovered{type=\"updated\"}",
+            "legendFormat": "更新项目",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto"
+        }
+      },
+      {
+        "id": 11,
+        "title": "缓存大小",
+        "type": "gauge",
+        "gridPos": {
+          "x": 0,
+          "y": 40,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "gitlab_mirror_cache_size",
+            "legendFormat": "缓存项数",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 800,
+                  "color": "yellow"
+                },
+                {
+                  "value": 900,
+                  "color": "red"
+                }
+              ]
+            },
+            "max": 1000
+          }
+        }
+      },
+      {
+        "id": 12,
+        "title": "同步状态详情",
+        "type": "table",
+        "gridPos": {
+          "x": 12,
+          "y": 40,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "gitlab_mirror_sync_status",
+            "legendFormat": "{{status}}",
+            "refId": "A",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {
+                "status": 0,
+                "Value": 1
+              },
+              "renameByName": {
+                "status": "同步状态",
+                "Value": "项目数"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "datasource",
+          "type": "datasource",
+          "query": "prometheus",
+          "hide": 0
+        },
+        {
+          "name": "instance",
+          "type": "query",
+          "datasource": "$datasource",
+          "query": "label_values(gitlab_mirror_projects_total, instance)",
+          "hide": 0,
+          "refresh": 1
+        }
+      ]
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+    }
+  }
+}
