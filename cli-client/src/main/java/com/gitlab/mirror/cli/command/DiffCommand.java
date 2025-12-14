@@ -139,25 +139,25 @@ public class DiffCommand {
             String delay = "N/A";
 
             if (diffDetails != null) {
-                Object shaMatchesObj = diffDetails.get("shaMatches");
+                Object shaMatchesObj = diffDetails.get("commitShaMatches");
                 if (shaMatchesObj != null) {
                     Boolean shaMatches = (Boolean) shaMatchesObj;
                     commitMatch = shaMatches ? "✓" : "✗";
                 }
 
-                Object commitDeltaObj = diffDetails.get("commitDelta");
+                Object commitDeltaObj = diffDetails.get("commitBehind");
                 if (commitDeltaObj != null) {
                     Integer delta = ((Number) commitDeltaObj).intValue();
                     commitDelta = String.format("%+d", delta);
                 }
 
-                Object branchDeltaObj = diffDetails.get("branchDelta");
+                Object branchDeltaObj = diffDetails.get("branchDiff");
                 if (branchDeltaObj != null) {
                     Integer delta = ((Number) branchDeltaObj).intValue();
                     branchDelta = String.format("%+d", delta);
                 }
 
-                Object delayMinutesObj = diffDetails.get("delayMinutes");
+                Object delayMinutesObj = diffDetails.get("syncDelayMinutes");
                 if (delayMinutesObj != null) {
                     Long delayMinutes = ((Number) delayMinutesObj).longValue();
                     delay = String.valueOf(delayMinutes);
@@ -281,11 +281,11 @@ public class DiffCommand {
     }
 
     private void printDiffDetails(Map<String, Object> diffDetails) {
-        Object shaMatchesObj = diffDetails.get("shaMatches");
-        Object commitDeltaObj = diffDetails.get("commitDelta");
-        Object branchDeltaObj = diffDetails.get("branchDelta");
-        Object sizeDeltaBytesObj = diffDetails.get("sizeDeltaBytes");
-        Object delayMinutesObj = diffDetails.get("delayMinutes");
+        Object shaMatchesObj = diffDetails.get("commitShaMatches");
+        Object commitDeltaObj = diffDetails.get("commitBehind");
+        Object branchDeltaObj = diffDetails.get("branchDiff");
+        Object sizeDeltaBytesObj = diffDetails.get("sizeDiffPercent");
+        Object delayMinutesObj = diffDetails.get("syncDelayMinutes");
 
         // SHA match
         if (shaMatchesObj != null) {
