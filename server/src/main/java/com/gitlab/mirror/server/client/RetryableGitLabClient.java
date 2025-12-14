@@ -37,6 +37,7 @@ public class RetryableGitLabClient {
      */
     public <T> T get(String path, Class<T> responseType) {
         return executeWithRetry(() -> {
+            long startTime = System.currentTimeMillis();
             HttpHeaders headers = createHeaders();
             HttpEntity<Void> entity = new HttpEntity<>(headers);
             String urlString = baseUrl + path;
@@ -45,6 +46,10 @@ public class RetryableGitLabClient {
             // Use URI instead of String to avoid double encoding
             java.net.URI uri = java.net.URI.create(urlString);
             ResponseEntity<T> response = restTemplate.exchange(uri, HttpMethod.GET, entity, responseType);
+
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("[API-PERF] GET {} - {}ms", sanitizeUrl(path), duration);
+
             return response.getBody();
         });
     }

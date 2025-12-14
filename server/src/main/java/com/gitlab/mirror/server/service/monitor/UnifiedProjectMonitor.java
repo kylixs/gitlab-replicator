@@ -67,9 +67,11 @@ public class UnifiedProjectMonitor {
 
         try {
             // Step 1: Query source projects
+            long step1Start = System.currentTimeMillis();
             LocalDateTime updatedAfter = "incremental".equals(scanType) ? getLastScanTime() : null;
             List<GitLabProject> sourceProjects = batchQueryExecutor.querySourceProjects(updatedAfter, 100);
-            log.info("Queried {} source projects", sourceProjects.size());
+            long step1Duration = System.currentTimeMillis() - step1Start;
+            log.info("[SCAN-PERF] Step 1: Query {} source projects - {}ms", sourceProjects.size(), step1Duration);
 
             if (sourceProjects.isEmpty()) {
                 log.info("No projects to scan");
@@ -77,8 +79,11 @@ public class UnifiedProjectMonitor {
             }
 
             // Step 2: Get project details (branches, commits) - optimized version
+            long step2Start = System.currentTimeMillis();
             List<BatchQueryExecutor.ProjectDetails> projectDetails =
                     batchQueryExecutor.getProjectDetailsBatchOptimized(sourceProjects, batchQueryExecutor.getSourceClient());
+            long step2Duration = System.currentTimeMillis() - step2Start;
+            log.info("[SCAN-PERF] Step 2: Get {} source project details - {}ms", sourceProjects.size(), step2Duration);
 
             // Convert to map for easy lookup
             Map<Long, BatchQueryExecutor.ProjectDetails> detailsMap = projectDetails.stream()
@@ -88,38 +93,58 @@ public class UnifiedProjectMonitor {
                     ));
 
             // Step 3: Update project data in database
+            long step3Start = System.currentTimeMillis();
             UpdateProjectDataService.UpdateResult updateResult =
                     updateProjectDataService.updateSourceProjects(sourceProjects, detailsMap);
-            log.info("Updated {} source projects", updateResult.getSuccessCount());
+            long step3Duration = System.currentTimeMillis() - step3Start;
+            log.info("[SCAN-PERF] Step 3: Update {} source projects to DB - {}ms", updateResult.getSuccessCount(), step3Duration);
 
-            // Query target projects - optimized version
+            // Step 4: Query target projects - optimized version
+            long step4Start = System.currentTimeMillis();
             List<GitLabProject> targetProjects = batchQueryExecutor.queryTargetProjects(updatedAfter, 100);
+            long step4Duration = System.currentTimeMillis() - step4Start;
+            log.info("[SCAN-PERF] Step 4: Query {} target projects - {}ms", targetProjects.size(), step4Duration);
+
+            // Step 5: Get target project details
+            long step5Start = System.currentTimeMillis();
             List<BatchQueryExecutor.ProjectDetails> targetDetails =
                     batchQueryExecutor.getProjectDetailsBatchOptimized(targetProjects, batchQueryExecutor.getTargetClient());
+            long step5Duration = System.currentTimeMillis() - step5Start;
+            log.info("[SCAN-PERF] Step 5: Get {} target project details - {}ms", targetProjects.size(), step5Duration);
+
             Map<Long, BatchQueryExecutor.ProjectDetails> targetDetailsMap = targetDetails.stream()
                     .collect(Collectors.toMap(
                             BatchQueryExecutor.ProjectDetails::getProjectId,
                             d -> d
                     ));
+
+            // Step 6: Update target projects
+            long step6Start = System.currentTimeMillis();
             UpdateProjectDataService.UpdateResult targetUpdateResult =
                     updateProjectDataService.updateTargetProjects(targetProjects, targetDetailsMap);
-            log.info("Updated {} target projects", targetUpdateResult.getSuccessCount());
+            long step6Duration = System.currentTimeMillis() - step6Start;
+            log.info("[SCAN-PERF] Step 6: Update {} target projects to DB - {}ms", targetUpdateResult.getSuccessCount(), step6Duration);
 
-            // Step 4: Calculate differences for all sync projects
+            // Step 7: Calculate differences for all sync projects
+            long step7Start = System.currentTimeMillis();
             List<SyncProject> syncProjects = syncProjectMapper.selectList(null);
             List<Long> syncProjectIds = syncProjects.stream()
                     .map(SyncProject::getId)
                     .collect(Collectors.toList());
 
             List<ProjectDiff> diffs = diffCalculator.calculateDiffBatch(syncProjectIds);
-            log.info("Calculated {} project diffs", diffs.size());
+            long step7Duration = System.currentTimeMillis() - step7Start;
+            log.info("[SCAN-PERF] Step 7: Calculate {} project diffs - {}ms", diffs.size(), step7Duration);
 
-            // Step 5: Cache diff results
+            // Step 8: Cache diff results
+            long step8Start = System.currentTimeMillis();
             for (ProjectDiff diff : diffs) {
                 cacheManager.put("diff:" + diff.getProjectKey(), diff, 15);
             }
+            long step8Duration = System.currentTimeMillis() - step8Start;
+            log.info("[SCAN-PERF] Step 8: Cache {} diff results - {}ms", diffs.size(), step8Duration);
 
-            // Step 6: Count changes
+            // Count changes
             int changesDetected = (int) diffs.stream()
                     .filter(d -> d.getStatus() != ProjectDiff.SyncStatus.SYNCED)
                     .count();
@@ -131,10 +156,27 @@ public class UnifiedProjectMonitor {
             LocalDateTime endTime = LocalDateTime.now();
             long durationMs = Duration.between(startTime, endTime).toMillis();
 
-            // Step 7: Update metrics
+            // Step 9: Update metrics
+            long step9Start = System.currentTimeMillis();
             metricsExporter.recordScanDuration(durationMs);
             metricsExporter.refreshSystemMetrics();
             metricsExporter.refreshProjectMetrics();
+            long step9Duration = System.currentTimeMillis() - step9Start;
+            log.info("[SCAN-PERF] Step 9: Update metrics - {}ms", step9Duration);
+
+            // Performance summary
+            log.info("[SCAN-PERF] === SCAN PERFORMANCE SUMMARY ===");
+            log.info("[SCAN-PERF] Total Duration: {}ms", durationMs);
+            log.info("[SCAN-PERF] Step 1 (Query Source):      {}ms ({} %)", step1Duration, String.format("%.1f", step1Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 2 (Source Details):    {}ms ({} %)", step2Duration, String.format("%.1f", step2Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 3 (Update Source):     {}ms ({} %)", step3Duration, String.format("%.1f", step3Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 4 (Query Target):      {}ms ({} %)", step4Duration, String.format("%.1f", step4Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 5 (Target Details):    {}ms ({} %)", step5Duration, String.format("%.1f", step5Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 6 (Update Target):     {}ms ({} %)", step6Duration, String.format("%.1f", step6Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 7 (Calculate Diff):    {}ms ({} %)", step7Duration, String.format("%.1f", step7Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 8 (Cache Results):     {}ms ({} %)", step8Duration, String.format("%.1f", step8Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 9 (Metrics):           {}ms ({} %)", step9Duration, String.format("%.1f", step9Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] ================================");
 
             return resultBuilder
                     .durationMs(durationMs)
