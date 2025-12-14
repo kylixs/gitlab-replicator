@@ -48,3 +48,18 @@ gitlab:
     timeout: 30000
     max-retries: 3
     retry-delay: 1000
+  mirror:
+    monitor:
+      # Incremental scan interval (milliseconds)
+      incremental-interval: 300000  # 5 minutes
+      # Full scan cron expression
+      full-scan-cron: "0 0 2 * * ?"  # Daily at 2:00 AM
+      # Auto-resolve interval (milliseconds)
+      auto-resolve-interval: 600000  # 10 minutes
+      # Scheduler configuration
+      scheduler:
+        enabled: true
+        incremental-enabled: true
+        full-scan-enabled: true
+        auto-resolve-enabled: true
+        cleanup-enabled: true
