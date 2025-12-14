@@ -291,6 +291,20 @@ Update the `**状态**:` line before and after working on the task.
 
 **Failure to follow this workflow will result in lost track of progress and incomplete task management.**
 
+## Git Commit Guidelines
+
+**IMPORTANT**: When creating git commits, follow these rules strictly:
+
+1. **Commit Message Format**:
+   - Keep messages concise and focused on key information only
+   - Use conventional commit format: `type(scope): brief description`
+   - Examples: `feat(pull-sync): add incremental sync`, `fix(api): correct timeout handling`
+
+2. **What NOT to Include**:
+   - ❌ DO NOT include any Claude-related information
+   - ❌ DO NOT add unnecessary preamble or elaboration
+
+
 ## Important Notes
 
 1. **Client/Server Communication**: CLI client communicates with sync service via HTTP REST API with token authentication
