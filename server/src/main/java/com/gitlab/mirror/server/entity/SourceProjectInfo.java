@@ -62,6 +62,27 @@ public class SourceProjectInfo {
     private String defaultBranch;
 
     /**
+     * Latest commit SHA (default branch)
+     * Used for monitoring and change detection
+     */
+    @TableField("latest_commit_sha")
+    private String latestCommitSha;
+
+    /**
+     * Commit count
+     * Used for monitoring sync progress
+     */
+    @TableField("commit_count")
+    private Integer commitCount;
+
+    /**
+     * Branch count
+     * Used for monitoring branch consistency
+     */
+    @TableField("branch_count")
+    private Integer branchCount;
+
+    /**
      * Visibility level
      * Values: private, internal, public
      */

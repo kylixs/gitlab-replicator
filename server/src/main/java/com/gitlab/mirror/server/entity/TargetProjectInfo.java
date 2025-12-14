@@ -47,6 +47,47 @@ public class TargetProjectInfo {
     private String name;
 
     /**
+     * Default branch
+     */
+    @TableField("default_branch")
+    private String defaultBranch;
+
+    /**
+     * Latest commit SHA (default branch)
+     * Used for monitoring and change detection
+     */
+    @TableField("latest_commit_sha")
+    private String latestCommitSha;
+
+    /**
+     * Commit count
+     * Used for monitoring sync progress
+     */
+    @TableField("commit_count")
+    private Integer commitCount;
+
+    /**
+     * Branch count
+     * Used for monitoring branch consistency
+     */
+    @TableField("branch_count")
+    private Integer branchCount;
+
+    /**
+     * Repository size in bytes
+     * Used for monitoring storage usage
+     */
+    @TableField("repository_size")
+    private Long repositorySize;
+
+    /**
+     * Last activity timestamp
+     * Used for monitoring sync delay
+     */
+    @TableField("last_activity_at")
+    private LocalDateTime lastActivityAt;
+
+    /**
      * Visibility level
      */
     @TableField("visibility")
