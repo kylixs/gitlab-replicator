@@ -181,11 +181,11 @@ public class SyncController {
     /**
      * Get project diff
      *
-     * GET /api/sync/projects/{projectKey}/diff
+     * GET /api/sync/diff?projectKey=devops/gitlab-mirror
      */
-    @GetMapping("/projects/{projectKey}/diff")
+    @GetMapping("/diff")
     public ResponseEntity<ApiResponse<ProjectDiff>> getProjectDiff(
-            @PathVariable String projectKey) {
+            @RequestParam String projectKey) {
         log.info("Query project diff - projectKey: {}", projectKey);
 
         try {

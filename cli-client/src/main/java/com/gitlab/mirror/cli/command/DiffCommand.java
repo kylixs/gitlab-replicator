@@ -50,10 +50,14 @@ public class DiffCommand {
     private void showSingleDiff(String projectKey) throws Exception {
         OutputFormatter.printInfo("Fetching diff for project: " + projectKey);
 
+        // Build query parameters
+        Map<String, String> params = new HashMap<>();
+        params.put("projectKey", projectKey);
+
         // Call API
         ApiClient.ApiResponse<Map<String, Object>> response = apiClient.get(
-                "/api/sync/projects/" + projectKey + "/diff",
-                new HashMap<>(),
+                "/api/sync/diff",
+                params,
                 new TypeReference<ApiClient.ApiResponse<Map<String, Object>>>() {}
         );
 
