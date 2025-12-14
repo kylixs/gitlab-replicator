@@ -154,7 +154,7 @@ class DiffCommandTest {
         // Given
         ApiClient.ApiResponse<Map<String, Object>> response = new ApiClient.ApiResponse<>();
         response.setSuccess(false);
-        ApiClient.ErrorInfo error = new ApiClient.ErrorInfo();
+        ApiClient.ApiResponse.ErrorInfo error = new ApiClient.ApiResponse.ErrorInfo();
         error.setMessage("API Error");
         response.setError(error);
 

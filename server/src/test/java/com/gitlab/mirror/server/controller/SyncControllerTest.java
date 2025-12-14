@@ -77,11 +77,11 @@ class SyncControllerTest {
                 .build();
 
         DiffDetails diffDetails = DiffDetails.builder()
-                .shaMatches(true)
-                .commitDelta(0)
-                .branchDelta(0)
-                .sizeDeltaBytes(0L)
-                .delayMinutes(0L)
+                .commitShaMatches(true)
+                .commitBehind(0)
+                .branchDiff(0)
+                .sizeDiffPercent(0.0)
+                .syncDelayMinutes(0L)
                 .build();
 
         testDiff = ProjectDiff.builder()

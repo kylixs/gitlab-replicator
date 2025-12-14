@@ -31,13 +31,11 @@ public class ScanCommand {
 
         OutputFormatter.printInfo("Triggering " + scanType + " scan...");
 
-        // Call API
-        Map<String, String> params = new HashMap<>();
-        params.put("type", scanType);
+        // Call API with query parameter
+        String path = "/api/sync/scan?type=" + scanType;
 
         ApiClient.ApiResponse<Map<String, Object>> response = apiClient.post(
-                "/api/sync/scan",
-                params,
+                path,
                 new TypeReference<ApiClient.ApiResponse<Map<String, Object>>>() {}
         );
 
@@ -53,11 +51,11 @@ public class ScanCommand {
         System.out.println("╔════════════════════════════════════════╗");
         System.out.println("║         Scan Results                   ║");
         System.out.println("╠════════════════════════════════════════╣");
-        System.out.printf("║ Scan Type:         %-19s║%n", data.get("scan_type"));
-        System.out.printf("║ Projects Scanned:  %-19s║%n", data.get("projects_scanned"));
-        System.out.printf("║ Projects Updated:  %-19s║%n", data.get("projects_updated"));
-        System.out.printf("║ Changes Detected:  %-19s║%n", data.get("changes_detected"));
-        System.out.printf("║ Duration:          %-16sms ║%n", data.get("duration_ms"));
+        System.out.printf("║ Scan Type:         %-19s║%n", data.get("scanType"));
+        System.out.printf("║ Projects Scanned:  %-19s║%n", data.get("projectsScanned"));
+        System.out.printf("║ Projects Updated:  %-19s║%n", data.get("projectsUpdated"));
+        System.out.printf("║ Changes Detected:  %-19s║%n", data.get("changesDetected"));
+        System.out.printf("║ Duration:          %-16sms ║%n", data.get("durationMs"));
         System.out.println("╚════════════════════════════════════════╝");
         System.out.println();
 

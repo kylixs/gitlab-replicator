@@ -101,6 +101,7 @@ public class BatchQueryExecutor {
                 if (updatedAfter != null) {
                     String updatedAfterStr = updatedAfter.format(ISO_FORMATTER);
                     builder.queryParam("updated_after", updatedAfterStr);
+                    builder.queryParam("order_by", "updated_at");  // Required when using updated_after
                 }
 
                 String path = builder.build().toUriString();
