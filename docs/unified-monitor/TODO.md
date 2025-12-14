@@ -32,7 +32,7 @@
 
 ### 轻量化实现
 - 复用现有表（SOURCE_PROJECT_INFO/TARGET_PROJECT_INFO）
-- 差异结果仅缓存内存（Redis）
+- 差异结果仅缓存到本地内存（无需Redis）
 - 告警驱动（仅在异常时记录）
 
 ---
@@ -79,14 +79,14 @@
 **子任务**:
 - [ ] T3.1 差异对象模型
 - [ ] T3.2 差异计算逻辑
-- [ ] T3.3 Redis 缓存
+- [ ] T3.3 本地内存缓存
 - [ ] T3.4 告警阈值判定
 - [ ] T3.5 单元测试
 
 **输出**:
 - DiffCalculator 服务
 - ProjectDiff 差异对象
-- Redis 缓存机制
+- LocalCacheManager 本地缓存
 
 **详情**: [T3-diff-calculator.md](tasks/T3-diff-calculator.md)
 

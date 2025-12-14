@@ -33,11 +33,12 @@
 相比v2.0方案，本版本做了以下优化：
 
 - **复用现有表**：扩展SOURCE_PROJECT_INFO和TARGET_PROJECT_INFO，不创建新的快照表
-- **内存计算差异**：差异对比结果仅缓存在内存，不持久化到数据库
+- **内存计算差异**：差异对比结果仅缓存在内存（本地缓存），不持久化到数据库
 - **轻量化告警**：仅在检测到异常时记录告警事件
 - **Prometheus导出**：提供标准Metrics接口，易于集成Grafana
 - **模块化设计**：查询/扫描归属同步模块，监控导出归属监控模块
 - **项目级指标**：新增项目级Prometheus指标，支持细粒度监控
+- **简化依赖**：使用本地内存缓存替代Redis，降低系统复杂度
 
 ### 核心思路
 
@@ -46,7 +47,7 @@
       ↓
 更新现有项目表（SOURCE_PROJECT_INFO/TARGET_PROJECT_INFO）
       ↓
-内存计算差异（缓存到Redis）
+内存计算差异（缓存到本地内存，TTL 15分钟）
       ↓
     ┌─────────────┴─────────────┐
     ↓                           ↓
@@ -94,7 +95,7 @@ graph TB
 
     subgraph "存储层"
         DB[(MySQL)]
-        CACHE[(Redis<br/>差异缓存)]
+        CACHE[(本地内存缓存<br/>差异缓存)]
     end
 
     S1 --> UMS
@@ -260,13 +261,16 @@ erDiagram
 - `size_diff`：仓库大小差异过大
 - `target_missing`：目标项目不存在
 
-### Redis缓存结构
+### 本地内存缓存结构
+
+使用 `ConcurrentHashMap` + 过期时间管理实现本地内存缓存。
 
 **差异数据缓存**（TTL: 15分钟）：
 
-```
-Key: monitor:diff:{project_key}
-Value: {
+```java
+// Cache Key: project_key
+// Cache Value: ProjectDiffResult
+{
   "source": {
     "commit_sha": "abc123...",
     "commit_count": 245,
@@ -288,14 +292,15 @@ Value: {
     "branch_diff": 0
   },
   "status": "outdated",
-  "checked_at": "2025-12-14T10:30:00Z"
+  "checked_at": "2025-12-14T10:30:00Z",
+  "expires_at": "2025-12-14T10:45:00Z"  // TTL 15分钟
 }
 ```
 
 **监控统计缓存**（TTL: 5分钟）：
 
-```
-Key: monitor:stats
+```java
+// Cache Key: "monitor:stats
 Value: {
   "total_projects": 127,
   "synced": 118,

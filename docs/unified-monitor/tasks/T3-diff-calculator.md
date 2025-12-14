@@ -10,7 +10,7 @@
 
 - 实现 DiffCalculator 差异计算服务
 - 内存计算源和目标项目差异
-- 缓存差异结果到 Redis
+- 缓存差异结果到本地内存（使用ConcurrentHashMap）
 - 实现告警阈值判定
 - 支持差异结果查询
 
@@ -80,23 +80,27 @@
 
 ---
 
-### T3.3 Redis 缓存
+### T3.3 内存缓存
 **状态**: ⏸️ 待处理
 
 **任务内容**:
+- 创建 `LocalCacheManager` 本地缓存管理类
+  - 使用 `ConcurrentHashMap<String, CacheEntry<T>>` 存储数据
+  - 支持 TTL 过期管理（后台线程定期清理）
 - 实现 `cacheDiff()` 方法
-  - Key 格式: `monitor:diff:{projectKey}`
-  - Value: ProjectDiff JSON
+  - Key: project_key
+  - Value: ProjectDiff 对象
   - TTL: 15分钟
 - 实现 `getCachedDiff()` 方法
-  - 从 Redis 读取缓存
-  - 缓存不存在返回 null
+  - 读取缓存，检查过期时间
+  - 缓存不存在或已过期返回 null
 - 实现 `cacheStats()` 方法
-  - Key: `monitor:stats`
-  - Value: 统计摘要 JSON
+  - Key: "monitor:stats"
+  - Value: 统计摘要对象
   - TTL: 5分钟
 - 实现缓存批量写入
-- 实现缓存失效策略
+- 实现缓存失效策略（定期清理过期条目）
+- 实现缓存统计（命中率、大小等）
 
 **统计摘要内容**:
 - `total_projects` - 项目总数
@@ -107,11 +111,11 @@
 - `updated_at` - 更新时间
 
 **验收标准**:
-- Redis 连接正常
-- 缓存读写正确
-- TTL 设置生效
-- JSON 序列化/反序列化正确
+- 缓存读写线程安全
+- TTL 自动过期生效
+- 内存使用合理（防止内存泄漏）
 - 批量操作高效
+- 支持并发访问
 
 ---
 
@@ -149,7 +153,9 @@
 **任务内容**:
 - 测试差异计算准确性
 - 测试状态判定逻辑
-- 测试 Redis 缓存读写
+- 测试本地缓存读写
+- 测试缓存TTL过期逻辑
+- 测试并发缓存访问
 - 测试告警阈值判定
 - 测试边界情况（除零、null 值等）
 - 测试批量计算性能
@@ -164,7 +170,7 @@
 ## 提交信息
 
 ```
-feat(monitor): implement diff calculator with redis cache and alert threshold
+feat(monitor): implement diff calculator with local cache and alert threshold
 ```
 
 ---
@@ -172,4 +178,4 @@ feat(monitor): implement diff calculator with redis cache and alert threshold
 ## 参考文档
 
 - [UNIFIED_PROJECT_MONITOR_DESIGN.md - 差异计算](../UNIFIED_PROJECT_MONITOR_DESIGN.md#🔄-关键处理流程)
-- [UNIFIED_PROJECT_MONITOR_DESIGN.md - Redis 缓存](../UNIFIED_PROJECT_MONITOR_DESIGN.md#redis缓存结构)
+- [UNIFIED_PROJECT_MONITOR_DESIGN.md - 本地内存缓存](../UNIFIED_PROJECT_MONITOR_DESIGN.md#本地内存缓存结构)
