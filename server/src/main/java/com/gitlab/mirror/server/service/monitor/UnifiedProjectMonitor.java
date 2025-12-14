@@ -76,12 +76,9 @@ public class UnifiedProjectMonitor {
                 return buildEmptyResult(resultBuilder, startTime);
             }
 
-            // Step 2: Get project details (branches, commits)
-            List<Long> projectIds = sourceProjects.stream()
-                    .map(GitLabProject::getId)
-                    .collect(Collectors.toList());
+            // Step 2: Get project details (branches, commits) - optimized version
             List<BatchQueryExecutor.ProjectDetails> projectDetails =
-                    batchQueryExecutor.getProjectDetailsBatch(projectIds, batchQueryExecutor.getSourceClient());
+                    batchQueryExecutor.getProjectDetailsBatchOptimized(sourceProjects, batchQueryExecutor.getSourceClient());
 
             // Convert to map for easy lookup
             Map<Long, BatchQueryExecutor.ProjectDetails> detailsMap = projectDetails.stream()
@@ -95,13 +92,10 @@ public class UnifiedProjectMonitor {
                     updateProjectDataService.updateSourceProjects(sourceProjects, detailsMap);
             log.info("Updated {} source projects", updateResult.getSuccessCount());
 
-            // Query target projects
+            // Query target projects - optimized version
             List<GitLabProject> targetProjects = batchQueryExecutor.queryTargetProjects(updatedAfter, 100);
-            List<Long> targetProjectIds = targetProjects.stream()
-                    .map(GitLabProject::getId)
-                    .collect(Collectors.toList());
             List<BatchQueryExecutor.ProjectDetails> targetDetails =
-                    batchQueryExecutor.getProjectDetailsBatch(targetProjectIds, batchQueryExecutor.getTargetClient());
+                    batchQueryExecutor.getProjectDetailsBatchOptimized(targetProjects, batchQueryExecutor.getTargetClient());
             Map<Long, BatchQueryExecutor.ProjectDetails> targetDetailsMap = targetDetails.stream()
                     .collect(Collectors.toMap(
                             BatchQueryExecutor.ProjectDetails::getProjectId,

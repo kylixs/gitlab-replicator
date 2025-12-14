@@ -105,8 +105,8 @@ class BatchQueryExecutorTest {
         when(sourceClient.get(contains("/branches"), eq(RepositoryBranch[].class))).thenReturn(branches);
         when(sourceClient.get(contains("/branches/main"), eq(RepositoryBranch.class))).thenReturn(defaultBranch);
 
-        // Execute
-        BatchQueryExecutor.ProjectDetails details = batchQueryExecutor.getProjectDetails(123L, sourceClient);
+        // Execute (pass null to test legacy mode where defaultBranch is queried)
+        BatchQueryExecutor.ProjectDetails details = batchQueryExecutor.getProjectDetails(123L, null, sourceClient);
 
         // Verify
         assertThat(details).isNotNull();

@@ -185,11 +185,12 @@ public class BatchQueryExecutor {
      * Get detailed project information including branches and commits
      *
      * @param projectId GitLab project ID
+     * @param defaultBranch Default branch name (if null, will query project to get it)
      * @param client GitLab API client (source or target)
      * @return Project details with branch count, commit count, and latest commit SHA
      */
-    public ProjectDetails getProjectDetails(Long projectId, RetryableGitLabClient client) {
-        log.debug("Getting details for project {}", projectId);
+    public ProjectDetails getProjectDetails(Long projectId, String defaultBranch, RetryableGitLabClient client) {
+        log.debug("Getting details for project {} (defaultBranch: {})", projectId, defaultBranch);
 
         ProjectDetails details = new ProjectDetails();
         details.setProjectId(projectId);
@@ -208,7 +209,7 @@ public class BatchQueryExecutor {
             }
 
             try {
-                String latestCommitSha = executeWithRetry(() -> getLatestCommitSha(projectId, client));
+                String latestCommitSha = executeWithRetry(() -> getLatestCommitSha(projectId, defaultBranch, client));
                 details.setLatestCommitSha(latestCommitSha);
             } catch (Exception e) {
                 // Some projects may not have commits (empty repos), log warning and continue
@@ -244,7 +245,41 @@ public class BatchQueryExecutor {
 
         List<CompletableFuture<ProjectDetails>> futures = projectIds.stream()
                 .map(projectId -> CompletableFuture.supplyAsync(
-                        () -> getProjectDetails(projectId, client),
+                        () -> getProjectDetails(projectId, null, client),
+                        executorService
+                ))
+                .collect(Collectors.toList());
+
+        // Wait for all to complete
+        CompletableFuture<Void> allOf = CompletableFuture.allOf(
+                futures.toArray(new CompletableFuture[0])
+        );
+
+        try {
+            allOf.get();
+            return futures.stream()
+                    .map(CompletableFuture::join)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Failed to get batch project details: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to get batch project details", e);
+        }
+    }
+
+    /**
+     * Get detailed information for multiple projects concurrently with project data (optimized version)
+     * This version reuses project data to avoid redundant API calls
+     *
+     * @param projects List of GitLab projects with basic info including defaultBranch
+     * @param client GitLab API client
+     * @return List of project details
+     */
+    public List<ProjectDetails> getProjectDetailsBatchOptimized(List<GitLabProject> projects, RetryableGitLabClient client) {
+        log.info("Getting details for {} projects concurrently (optimized - reusing project data)", projects.size());
+
+        List<CompletableFuture<ProjectDetails>> futures = projects.stream()
+                .map(project -> CompletableFuture.supplyAsync(
+                        () -> getProjectDetails(project.getId(), project.getDefaultBranch(), client),
                         executorService
                 ))
                 .collect(Collectors.toList());
@@ -278,20 +313,28 @@ public class BatchQueryExecutor {
 
     /**
      * Get latest commit SHA from default branch
+     * @param projectId Project ID
+     * @param defaultBranch Default branch name (if null, will query project to get it)
+     * @param client GitLab API client
      */
-    private String getLatestCommitSha(Long projectId, RetryableGitLabClient client) throws Exception {
-        // First get project to find default branch
-        String projectPath = "/api/v4/projects/" + projectId;
-        GitLabProject project = client.get(projectPath, GitLabProject.class);
+    private String getLatestCommitSha(Long projectId, String defaultBranch, RetryableGitLabClient client) throws Exception {
+        String branchName = defaultBranch;
 
-        if (project == null || project.getDefaultBranch() == null) {
-            return null;
+        // If default branch not provided, query project to get it
+        if (branchName == null || branchName.isEmpty()) {
+            String projectPath = "/api/v4/projects/" + projectId;
+            GitLabProject project = client.get(projectPath, GitLabProject.class);
+
+            if (project == null || project.getDefaultBranch() == null) {
+                return null;
+            }
+            branchName = project.getDefaultBranch();
         }
 
         // Get branch details for default branch
         String branchPath = UriComponentsBuilder
                 .fromPath("/api/v4/projects/{id}/repository/branches/{branch}")
-                .buildAndExpand(projectId, project.getDefaultBranch())
+                .buildAndExpand(projectId, branchName)
                 .toUriString();
 
         RepositoryBranch branch = client.get(branchPath, RepositoryBranch.class);
