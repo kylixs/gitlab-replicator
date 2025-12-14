@@ -195,26 +195,26 @@ public class BatchQueryExecutor {
         details.setProjectId(projectId);
 
         try {
-            // Query branches and commits in parallel
-            CompletableFuture<RepositoryBranch[]> branchesFuture = CompletableFuture.supplyAsync(
-                    () -> executeWithRetry(() -> getBranches(projectId, client)),
-                    executorService
-            );
+            // Query branches and latest commit sequentially
+            // Note: We don't use nested CompletableFuture here to avoid thread pool deadlock
+            // The outer getProjectDetailsBatch() already provides concurrency
+            try {
+                RepositoryBranch[] branches = executeWithRetry(() -> getBranches(projectId, client));
+                details.setBranchCount(branches != null ? branches.length : 0);
+            } catch (Exception e) {
+                // Some projects may not have branches (empty repos), log warning and continue
+                log.warn("Failed to get branches for project {}: {}", projectId, e.getMessage());
+                details.setBranchCount(0);
+            }
 
-            // Note: Getting commit count from API can be expensive
-            // For performance, we can skip this or use approximations
-            CompletableFuture<String> latestCommitShaFuture = CompletableFuture.supplyAsync(
-                    () -> executeWithRetry(() -> getLatestCommitSha(projectId, client)),
-                    executorService
-            );
-
-            // Wait for both queries to complete
-            RepositoryBranch[] branches = branchesFuture.get();
-            String latestCommitSha = latestCommitShaFuture.get();
-
-            // Set results
-            details.setBranchCount(branches != null ? branches.length : 0);
-            details.setLatestCommitSha(latestCommitSha);
+            try {
+                String latestCommitSha = executeWithRetry(() -> getLatestCommitSha(projectId, client));
+                details.setLatestCommitSha(latestCommitSha);
+            } catch (Exception e) {
+                // Some projects may not have commits (empty repos), log warning and continue
+                log.warn("Failed to get latest commit for project {}: {}", projectId, e.getMessage());
+                details.setLatestCommitSha(null);
+            }
 
             // For commit count, we can optionally query commits API
             // But this is expensive, so we skip it for now
@@ -225,7 +225,8 @@ public class BatchQueryExecutor {
 
         } catch (Exception e) {
             log.error("Failed to get project details for {}: {}", projectId, e.getMessage(), e);
-            throw new RuntimeException("Failed to get project details", e);
+            // Return details with default values instead of throwing
+            return details;
         }
 
         return details;
