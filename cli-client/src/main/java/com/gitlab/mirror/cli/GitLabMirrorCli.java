@@ -77,6 +77,9 @@ public class GitLabMirrorCli {
                 case "webhook":
                     new WebhookCommand(apiClient).execute(commandArgs);
                     break;
+                case "monitor":
+                    new MonitorCommand(apiClient).execute(commandArgs);
+                    break;
                 case "help":
                 case "--help":
                 case "-h":
@@ -124,6 +127,10 @@ public class GitLabMirrorCli {
         System.out.println("  task <subcommand>     Task management (list/show/retry/reset/stats)");
         System.out.println("  scheduler <subcommand> Scheduler management (status/trigger/metrics)");
         System.out.println("  webhook <subcommand>  Webhook monitoring (list/show/stats)");
+        System.out.println();
+        System.out.println(OutputFormatter.YELLOW + "Monitor Commands:" + OutputFormatter.RESET);
+        System.out.println("  monitor status        View monitoring status overview");
+        System.out.println("  monitor alerts        View active alerts");
         System.out.println();
         System.out.println(OutputFormatter.YELLOW + "General Commands:" + OutputFormatter.RESET);
         System.out.println("  help                  Show this help message");

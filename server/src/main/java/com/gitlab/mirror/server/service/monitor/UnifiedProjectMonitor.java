@@ -32,18 +32,21 @@ public class UnifiedProjectMonitor {
     private final DiffCalculator diffCalculator;
     private final LocalCacheManager cacheManager;
     private final SyncProjectMapper syncProjectMapper;
+    private final MetricsExporter metricsExporter;
 
     public UnifiedProjectMonitor(
             BatchQueryExecutor batchQueryExecutor,
             UpdateProjectDataService updateProjectDataService,
             DiffCalculator diffCalculator,
             LocalCacheManager cacheManager,
-            SyncProjectMapper syncProjectMapper) {
+            SyncProjectMapper syncProjectMapper,
+            MetricsExporter metricsExporter) {
         this.batchQueryExecutor = batchQueryExecutor;
         this.updateProjectDataService = updateProjectDataService;
         this.diffCalculator = diffCalculator;
         this.cacheManager = cacheManager;
         this.syncProjectMapper = syncProjectMapper;
+        this.metricsExporter = metricsExporter;
     }
 
     /**
@@ -133,6 +136,11 @@ public class UnifiedProjectMonitor {
             // Build result
             LocalDateTime endTime = LocalDateTime.now();
             long durationMs = Duration.between(startTime, endTime).toMillis();
+
+            // Step 7: Update metrics
+            metricsExporter.recordScanDuration(durationMs);
+            metricsExporter.refreshSystemMetrics();
+            metricsExporter.refreshProjectMetrics();
 
             return resultBuilder
                     .durationMs(durationMs)

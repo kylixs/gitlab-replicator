@@ -41,6 +41,9 @@ class UnifiedProjectMonitorTest {
     @Mock
     private SyncProjectMapper syncProjectMapper;
 
+    @Mock
+    private MetricsExporter metricsExporter;
+
     private UnifiedProjectMonitor unifiedProjectMonitor;
 
     @BeforeEach
@@ -51,7 +54,8 @@ class UnifiedProjectMonitorTest {
                 updateProjectDataService,
                 diffCalculator,
                 cacheManager,
-                syncProjectMapper
+                syncProjectMapper,
+                metricsExporter
         );
     }
 
