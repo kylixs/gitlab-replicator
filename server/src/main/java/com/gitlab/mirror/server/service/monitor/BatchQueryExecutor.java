@@ -297,6 +297,20 @@ public class BatchQueryExecutor {
     }
 
     /**
+     * Get source GitLab client
+     */
+    public RetryableGitLabClient getSourceClient() {
+        return sourceClient;
+    }
+
+    /**
+     * Get target GitLab client
+     */
+    public RetryableGitLabClient getTargetClient() {
+        return targetClient;
+    }
+
+    /**
      * Functional interface for retry operations
      */
     @FunctionalInterface
