@@ -80,6 +80,12 @@ public class GitLabMirrorCli {
                 case "monitor":
                     new MonitorCommand(apiClient).execute(commandArgs);
                     break;
+                case "scan":
+                    new ScanCommand(apiClient).execute(commandArgs);
+                    break;
+                case "diff":
+                    new DiffCommand(apiClient).execute(commandArgs);
+                    break;
                 case "help":
                 case "--help":
                 case "-h":
@@ -132,6 +138,13 @@ public class GitLabMirrorCli {
         System.out.println("  monitor status        View monitoring status overview");
         System.out.println("  monitor alerts        View active alerts");
         System.out.println();
+        System.out.println(OutputFormatter.YELLOW + "Scan Commands:" + OutputFormatter.RESET);
+        System.out.println("  scan [--type=TYPE]    Trigger project scan (incremental|full)");
+        System.out.println();
+        System.out.println(OutputFormatter.YELLOW + "Diff Commands:" + OutputFormatter.RESET);
+        System.out.println("  diff                  List all project diffs");
+        System.out.println("  diff <project-key>    Show single project diff details");
+        System.out.println();
         System.out.println(OutputFormatter.YELLOW + "General Commands:" + OutputFormatter.RESET);
         System.out.println("  help                  Show this help message");
         System.out.println("  version               Show version information");
@@ -142,6 +155,12 @@ public class GitLabMirrorCli {
         System.out.println("  gitlab-mirror task retry 123");
         System.out.println("  gitlab-mirror scheduler status");
         System.out.println("  gitlab-mirror webhook stats");
+        System.out.println("  gitlab-mirror monitor status");
+        System.out.println("  gitlab-mirror monitor alerts --severity=critical");
+        System.out.println("  gitlab-mirror scan --type=incremental");
+        System.out.println("  gitlab-mirror diff");
+        System.out.println("  gitlab-mirror diff --status=OUTDATED");
+        System.out.println("  gitlab-mirror diff mygroup/myproject");
         System.out.println();
         System.out.println(OutputFormatter.YELLOW + "Environment Variables:" + OutputFormatter.RESET);
         System.out.println("  GITLAB_MIRROR_API_URL      API base URL (default: http://localhost:8080)");

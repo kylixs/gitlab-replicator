@@ -85,5 +85,6 @@ public class SyncProject {
         public static final String MIRROR_CONFIGURED = "mirror_configured";
         public static final String ACTIVE = "active";
         public static final String FAILED = "failed";
+        public static final String DELETED = "deleted";
     }
 }

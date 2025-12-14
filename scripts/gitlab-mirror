@@ -284,6 +284,17 @@ show_usage() {
     echo "    show <event-id>                  Show event details"
     echo "    stats                            Show webhook statistics"
     echo ""
+    echo -e "${YELLOW}Monitor Commands:${NC}"
+    echo "  gitlab-mirror monitor status       View monitoring status overview"
+    echo "  gitlab-mirror monitor alerts       View active alerts"
+    echo ""
+    echo -e "${YELLOW}Scan Commands:${NC}"
+    echo "  gitlab-mirror scan [--type=TYPE]   Trigger project scan (incremental|full)"
+    echo ""
+    echo -e "${YELLOW}Diff Commands:${NC}"
+    echo "  gitlab-mirror diff                 List all project diffs"
+    echo "  gitlab-mirror diff <project-key>   Show single project diff details"
+    echo ""
     echo -e "${YELLOW}Help:${NC}"
     echo "  gitlab-mirror help                 Show this help message"
     echo "  gitlab-mirror version              Show version information"
@@ -326,7 +337,7 @@ main() {
             shift
             show_logs "$@"
             ;;
-        projects|mirrors|mirror|events|discover|export|compensate|sync|pull|task|scheduler|webhook)
+        projects|mirrors|mirror|events|discover|export|compensate|sync|pull|task|scheduler|webhook|monitor|scan|diff)
             execute_cli_command "$@"
             ;;
         help|--help|-h)

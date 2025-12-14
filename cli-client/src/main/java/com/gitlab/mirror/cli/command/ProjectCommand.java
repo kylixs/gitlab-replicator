@@ -51,7 +51,7 @@ public class ProjectCommand {
 
         // Call API
         ApiClient.ApiResponse<Map<String, Object>> response = apiClient.get(
-                "/api/projects",
+                "/api/sync/projects",
                 params,
                 new TypeReference<ApiClient.ApiResponse<Map<String, Object>>>() {}
         );

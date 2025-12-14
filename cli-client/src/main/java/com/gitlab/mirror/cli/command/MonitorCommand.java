@@ -110,18 +110,22 @@ public class MonitorCommand {
         Map<String, Object> summary = (Map<String, Object>) data.get("summary");
         if (summary != null) {
             System.out.println("║ 📊 Projects Summary                    ║");
-            System.out.printf("║   Total:        %-23s║%n", summary.get("total_projects"));
+            Object totalObj = summary.get("total_projects");
+            Integer total = totalObj != null ? ((Number) totalObj).intValue() : 0;
+            System.out.printf("║   Total:        %-23s║%n", total);
 
-            Integer synced = (Integer) summary.get("synced");
-            Integer total = (Integer) summary.get("total_projects");
+            Object syncedObj = summary.get("synced");
+            Integer synced = syncedObj != null ? ((Number) syncedObj).intValue() : 0;
             double syncedPercent = total > 0 ? (synced * 100.0 / total) : 0.0;
             System.out.printf("║   ✓ Synced:     %-6s (%.1f%%)          ║%n", synced, syncedPercent);
 
-            Integer outdated = (Integer) summary.get("outdated");
+            Object outdatedObj = summary.get("outdated");
+            Integer outdated = outdatedObj != null ? ((Number) outdatedObj).intValue() : 0;
             double outdatedPercent = total > 0 ? (outdated * 100.0 / total) : 0.0;
             System.out.printf("║   ⟳ Outdated:   %-6s (%.1f%%)          ║%n", outdated, outdatedPercent);
 
-            Integer failed = (Integer) summary.get("failed");
+            Object failedObj = summary.get("failed");
+            Integer failed = failedObj != null ? ((Number) failedObj).intValue() : 0;
             double failedPercent = total > 0 ? (failed * 100.0 / total) : 0.0;
             System.out.printf("║   ✗ Failed:     %-6s (%.1f%%)          ║%n", failed, failedPercent);
         }
@@ -132,16 +136,19 @@ public class MonitorCommand {
         @SuppressWarnings("unchecked")
         Map<String, Object> alerts = (Map<String, Object>) data.get("alerts");
         if (alerts != null) {
-            Integer active = (Integer) alerts.get("active");
+            Object activeObj = alerts.get("active");
+            Integer active = activeObj != null ? ((Number) activeObj).intValue() : 0;
             System.out.printf("║ 🚨 Active Alerts   %-19s║%n", active);
 
-            Integer critical = (Integer) alerts.get("critical");
-            if (critical != null && critical > 0) {
+            Object criticalObj = alerts.get("critical");
+            Integer critical = criticalObj != null ? ((Number) criticalObj).intValue() : 0;
+            if (critical > 0) {
                 System.out.printf("║   🔴 Critical:  %-23s║%n", critical);
             }
 
-            Integer high = (Integer) alerts.get("high");
-            if (high != null && high > 0) {
+            Object highObj = alerts.get("high");
+            Integer high = highObj != null ? ((Number) highObj).intValue() : 0;
+            if (high > 0) {
                 System.out.printf("║   🟠 High:      %-23s║%n", high);
             }
         }

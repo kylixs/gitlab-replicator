@@ -4,6 +4,7 @@ import com.gitlab.mirror.server.entity.MonitorAlert;
 import com.gitlab.mirror.server.entity.SyncProject;
 import com.gitlab.mirror.server.mapper.MonitorAlertMapper;
 import com.gitlab.mirror.server.mapper.SyncProjectMapper;
+import com.gitlab.mirror.server.service.ProjectDiscoveryService;
 import com.gitlab.mirror.server.service.monitor.model.DiffDetails;
 import com.gitlab.mirror.server.service.monitor.model.DiscoveryResult;
 import com.gitlab.mirror.server.service.monitor.model.ProjectDiff;

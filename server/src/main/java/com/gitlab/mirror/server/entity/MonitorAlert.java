@@ -100,6 +100,7 @@ public class MonitorAlert {
         public static final String BRANCH_DIFF = "branch_diff";
         public static final String SIZE_DIFF = "size_diff";
         public static final String TARGET_MISSING = "target_missing";
+        public static final String PROJECT_DELETED = "project_deleted";
     }
 
     /**

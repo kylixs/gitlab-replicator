@@ -126,6 +126,59 @@ public class SyncController {
     }
 
     /**
+     * Get project diff list
+     *
+     * GET /api/sync/diffs?status=OUTDATED&page=1&size=20
+     */
+    @GetMapping("/diffs")
+    public ResponseEntity<ApiResponse<PageResult<ProjectDiff>>> getProjectDiffs(
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer size) {
+        log.info("Query project diffs - status: {}, page: {}, size: {}", status, page, size);
+
+        try {
+            QueryWrapper<SyncProject> queryWrapper = new QueryWrapper<>();
+            if (status != null && !status.isEmpty()) {
+                queryWrapper.eq("sync_status", status);
+            }
+
+            Page<SyncProject> pageQuery = new Page<>(page, size);
+            Page<SyncProject> result = syncProjectMapper.selectPage(pageQuery, queryWrapper);
+
+            // Calculate diffs for each project
+            List<ProjectDiff> diffs = result.getRecords().stream()
+                    .map(project -> {
+                        // Try cache first
+                        ProjectDiff cachedDiff = cacheManager.get("diff:" + project.getProjectKey());
+                        if (cachedDiff != null) {
+                            return cachedDiff;
+                        }
+
+                        // Calculate and cache
+                        ProjectDiff diff = diffCalculator.calculateDiff(project.getId());
+                        if (diff != null) {
+                            cacheManager.put("diff:" + project.getProjectKey(), diff, 15);
+                        }
+                        return diff;
+                    })
+                    .filter(diff -> diff != null)
+                    .toList();
+
+            PageResult<ProjectDiff> pageResult = new PageResult<>();
+            pageResult.setItems(diffs);
+            pageResult.setTotal(result.getTotal());
+            pageResult.setPage(page);
+            pageResult.setSize(size);
+
+            return ResponseEntity.ok(ApiResponse.success(pageResult));
+        } catch (Exception e) {
+            log.error("Query project diffs failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
+        }
+    }
+
+    /**
      * Get project diff
      *
      * GET /api/sync/projects/{projectKey}/diff
