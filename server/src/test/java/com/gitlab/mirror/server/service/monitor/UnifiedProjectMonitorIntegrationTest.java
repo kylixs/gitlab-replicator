@@ -69,6 +69,7 @@ class UnifiedProjectMonitorIntegrationTest {
         LocalCacheManager cacheManager = mock(LocalCacheManager.class);
         SyncProjectMapper syncProjectMapper = mock(SyncProjectMapper.class);
         MetricsExporter metricsExporter = mock(MetricsExporter.class);
+        com.gitlab.mirror.server.service.ProjectDiscoveryService projectDiscoveryService = mock(com.gitlab.mirror.server.service.ProjectDiscoveryService.class);
 
         // Configure mock behaviors
         UpdateProjectDataService.UpdateResult mockResult = new UpdateProjectDataService.UpdateResult();
@@ -85,7 +86,8 @@ class UnifiedProjectMonitorIntegrationTest {
                 diffCalculator,
                 cacheManager,
                 syncProjectMapper,
-                metricsExporter
+                metricsExporter,
+                projectDiscoveryService
         );
     }
 

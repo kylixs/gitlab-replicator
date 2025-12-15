@@ -44,6 +44,9 @@ class UnifiedProjectMonitorTest {
     @Mock
     private MetricsExporter metricsExporter;
 
+    @Mock
+    private com.gitlab.mirror.server.service.ProjectDiscoveryService projectDiscoveryService;
+
     private UnifiedProjectMonitor unifiedProjectMonitor;
 
     @BeforeEach
@@ -55,7 +58,8 @@ class UnifiedProjectMonitorTest {
                 diffCalculator,
                 cacheManager,
                 syncProjectMapper,
-                metricsExporter
+                metricsExporter,
+                projectDiscoveryService
         );
     }
 

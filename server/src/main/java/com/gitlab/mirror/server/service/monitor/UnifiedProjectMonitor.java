@@ -33,6 +33,7 @@ public class UnifiedProjectMonitor {
     private final LocalCacheManager cacheManager;
     private final SyncProjectMapper syncProjectMapper;
     private final MetricsExporter metricsExporter;
+    private final com.gitlab.mirror.server.service.ProjectDiscoveryService projectDiscoveryService;
 
     public UnifiedProjectMonitor(
             BatchQueryExecutor batchQueryExecutor,
@@ -40,13 +41,15 @@ public class UnifiedProjectMonitor {
             DiffCalculator diffCalculator,
             LocalCacheManager cacheManager,
             SyncProjectMapper syncProjectMapper,
-            MetricsExporter metricsExporter) {
+            MetricsExporter metricsExporter,
+            com.gitlab.mirror.server.service.ProjectDiscoveryService projectDiscoveryService) {
         this.batchQueryExecutor = batchQueryExecutor;
         this.updateProjectDataService = updateProjectDataService;
         this.diffCalculator = diffCalculator;
         this.cacheManager = cacheManager;
         this.syncProjectMapper = syncProjectMapper;
         this.metricsExporter = metricsExporter;
+        this.projectDiscoveryService = projectDiscoveryService;
     }
 
     /**
@@ -76,6 +79,15 @@ public class UnifiedProjectMonitor {
             if (sourceProjects.isEmpty()) {
                 log.info("No projects to scan");
                 return buildEmptyResult(resultBuilder, startTime);
+            }
+
+            // Step 1.5: Discover and add new projects (only for full scan)
+            int newProjectsAdded = 0;
+            if ("full".equals(scanType)) {
+                long step1_5Start = System.currentTimeMillis();
+                newProjectsAdded = discoverNewProjects(sourceProjects);
+                long step1_5Duration = System.currentTimeMillis() - step1_5Start;
+                log.info("[SCAN-PERF] Step 1.5: Discover {} new projects - {}ms", newProjectsAdded, step1_5Duration);
             }
 
             // Step 2: Get project details using GraphQL batch query (Two-stage optimization - Stage 1)
@@ -182,7 +194,7 @@ public class UnifiedProjectMonitor {
                     .durationMs(durationMs)
                     .projectsScanned(sourceProjects.size())
                     .projectsUpdated(updateResult.getSuccessCount() + targetUpdateResult.getSuccessCount())
-                    .newProjects(0) // Will be updated by ProjectDiscoveryService
+                    .newProjects(newProjectsAdded)
                     .changesDetected(changesDetected)
                     .endTime(endTime)
                     .build();
@@ -214,6 +226,54 @@ public class UnifiedProjectMonitor {
      */
     private void updateLastScanTime(LocalDateTime time) {
         cacheManager.put("last_scan_time", time, 60 * 24); // 24 hours TTL
+    }
+
+    /**
+     * Discover and add new projects to sync_project table
+     *
+     * @param sourceProjects List of projects from source GitLab
+     * @return Number of new projects added
+     */
+    private int discoverNewProjects(List<GitLabProject> sourceProjects) {
+        log.info("Discovering new projects from {} source projects", sourceProjects.size());
+
+        // Get existing project keys
+        List<SyncProject> existingProjects = syncProjectMapper.selectList(null);
+        java.util.Set<String> existingKeys = existingProjects.stream()
+                .map(SyncProject::getProjectKey)
+                .collect(Collectors.toSet());
+
+        log.info("Found {} existing sync projects", existingKeys.size());
+
+        // Find new projects
+        List<GitLabProject> newProjects = sourceProjects.stream()
+                .filter(p -> !existingKeys.contains(p.getPathWithNamespace()))
+                .collect(Collectors.toList());
+
+        log.info("Discovered {} new projects to add", newProjects.size());
+
+        // Add new projects
+        int added = 0;
+        for (GitLabProject project : newProjects) {
+            try {
+                SyncProject syncProject = new SyncProject();
+                syncProject.setProjectKey(project.getPathWithNamespace());
+                syncProject.setSyncMethod("pull_sync");
+                syncProject.setSyncStatus(SyncProject.SyncStatus.PENDING);
+                syncProject.setEnabled(true);
+                syncProject.setCreatedAt(LocalDateTime.now());
+                syncProject.setUpdatedAt(LocalDateTime.now());
+
+                syncProjectMapper.insert(syncProject);
+                log.info("Added new sync project: {} (GitLab ID: {})", project.getPathWithNamespace(), project.getId());
+                added++;
+            } catch (Exception e) {
+                log.error("Failed to add new project {}: {}", project.getPathWithNamespace(), e.getMessage(), e);
+            }
+        }
+
+        log.info("Successfully added {} new sync projects", added);
+        return added;
     }
 
     /**
