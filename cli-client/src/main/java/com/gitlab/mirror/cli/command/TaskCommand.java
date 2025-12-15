@@ -159,14 +159,7 @@ public class TaskCommand {
     }
 
     private String formatNextRun(String nextRunAt) {
-        if (nextRunAt == null || nextRunAt.equals("-")) {
-            return "-";
-        }
-        // Extract date and time
-        if (nextRunAt.length() > 16) {
-            return nextRunAt.substring(0, 16).replace("T", " ");
-        }
-        return nextRunAt;
+        return OutputFormatter.formatDateTime(nextRunAt);
     }
 
     private void showTask(String[] args) throws Exception {
@@ -220,8 +213,8 @@ public class TaskCommand {
         OutputFormatter.printKeyValue("Enabled", JsonParser.formatEnabled(JsonParser.getBoolean(task, "enabled")));
         System.out.println();
 
-        OutputFormatter.printKeyValue("Next Run At", JsonParser.getString(task, "nextRunAt"));
-        OutputFormatter.printKeyValue("Last Run At", JsonParser.getString(task, "lastRunAt"));
+        OutputFormatter.printKeyValue("Next Run At", OutputFormatter.formatDateTime(JsonParser.getString(task, "nextRunAt")));
+        OutputFormatter.printKeyValue("Last Run At", OutputFormatter.formatDateTime(JsonParser.getString(task, "lastRunAt")));
         OutputFormatter.printKeyValue("Last Sync Status", JsonParser.getString(task, "lastSyncStatus"));
         System.out.println();
 
@@ -237,8 +230,8 @@ public class TaskCommand {
         }
 
         System.out.println();
-        OutputFormatter.printKeyValue("Created At", JsonParser.getString(task, "createdAt"));
-        OutputFormatter.printKeyValue("Updated At", JsonParser.getString(task, "updatedAt"));
+        OutputFormatter.printKeyValue("Created At", OutputFormatter.formatDateTime(JsonParser.getString(task, "createdAt")));
+        OutputFormatter.printKeyValue("Updated At", OutputFormatter.formatDateTime(JsonParser.getString(task, "updatedAt")));
         System.out.println();
     }
 

@@ -1,7 +1,10 @@
 package com.gitlab.mirror.cli.formatter;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -171,6 +174,37 @@ public class OutputFormatter {
             return "-";
         }
         return dateTime.format(DATE_FORMATTER);
+    }
+
+    /**
+     * Format ISO 8601 datetime string to local timezone
+     * Handles both UTC (with Z suffix) and non-timezone formats
+     *
+     * @param isoDateTimeStr ISO 8601 datetime string (e.g., "2025-12-15T06:06:40.563027Z" or "2025-12-14T05:02:26")
+     * @return Formatted datetime in local timezone (e.g., "2025-12-15 14:06:40")
+     */
+    public static String formatDateTime(String isoDateTimeStr) {
+        if (isoDateTimeStr == null || isoDateTimeStr.isEmpty() || isoDateTimeStr.equals("-")) {
+            return "-";
+        }
+
+        try {
+            // Try parsing as ZonedDateTime (handles UTC with Z suffix)
+            if (isoDateTimeStr.contains("Z") || isoDateTimeStr.contains("+") ||
+                (isoDateTimeStr.contains("-") && isoDateTimeStr.lastIndexOf("-") > 10)) {
+                ZonedDateTime utcDateTime = ZonedDateTime.parse(isoDateTimeStr);
+                // Convert to system default timezone
+                ZonedDateTime localZonedDateTime = utcDateTime.withZoneSameInstant(ZoneId.systemDefault());
+                return localZonedDateTime.format(DATE_FORMATTER);
+            } else {
+                // Parse as LocalDateTime (no timezone info, assume already local)
+                LocalDateTime localDateTime = LocalDateTime.parse(isoDateTimeStr);
+                return localDateTime.format(DATE_FORMATTER);
+            }
+        } catch (DateTimeParseException e) {
+            // If parsing fails, return original string
+            return isoDateTimeStr;
+        }
     }
 
     /**
