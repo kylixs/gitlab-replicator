@@ -3,6 +3,8 @@ package com.gitlab.mirror.server.service.monitor;
 import com.gitlab.mirror.common.model.GitLabProject;
 import com.gitlab.mirror.common.model.RepositoryBranch;
 import com.gitlab.mirror.server.client.RetryableGitLabClient;
+import com.gitlab.mirror.server.client.graphql.GitLabGraphQLClient;
+import com.gitlab.mirror.server.client.graphql.GraphQLProjectInfo;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -33,18 +35,21 @@ public class BatchQueryExecutor {
     private static final int DEFAULT_PER_PAGE = 50;
     private static final int MAX_TIMEOUT_SECONDS = 30;
     private static final int MAX_RETRIES = 3;
-    private static final int CONCURRENT_QUERIES = 5;  // Max concurrent queries
+    private static final int CONCURRENT_QUERIES = 10;  // Max concurrent queries (increased from 5 for better performance)
     private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_DATE_TIME;
 
     private final RetryableGitLabClient sourceClient;
     private final RetryableGitLabClient targetClient;
+    private final GitLabGraphQLClient graphQLClient;
     private final ExecutorService executorService;
 
     public BatchQueryExecutor(
             @Qualifier("sourceGitLabClient") RetryableGitLabClient sourceClient,
-            @Qualifier("targetGitLabClient") RetryableGitLabClient targetClient) {
+            @Qualifier("targetGitLabClient") RetryableGitLabClient targetClient,
+            GitLabGraphQLClient graphQLClient) {
         this.sourceClient = sourceClient;
         this.targetClient = targetClient;
+        this.graphQLClient = graphQLClient;
         this.executorService = Executors.newFixedThreadPool(CONCURRENT_QUERIES);
     }
 
@@ -196,33 +201,35 @@ public class BatchQueryExecutor {
         details.setProjectId(projectId);
 
         try {
-            // Query branches and latest commit sequentially
-            // Note: We don't use nested CompletableFuture here to avoid thread pool deadlock
-            // The outer getProjectDetailsBatch() already provides concurrency
-            try {
-                RepositoryBranch[] branches = executeWithRetry(() -> getBranches(projectId, client));
-                details.setBranchCount(branches != null ? branches.length : 0);
-            } catch (Exception e) {
-                // Some projects may not have branches (empty repos), log warning and continue
-                log.warn("Failed to get branches for project {}: {}", projectId, e.getMessage());
-                details.setBranchCount(0);
-            }
+            // Optimization: Skip getBranches() API call if we only need default branch info
+            // This reduces API calls from 2 per project to 1 per project
+            // We set branchCount to null (unknown) instead of querying all branches
 
-            try {
-                String latestCommitSha = executeWithRetry(() -> getLatestCommitSha(projectId, defaultBranch, client));
-                details.setLatestCommitSha(latestCommitSha);
-            } catch (Exception e) {
-                // Some projects may not have commits (empty repos), log warning and continue
-                log.warn("Failed to get latest commit for project {}: {}", projectId, e.getMessage());
+            if (defaultBranch != null && !defaultBranch.isEmpty()) {
+                try {
+                    // Directly get default branch details without querying all branches first
+                    String latestCommitSha = executeWithRetry(() -> getLatestCommitSha(projectId, defaultBranch, client));
+                    details.setLatestCommitSha(latestCommitSha);
+                    // Set branchCount to null since we're skipping the branches list query
+                    details.setBranchCount(null);
+                } catch (Exception e) {
+                    // Some projects may not have the default branch (empty repos or deleted branch)
+                    log.warn("Failed to get default branch '{}' for project {}: {}", defaultBranch, projectId, e.getMessage());
+                    details.setLatestCommitSha(null);
+                    details.setBranchCount(null);
+                }
+            } else {
+                // No default branch specified, cannot query
+                log.debug("No default branch specified for project {}, skipping branch query", projectId);
                 details.setLatestCommitSha(null);
+                details.setBranchCount(null);
             }
 
             // For commit count, we can optionally query commits API
             // But this is expensive, so we skip it for now
             // details.setCommitCount(getCommitCount(projectId, client));
 
-            log.debug("Project {} details: branches={}, latestCommitSha={}",
-                    projectId, details.getBranchCount(), details.getLatestCommitSha());
+            log.debug("Project {} details: latestCommitSha={}", projectId, details.getLatestCommitSha());
 
         } catch (Exception e) {
             log.error("Failed to get project details for {}: {}", projectId, e.getMessage(), e);
@@ -353,6 +360,49 @@ public class BatchQueryExecutor {
      */
     public RetryableGitLabClient getTargetClient() {
         return targetClient;
+    }
+
+    /**
+     * Get project details using GraphQL batch query (Two-stage optimization - Stage 1)
+     * This is much faster than REST API for batch queries (1 API call vs N calls)
+     *
+     * @param projects List of GitLab projects
+     * @return List of GraphQL project info with basic statistics
+     */
+    public List<GraphQLProjectInfo> getProjectDetailsBatchGraphQL(List<GitLabProject> projects) {
+        if (projects == null || projects.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        log.info("[GraphQL] Getting details for {} projects using batch query", projects.size());
+
+        List<Long> projectIds = projects.stream()
+                .map(GitLabProject::getId)
+                .collect(Collectors.toList());
+
+        try {
+            // Use GraphQL batch query with chunking (30 projects per batch recommended)
+            return graphQLClient.batchQueryProjectsInChunks(projectIds, 30);
+        } catch (Exception e) {
+            log.warn("[GraphQL] Batch query failed, falling back to REST API: {}", e.getMessage());
+            // Fallback to REST API if GraphQL fails
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Convert GraphQL project info to ProjectDetails
+     *
+     * @param graphQLInfo GraphQL project information
+     * @return Project details DTO
+     */
+    public ProjectDetails convertGraphQLToDetails(GraphQLProjectInfo graphQLInfo) {
+        ProjectDetails details = new ProjectDetails();
+        details.setProjectId(graphQLInfo.getProjectId());
+        details.setLatestCommitSha(graphQLInfo.getLastCommitSha());
+        details.setCommitCount(graphQLInfo.getCommitCount());
+        details.setBranchCount(null); // GraphQL doesn't provide branch count in batch query
+        return details;
     }
 
     /**

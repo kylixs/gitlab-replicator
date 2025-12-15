@@ -78,24 +78,24 @@ public class UnifiedProjectMonitor {
                 return buildEmptyResult(resultBuilder, startTime);
             }
 
-            // Step 2: Get project details (branches, commits) - optimized version
+            // Step 2: Get project details using GraphQL batch query (Two-stage optimization - Stage 1)
             long step2Start = System.currentTimeMillis();
-            List<BatchQueryExecutor.ProjectDetails> projectDetails =
-                    batchQueryExecutor.getProjectDetailsBatchOptimized(sourceProjects, batchQueryExecutor.getSourceClient());
+            List<com.gitlab.mirror.server.client.graphql.GraphQLProjectInfo> graphQLInfos =
+                    batchQueryExecutor.getProjectDetailsBatchGraphQL(sourceProjects);
             long step2Duration = System.currentTimeMillis() - step2Start;
-            log.info("[SCAN-PERF] Step 2: Get {} source project details - {}ms", sourceProjects.size(), step2Duration);
+            log.info("[SCAN-PERF] Step 2: GraphQL batch query {} source projects - {}ms", sourceProjects.size(), step2Duration);
 
             // Convert to map for easy lookup
-            Map<Long, BatchQueryExecutor.ProjectDetails> detailsMap = projectDetails.stream()
+            Map<Long, com.gitlab.mirror.server.client.graphql.GraphQLProjectInfo> graphQLMap = graphQLInfos.stream()
                     .collect(Collectors.toMap(
-                            BatchQueryExecutor.ProjectDetails::getProjectId,
-                            d -> d
+                            com.gitlab.mirror.server.client.graphql.GraphQLProjectInfo::getProjectId,
+                            info -> info
                     ));
 
-            // Step 3: Update project data in database
+            // Step 3: Update project data in database using GraphQL data
             long step3Start = System.currentTimeMillis();
             UpdateProjectDataService.UpdateResult updateResult =
-                    updateProjectDataService.updateSourceProjects(sourceProjects, detailsMap);
+                    updateProjectDataService.updateSourceProjectsFromGraphQL(sourceProjects, graphQLMap);
             long step3Duration = System.currentTimeMillis() - step3Start;
             log.info("[SCAN-PERF] Step 3: Update {} source projects to DB - {}ms", updateResult.getSuccessCount(), step3Duration);
 

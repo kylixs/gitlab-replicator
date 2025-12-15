@@ -2,6 +2,7 @@ package com.gitlab.mirror.server.service.monitor;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.gitlab.mirror.common.model.GitLabProject;
+import com.gitlab.mirror.server.client.graphql.GraphQLProjectInfo;
 import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.TargetProjectInfo;
 import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
@@ -99,6 +100,64 @@ public class UpdateProjectDataService {
     }
 
     /**
+     * Update source projects monitoring fields from GraphQL batch query (Two-stage optimization)
+     *
+     * @param projects List of GitLab projects from API
+     * @param graphQLInfos Map of project ID to GraphQL info
+     * @return Update result statistics
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public UpdateResult updateSourceProjectsFromGraphQL(
+            List<GitLabProject> projects,
+            Map<Long, GraphQLProjectInfo> graphQLInfos) {
+
+        log.info("Updating {} source projects from GraphQL data", projects.size());
+
+        UpdateResult result = new UpdateResult();
+        result.setTotalCount(projects.size());
+
+        List<String> errors = new ArrayList<>();
+
+        for (GitLabProject project : projects) {
+            try {
+                QueryWrapper<SourceProjectInfo> queryWrapper = new QueryWrapper<>();
+                queryWrapper.eq("gitlab_project_id", project.getId());
+                SourceProjectInfo info = sourceProjectInfoMapper.selectOne(queryWrapper);
+
+                if (info == null) {
+                    log.warn("Source project not found for GitLab project ID: {}", project.getId());
+                    result.setSkippedCount(result.getSkippedCount() + 1);
+                    continue;
+                }
+
+                // Update fields from GraphQL data
+                GraphQLProjectInfo graphQLInfo = graphQLInfos.get(project.getId());
+                updateSourceProjectFieldsFromGraphQL(info, project, graphQLInfo);
+
+                // Update record
+                int updated = sourceProjectInfoMapper.updateById(info);
+                if (updated > 0) {
+                    result.setSuccessCount(result.getSuccessCount() + 1);
+                } else {
+                    result.setFailedCount(result.getFailedCount() + 1);
+                    errors.add("Failed to update source project: " + project.getPathWithNamespace());
+                }
+
+            } catch (Exception e) {
+                log.error("Error updating source project {}: {}", project.getPathWithNamespace(), e.getMessage(), e);
+                result.setFailedCount(result.getFailedCount() + 1);
+                errors.add(project.getPathWithNamespace() + ": " + e.getMessage());
+            }
+        }
+
+        result.setErrors(errors);
+        log.info("Source projects GraphQL update completed - success: {}, failed: {}, skipped: {}",
+                result.getSuccessCount(), result.getFailedCount(), result.getSkippedCount());
+
+        return result;
+    }
+
+    /**
      * Update target projects monitoring fields from GitLab API data
      *
      * @param projects List of GitLab projects from API
@@ -181,6 +240,50 @@ public class UpdateProjectDataService {
         }
 
         // Update default branch
+        if (project.getDefaultBranch() != null) {
+            info.setDefaultBranch(project.getDefaultBranch());
+        }
+
+        // Updated at is automatically set by MyBatis-Plus
+    }
+
+    /**
+     * Update source project info fields from GraphQL data (Two-stage optimization)
+     */
+    private void updateSourceProjectFieldsFromGraphQL(
+            SourceProjectInfo info,
+            GitLabProject project,
+            GraphQLProjectInfo graphQLInfo) {
+
+        // Update from GraphQL data
+        if (graphQLInfo != null) {
+            // Commit information from GraphQL
+            if (graphQLInfo.getLastCommitSha() != null) {
+                info.setLatestCommitSha(graphQLInfo.getLastCommitSha());
+            }
+
+            // Commit count from GraphQL statistics (all branches cumulative)
+            if (graphQLInfo.getCommitCount() != null) {
+                info.setCommitCount(graphQLInfo.getCommitCount());
+            }
+
+            // Repository size from GraphQL statistics
+            if (graphQLInfo.getRepositorySize() != null) {
+                info.setRepositorySize(graphQLInfo.getRepositorySize());
+            }
+
+            // Last activity time from GraphQL
+            if (graphQLInfo.getLastActivityAt() != null) {
+                info.setLastActivityAt(convertToLocalDateTime(graphQLInfo.getLastActivityAt()));
+            }
+
+            // Default branch from GraphQL repository.rootRef
+            if (graphQLInfo.getRepository() != null && graphQLInfo.getRepository().getRootRef() != null) {
+                info.setDefaultBranch(graphQLInfo.getRepository().getRootRef());
+            }
+        }
+
+        // Also update from project basic data if available
         if (project.getDefaultBranch() != null) {
             info.setDefaultBranch(project.getDefaultBranch());
         }
