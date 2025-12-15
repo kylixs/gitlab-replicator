@@ -301,9 +301,14 @@ public class UpdateProjectDataService {
 
         // Update from project details
         if (details != null) {
+            log.debug("[TARGET-UPDATE] Updating target project {} with details: commitCount={}, branchCount={}, sha={}",
+                    info.getPathWithNamespace(), details.getCommitCount(), details.getBranchCount(), details.getLatestCommitSha());
             info.setLatestCommitSha(details.getLatestCommitSha());
             info.setCommitCount(details.getCommitCount());
             info.setBranchCount(details.getBranchCount());
+        } else {
+            log.warn("[TARGET-UPDATE] No details available for target project {}, skipping commit/branch count update",
+                    info.getPathWithNamespace());
         }
 
         // Update from project statistics
