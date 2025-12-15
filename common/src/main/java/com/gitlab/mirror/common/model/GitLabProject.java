@@ -71,6 +71,9 @@ public class GitLabProject {
 
     @Data
     public static class Statistics {
+        @JsonProperty("commit_count")
+        private Integer commitCount;
+
         @JsonProperty("repository_size")
         private Long repositorySize;
 

@@ -299,16 +299,23 @@ public class UpdateProjectDataService {
             GitLabProject project,
             BatchQueryExecutor.ProjectDetails details) {
 
-        // Update from project details
+        // Update latest commit SHA and branch count from details
         if (details != null) {
-            log.debug("[TARGET-UPDATE] Updating target project {} with details: commitCount={}, branchCount={}, sha={}",
-                    info.getPathWithNamespace(), details.getCommitCount(), details.getBranchCount(), details.getLatestCommitSha());
             info.setLatestCommitSha(details.getLatestCommitSha());
-            info.setCommitCount(details.getCommitCount());
             info.setBranchCount(details.getBranchCount());
+        }
+
+        // Update commit count from project statistics (fallback if details doesn't have it)
+        if (project.getStatistics() != null && project.getStatistics().getCommitCount() != null) {
+            info.setCommitCount(project.getStatistics().getCommitCount());
+            log.debug("[TARGET-UPDATE] Updating target project {} commitCount from statistics: {}",
+                    info.getPathWithNamespace(), project.getStatistics().getCommitCount());
+        } else if (details != null && details.getCommitCount() != null) {
+            info.setCommitCount(details.getCommitCount());
+            log.debug("[TARGET-UPDATE] Updating target project {} commitCount from details: {}",
+                    info.getPathWithNamespace(), details.getCommitCount());
         } else {
-            log.warn("[TARGET-UPDATE] No details available for target project {}, skipping commit/branch count update",
-                    info.getPathWithNamespace());
+            log.warn("[TARGET-UPDATE] No commit count available for target project {}", info.getPathWithNamespace());
         }
 
         // Update from project statistics
