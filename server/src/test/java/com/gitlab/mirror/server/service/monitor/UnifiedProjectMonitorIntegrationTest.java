@@ -57,7 +57,7 @@ class UnifiedProjectMonitorIntegrationTest {
         objectMapper.findAndRegisterModules();
 
         // Create GraphQL client
-        GitLabGraphQLClient graphQLClient = new GitLabGraphQLClient(sourceClient, objectMapper);
+        GitLabGraphQLClient graphQLClient = new GitLabGraphQLClient(objectMapper);
 
         // Create BatchQueryExecutor
         batchQueryExecutor = new BatchQueryExecutor(sourceClient, targetClient, graphQLClient);

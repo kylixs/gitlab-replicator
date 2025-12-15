@@ -119,7 +119,7 @@ public class UnifiedProjectMonitor {
                             info -> info
                     ));
 
-            // Step 3: Update project data in database using GraphQL data
+            // Step 3: Update project data in database using GraphQL data (including branch count)
             long step3Start = System.currentTimeMillis();
             UpdateProjectDataService.UpdateResult updateResult =
                     updateProjectDataService.updateSourceProjectsFromGraphQL(sourceProjects, graphQLMap);
@@ -132,25 +132,28 @@ public class UnifiedProjectMonitor {
             long step4Duration = System.currentTimeMillis() - step4Start;
             log.info("[SCAN-PERF] Step 4: Query {} target projects - {}ms", targetProjects.size(), step4Duration);
 
-            // Step 5: Get target project details
+            // Step 5: Get target project details using GraphQL batch query (much faster!)
             long step5Start = System.currentTimeMillis();
-            List<BatchQueryExecutor.ProjectDetails> targetDetails =
-                    batchQueryExecutor.getProjectDetailsBatchOptimized(targetProjects, batchQueryExecutor.getTargetClient());
+            List<com.gitlab.mirror.server.client.graphql.GraphQLProjectInfo> targetGraphQLInfos =
+                    batchQueryExecutor.getTargetProjectDetailsBatchGraphQL(targetProjects);
             long step5Duration = System.currentTimeMillis() - step5Start;
-            log.info("[SCAN-PERF] Step 5: Get {} target project details - {}ms", targetProjects.size(), step5Duration);
+            log.info("[SCAN-PERF] Step 5: GraphQL batch query {} target projects - {}ms", targetProjects.size(), step5Duration);
 
-            Map<Long, BatchQueryExecutor.ProjectDetails> targetDetailsMap = targetDetails.stream()
+            // Convert to map for easy lookup
+            Map<Long, com.gitlab.mirror.server.client.graphql.GraphQLProjectInfo> targetGraphQLMap = targetGraphQLInfos.stream()
                     .collect(Collectors.toMap(
-                            BatchQueryExecutor.ProjectDetails::getProjectId,
-                            d -> d
+                            com.gitlab.mirror.server.client.graphql.GraphQLProjectInfo::getProjectId,
+                            info -> info
                     ));
 
-            // Step 6: Update target projects
+            // Step 6: Update target projects from GraphQL data
             long step6Start = System.currentTimeMillis();
             UpdateProjectDataService.UpdateResult targetUpdateResult =
-                    updateProjectDataService.updateTargetProjects(targetProjects, targetDetailsMap);
+                    updateProjectDataService.updateTargetProjectsFromGraphQL(targetProjects, targetGraphQLMap);
             long step6Duration = System.currentTimeMillis() - step6Start;
             log.info("[SCAN-PERF] Step 6: Update {} target projects to DB - {}ms", targetUpdateResult.getSuccessCount(), step6Duration);
+
+            // Step 6.5 removed - no longer needed as Step 6 now properly updates all target project data
 
             // Step 7: Calculate differences for all sync projects
             long step7Start = System.currentTimeMillis();
@@ -194,15 +197,15 @@ public class UnifiedProjectMonitor {
             // Performance summary
             log.info("[SCAN-PERF] === SCAN PERFORMANCE SUMMARY ===");
             log.info("[SCAN-PERF] Total Duration: {}ms", durationMs);
-            log.info("[SCAN-PERF] Step 1 (Query Source):      {}ms ({} %)", step1Duration, String.format("%.1f", step1Duration * 100.0 / durationMs));
-            log.info("[SCAN-PERF] Step 2 (Source Details):    {}ms ({} %)", step2Duration, String.format("%.1f", step2Duration * 100.0 / durationMs));
-            log.info("[SCAN-PERF] Step 3 (Update Source):     {}ms ({} %)", step3Duration, String.format("%.1f", step3Duration * 100.0 / durationMs));
-            log.info("[SCAN-PERF] Step 4 (Query Target):      {}ms ({} %)", step4Duration, String.format("%.1f", step4Duration * 100.0 / durationMs));
-            log.info("[SCAN-PERF] Step 5 (Target Details):    {}ms ({} %)", step5Duration, String.format("%.1f", step5Duration * 100.0 / durationMs));
-            log.info("[SCAN-PERF] Step 6 (Update Target):     {}ms ({} %)", step6Duration, String.format("%.1f", step6Duration * 100.0 / durationMs));
-            log.info("[SCAN-PERF] Step 7 (Calculate Diff):    {}ms ({} %)", step7Duration, String.format("%.1f", step7Duration * 100.0 / durationMs));
-            log.info("[SCAN-PERF] Step 8 (Cache Results):     {}ms ({} %)", step8Duration, String.format("%.1f", step8Duration * 100.0 / durationMs));
-            log.info("[SCAN-PERF] Step 9 (Metrics):           {}ms ({} %)", step9Duration, String.format("%.1f", step9Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 1   (Query Source):      {}ms ({} %)", step1Duration, String.format("%.1f", step1Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 2   (GraphQL Source):    {}ms ({} %)", step2Duration, String.format("%.1f", step2Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 3   (Update Source):     {}ms ({} %)", step3Duration, String.format("%.1f", step3Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 4   (Query Target):      {}ms ({} %)", step4Duration, String.format("%.1f", step4Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 5   (Target Details):    {}ms ({} %)", step5Duration, String.format("%.1f", step5Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 6   (Update Target):     {}ms ({} %)", step6Duration, String.format("%.1f", step6Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 7   (Calculate Diff):    {}ms ({} %)", step7Duration, String.format("%.1f", step7Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 8   (Cache Results):     {}ms ({} %)", step8Duration, String.format("%.1f", step8Duration * 100.0 / durationMs));
+            log.info("[SCAN-PERF] Step 9   (Metrics):           {}ms ({} %)", step9Duration, String.format("%.1f", step9Duration * 100.0 / durationMs));
             log.info("[SCAN-PERF] ================================");
 
             return resultBuilder

@@ -32,12 +32,15 @@ class UpdateProjectDataServiceTest {
     @Mock
     private TargetProjectInfoMapper targetProjectInfoMapper;
 
+    @Mock
+    private BatchQueryExecutor batchQueryExecutor;
+
     private UpdateProjectDataService updateProjectDataService;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        updateProjectDataService = new UpdateProjectDataService(sourceProjectInfoMapper, targetProjectInfoMapper);
+        updateProjectDataService = new UpdateProjectDataService(sourceProjectInfoMapper, targetProjectInfoMapper, batchQueryExecutor);
     }
 
     @Test

@@ -201,28 +201,26 @@ public class BatchQueryExecutor {
         details.setProjectId(projectId);
 
         try {
-            // Optimization: Skip getBranches() API call if we only need default branch info
-            // This reduces API calls from 2 per project to 1 per project
-            // We set branchCount to null (unknown) instead of querying all branches
-
             if (defaultBranch != null && !defaultBranch.isEmpty()) {
                 try {
-                    // Directly get default branch details without querying all branches first
+                    // Get default branch details
                     String latestCommitSha = executeWithRetry(() -> getLatestCommitSha(projectId, defaultBranch, client));
                     details.setLatestCommitSha(latestCommitSha);
-                    // Set branchCount to null since we're skipping the branches list query
-                    details.setBranchCount(null);
+
+                    // Get branch count
+                    RepositoryBranch[] branches = executeWithRetry(() -> getBranches(projectId, client));
+                    details.setBranchCount(branches != null ? branches.length : 0);
                 } catch (Exception e) {
                     // Some projects may not have the default branch (empty repos or deleted branch)
-                    log.warn("Failed to get default branch '{}' for project {}: {}", defaultBranch, projectId, e.getMessage());
+                    log.warn("Failed to get branch details for project {}: {}", projectId, e.getMessage());
                     details.setLatestCommitSha(null);
-                    details.setBranchCount(null);
+                    details.setBranchCount(0);
                 }
             } else {
                 // No default branch specified, cannot query
                 log.debug("No default branch specified for project {}, skipping branch query", projectId);
                 details.setLatestCommitSha(null);
-                details.setBranchCount(null);
+                details.setBranchCount(0);
             }
 
             // For commit count, we can optionally query commits API
@@ -363,18 +361,37 @@ public class BatchQueryExecutor {
     }
 
     /**
+     * Get SOURCE project details using GraphQL batch query
+     */
+    public List<GraphQLProjectInfo> getProjectDetailsBatchGraphQL(List<GitLabProject> projects) {
+        return getProjectDetailsBatchGraphQL(projects, sourceClient, "Source");
+    }
+
+    /**
+     * Get TARGET project details using GraphQL batch query
+     */
+    public List<GraphQLProjectInfo> getTargetProjectDetailsBatchGraphQL(List<GitLabProject> projects) {
+        return getProjectDetailsBatchGraphQL(projects, targetClient, "Target");
+    }
+
+    /**
      * Get project details using GraphQL batch query (Two-stage optimization - Stage 1)
      * This is much faster than REST API for batch queries (1 API call vs N calls)
      *
      * @param projects List of GitLab projects
+     * @param client GitLab API client
+     * @param label Label for logging
      * @return List of GraphQL project info with basic statistics
      */
-    public List<GraphQLProjectInfo> getProjectDetailsBatchGraphQL(List<GitLabProject> projects) {
+    private List<GraphQLProjectInfo> getProjectDetailsBatchGraphQL(
+            List<GitLabProject> projects,
+            RetryableGitLabClient client,
+            String label) {
         if (projects == null || projects.isEmpty()) {
             return new ArrayList<>();
         }
 
-        log.info("[GraphQL] Getting details for {} projects using batch query", projects.size());
+        log.info("[GraphQL-{}] Getting details for {} projects using batch query", label, projects.size());
 
         List<Long> projectIds = projects.stream()
                 .map(GitLabProject::getId)
@@ -382,9 +399,9 @@ public class BatchQueryExecutor {
 
         try {
             // Use GraphQL batch query with chunking (30 projects per batch recommended)
-            return graphQLClient.batchQueryProjectsInChunks(projectIds, 30);
+            return graphQLClient.batchQueryProjectsInChunks(projectIds, 30, client);
         } catch (Exception e) {
-            log.warn("[GraphQL] Batch query failed, falling back to REST API: {}", e.getMessage());
+            log.warn("[GraphQL-{}] Batch query failed, falling back to REST API: {}", label, e.getMessage());
             // Fallback to REST API if GraphQL fails
             return new ArrayList<>();
         }

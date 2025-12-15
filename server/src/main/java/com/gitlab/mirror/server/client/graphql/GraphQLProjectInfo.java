@@ -26,6 +26,7 @@ public class GraphQLProjectInfo {
     public static class Repository {
         private String rootRef;  // 默认分支名
         private Tree tree;
+        private java.util.List<String> branchNames;  // 分支名称列表
 
         @Data
         @JsonIgnoreProperties(ignoreUnknown = true)
@@ -99,5 +100,15 @@ public class GraphQLProjectInfo {
             return null;
         }
         return statistics.getRepositorySize().longValue();
+    }
+
+    /**
+     * 获取分支数量
+     */
+    public Integer getBranchCount() {
+        if (repository == null || repository.getBranchNames() == null) {
+            return null;
+        }
+        return repository.getBranchNames().size();
     }
 }

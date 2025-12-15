@@ -25,7 +25,6 @@ import java.util.Map;
 @Component
 public class GitLabGraphQLClient {
 
-    private final RetryableGitLabClient retryableClient;
     private final ObjectMapper objectMapper;
 
     // GraphQL查询模板 - 批量查询项目基础信息
@@ -45,6 +44,7 @@ public class GitLabGraphQLClient {
                         committedDate
                       }
                     }
+                    branchNames
                   }
                   statistics {
                     commitCount
@@ -56,10 +56,7 @@ public class GitLabGraphQLClient {
             }
             """;
 
-    public GitLabGraphQLClient(
-            @Qualifier("sourceGitLabClient") RetryableGitLabClient retryableClient,
-            ObjectMapper objectMapper) {
-        this.retryableClient = retryableClient;
+    public GitLabGraphQLClient(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
@@ -67,9 +64,10 @@ public class GitLabGraphQLClient {
      * 批量查询项目基础信息（使用项目ID）
      *
      * @param projectIds 项目ID列表（数字ID，非gid）
+     * @param client GitLab API客户端
      * @return 项目信息列表
      */
-    public List<GraphQLProjectInfo> batchQueryProjects(List<Long> projectIds) {
+    public List<GraphQLProjectInfo> batchQueryProjects(List<Long> projectIds, RetryableGitLabClient client) {
         if (projectIds == null || projectIds.isEmpty()) {
             return new ArrayList<>();
         }
@@ -91,7 +89,7 @@ public class GitLabGraphQLClient {
             log.info("[GraphQL] Batch querying {} projects", projectIds.size());
 
             // 使用RetryableGitLabClient的post方法
-            String responseBody = retryableClient.post("/api/graphql", request, String.class);
+            String responseBody = client.post("/api/graphql", request, String.class);
 
             long duration = System.currentTimeMillis() - startTime;
             log.info("[API-PERF] POST /api/graphql (batch {} projects) - {}ms",
@@ -147,9 +145,11 @@ public class GitLabGraphQLClient {
      *
      * @param projectIds 项目ID列表
      * @param batchSize  每批数量（建议20-50）
+     * @param client GitLab API客户端
      * @return 所有项目信息
      */
-    public List<GraphQLProjectInfo> batchQueryProjectsInChunks(List<Long> projectIds, int batchSize) {
+    public List<GraphQLProjectInfo> batchQueryProjectsInChunks(List<Long> projectIds, int batchSize,
+            RetryableGitLabClient client) {
         if (projectIds == null || projectIds.isEmpty()) {
             return new ArrayList<>();
         }
@@ -168,7 +168,7 @@ public class GitLabGraphQLClient {
             log.info("[GraphQL] Processing batch {}/{} ({} projects)",
                     batchNum, totalBatches, batch.size());
 
-            List<GraphQLProjectInfo> batchResult = batchQueryProjects(batch);
+            List<GraphQLProjectInfo> batchResult = batchQueryProjects(batch, client);
             allProjects.addAll(batchResult);
         }
 

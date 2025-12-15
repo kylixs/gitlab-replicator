@@ -63,15 +63,18 @@ public class DiffCalculator {
                 new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<SourceProjectInfo>()
                         .eq("sync_project_id", syncProjectId)
         );
+        log.debug("查询 SourceProjectInfo - syncProjectId: {}, result: {}", syncProjectId, sourceInfo != null ? "找到" : "未找到");
 
         TargetProjectInfo targetInfo = targetProjectInfoMapper.selectOne(
                 new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<TargetProjectInfo>()
                         .eq("sync_project_id", syncProjectId)
         );
+        log.debug("查询 TargetProjectInfo - syncProjectId: {}, result: {}", syncProjectId, targetInfo != null ? ("找到 ID=" + targetInfo.getId()) : "未找到");
 
         // Build snapshots
         ProjectSnapshot sourceSnapshot = buildSourceSnapshot(sourceInfo);
         ProjectSnapshot targetSnapshot = buildTargetSnapshot(targetInfo);
+        log.debug("构建 Snapshot - source: {}, target: {}", sourceSnapshot != null, targetSnapshot != null);
 
         // Calculate diff details
         DiffDetails diffDetails = calculateDiffDetails(sourceSnapshot, targetSnapshot);
