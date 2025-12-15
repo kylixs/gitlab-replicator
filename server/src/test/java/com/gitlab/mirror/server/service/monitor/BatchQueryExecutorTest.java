@@ -3,6 +3,7 @@ package com.gitlab.mirror.server.service.monitor;
 import com.gitlab.mirror.common.model.GitLabProject;
 import com.gitlab.mirror.common.model.RepositoryBranch;
 import com.gitlab.mirror.server.client.RetryableGitLabClient;
+import com.gitlab.mirror.server.client.graphql.GitLabGraphQLClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -29,12 +30,15 @@ class BatchQueryExecutorTest {
     @Mock
     private RetryableGitLabClient targetClient;
 
+    @Mock
+    private GitLabGraphQLClient graphQLClient;
+
     private BatchQueryExecutor batchQueryExecutor;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        batchQueryExecutor = new BatchQueryExecutor(sourceClient, targetClient);
+        batchQueryExecutor = new BatchQueryExecutor(sourceClient, targetClient, graphQLClient);
     }
 
     @Test
