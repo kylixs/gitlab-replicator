@@ -71,7 +71,12 @@ public class ProjectDiff {
         OUTDATED,
 
         /**
-         * Failed: Target doesn't exist or has errors
+         * Pending: Target project not yet created (newly discovered project)
+         */
+        PENDING,
+
+        /**
+         * Failed: Sync process failed or has errors
          */
         FAILED,
 

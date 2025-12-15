@@ -200,14 +200,14 @@ public class DiffCalculator {
             ProjectSnapshot target,
             DiffDetails diff) {
 
-        // Target missing
-        if (target == null) {
-            return ProjectDiff.SyncStatus.FAILED;
-        }
-
         // Source missing (shouldn't happen)
         if (source == null) {
             return ProjectDiff.SyncStatus.FAILED;
+        }
+
+        // Target missing - newly discovered project, not yet synced
+        if (target == null) {
+            return ProjectDiff.SyncStatus.PENDING;
         }
 
         // Check for inconsistencies first (highest priority)
