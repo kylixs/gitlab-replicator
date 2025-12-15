@@ -29,6 +29,7 @@ public class WebhookEventService {
     private final SyncTaskMapper syncTaskMapper;
     private final PullSyncConfigMapper pullSyncConfigMapper;
     private final SourceProjectInfoMapper sourceProjectInfoMapper;
+    private final TargetProjectInfoMapper targetProjectInfoMapper;
     private final SyncEventMapper syncEventMapper;
 
     private static final int DEBOUNCE_SECONDS = 120; // 2 minutes
@@ -89,14 +90,17 @@ public class WebhookEventService {
             return;
         }
 
-        // 5. Update next_run_at to NOW for immediate scheduling
+        // 5. Update source project info with latest commit from webhook
+        updateSourceProjectInfo(project, event);
+
+        // 6. Update next_run_at to NOW for immediate scheduling
         task.setNextRunAt(Instant.now());
         syncTaskMapper.updateById(task);
 
-        log.info("Immediate schedule triggered by webhook: projectKey={}, nextRunAt={}", 
+        log.info("Immediate schedule triggered by webhook: projectKey={}, nextRunAt={}",
                 projectKey, task.getNextRunAt());
 
-        // 6. Record webhook event
+        // 7. Record webhook event
         recordWebhookEvent(project, event, "accepted", "Scheduled for immediate execution");
     }
 
@@ -226,6 +230,94 @@ public class WebhookEventService {
         // Default base path (should come from config in production)
         String basePath = System.getProperty("user.home") + "/.gitlab-sync/repos";
         return basePath + "/" + projectKey;
+    }
+
+    /**
+     * Update source project info with latest commit from webhook
+     *
+     * @param project Sync project
+     * @param event GitLab push event
+     */
+    private void updateSourceProjectInfo(SyncProject project, GitLabPushEvent event) {
+        try {
+            // Find source project info by sync_project_id
+            SourceProjectInfo info = sourceProjectInfoMapper.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SourceProjectInfo>()
+                            .eq(SourceProjectInfo::getSyncProjectId, project.getId())
+            ).stream().findFirst().orElse(null);
+
+            if (info == null) {
+                log.warn("[WEBHOOK] Source project info not found for projectKey: {}", project.getProjectKey());
+                return;
+            }
+
+            // Update latest commit SHA
+            if (event.getAfter() != null && !event.getAfter().equals("0000000000000000000000000000000000000000")) {
+                info.setLatestCommitSha(event.getAfter());
+            }
+
+            // Update last activity time to now
+            info.setLastActivityAt(LocalDateTime.now());
+
+            // Update default branch if available
+            if (event.getProject() != null && event.getProject().getDefaultBranch() != null) {
+                info.setDefaultBranch(event.getProject().getDefaultBranch());
+            }
+
+            // Save to database
+            sourceProjectInfoMapper.updateById(info);
+
+            log.info("[WEBHOOK] Updated source project info: projectKey={}, latestCommit={}",
+                    project.getProjectKey(),
+                    event.getAfter() != null ? event.getAfter().substring(0, 8) : "null");
+
+        } catch (Exception e) {
+            log.error("[WEBHOOK] Failed to update source project info: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Update target project info with latest commit from webhook
+     *
+     * @param project Sync project
+     * @param event GitLab push event
+     */
+    private void updateTargetProjectInfo(SyncProject project, GitLabPushEvent event) {
+        try {
+            // Find target project info by sync_project_id
+            TargetProjectInfo info = targetProjectInfoMapper.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<TargetProjectInfo>()
+                            .eq(TargetProjectInfo::getSyncProjectId, project.getId())
+            ).stream().findFirst().orElse(null);
+
+            if (info == null) {
+                log.debug("[WEBHOOK] Target project info not found for projectKey: {}", project.getProjectKey());
+                return;
+            }
+
+            // Update latest commit SHA
+            if (event.getAfter() != null && !event.getAfter().equals("0000000000000000000000000000000000000000")) {
+                info.setLatestCommitSha(event.getAfter());
+            }
+
+            // Update last activity time to now
+            info.setLastActivityAt(LocalDateTime.now());
+
+            // Update default branch if available
+            if (event.getProject() != null && event.getProject().getDefaultBranch() != null) {
+                info.setDefaultBranch(event.getProject().getDefaultBranch());
+            }
+
+            // Save to database
+            targetProjectInfoMapper.updateById(info);
+
+            log.info("[WEBHOOK] Updated target project info: projectKey={}, latestCommit={}",
+                    project.getProjectKey(),
+                    event.getAfter() != null ? event.getAfter().substring(0, 8) : "null");
+
+        } catch (Exception e) {
+            log.error("[WEBHOOK] Failed to update target project info: {}", e.getMessage(), e);
+        }
     }
 
     /**
