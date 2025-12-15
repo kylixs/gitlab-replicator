@@ -47,6 +47,15 @@ class UnifiedProjectMonitorTest {
     @Mock
     private com.gitlab.mirror.server.service.ProjectDiscoveryService projectDiscoveryService;
 
+    @Mock
+    private com.gitlab.mirror.server.mapper.SourceProjectInfoMapper sourceProjectInfoMapper;
+
+    @Mock
+    private com.gitlab.mirror.server.service.PullSyncConfigService pullSyncConfigService;
+
+    @Mock
+    private com.gitlab.mirror.server.service.SyncTaskService syncTaskService;
+
     private UnifiedProjectMonitor unifiedProjectMonitor;
 
     @BeforeEach
@@ -59,7 +68,10 @@ class UnifiedProjectMonitorTest {
                 cacheManager,
                 syncProjectMapper,
                 metricsExporter,
-                projectDiscoveryService
+                projectDiscoveryService,
+                sourceProjectInfoMapper,
+                pullSyncConfigService,
+                syncTaskService
         );
     }
 

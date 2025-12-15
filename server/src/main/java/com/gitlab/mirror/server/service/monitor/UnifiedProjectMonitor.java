@@ -1,8 +1,12 @@
 package com.gitlab.mirror.server.service.monitor;
 
 import com.gitlab.mirror.common.model.GitLabProject;
+import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncProject;
+import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
 import com.gitlab.mirror.server.mapper.SyncProjectMapper;
+import com.gitlab.mirror.server.service.PullSyncConfigService;
+import com.gitlab.mirror.server.service.SyncTaskService;
 import com.gitlab.mirror.server.service.monitor.model.ProjectDiff;
 import com.gitlab.mirror.server.service.monitor.model.ScanResult;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +40,9 @@ public class UnifiedProjectMonitor {
     private final SyncProjectMapper syncProjectMapper;
     private final MetricsExporter metricsExporter;
     private final com.gitlab.mirror.server.service.ProjectDiscoveryService projectDiscoveryService;
+    private final SourceProjectInfoMapper sourceProjectInfoMapper;
+    private final PullSyncConfigService pullSyncConfigService;
+    private final SyncTaskService syncTaskService;
 
     public UnifiedProjectMonitor(
             BatchQueryExecutor batchQueryExecutor,
@@ -42,7 +51,10 @@ public class UnifiedProjectMonitor {
             LocalCacheManager cacheManager,
             SyncProjectMapper syncProjectMapper,
             MetricsExporter metricsExporter,
-            com.gitlab.mirror.server.service.ProjectDiscoveryService projectDiscoveryService) {
+            com.gitlab.mirror.server.service.ProjectDiscoveryService projectDiscoveryService,
+            SourceProjectInfoMapper sourceProjectInfoMapper,
+            PullSyncConfigService pullSyncConfigService,
+            SyncTaskService syncTaskService) {
         this.batchQueryExecutor = batchQueryExecutor;
         this.updateProjectDataService = updateProjectDataService;
         this.diffCalculator = diffCalculator;
@@ -50,6 +62,9 @@ public class UnifiedProjectMonitor {
         this.syncProjectMapper = syncProjectMapper;
         this.metricsExporter = metricsExporter;
         this.projectDiscoveryService = projectDiscoveryService;
+        this.sourceProjectInfoMapper = sourceProjectInfoMapper;
+        this.pullSyncConfigService = pullSyncConfigService;
+        this.syncTaskService = syncTaskService;
     }
 
     /**
@@ -252,10 +267,11 @@ public class UnifiedProjectMonitor {
 
         log.info("Discovered {} new projects to add", newProjects.size());
 
-        // Add new projects
+        // Add new projects and create related records
         int added = 0;
         for (GitLabProject project : newProjects) {
             try {
+                // Step 1: Create sync_project record
                 SyncProject syncProject = new SyncProject();
                 syncProject.setProjectKey(project.getPathWithNamespace());
                 syncProject.setSyncMethod("pull_sync");
@@ -265,15 +281,66 @@ public class UnifiedProjectMonitor {
                 syncProject.setUpdatedAt(LocalDateTime.now());
 
                 syncProjectMapper.insert(syncProject);
-                log.info("Added new sync project: {} (GitLab ID: {})", project.getPathWithNamespace(), project.getId());
+                log.info("Created sync_project: {} (id={})", project.getPathWithNamespace(), syncProject.getId());
+
+                // Step 2: Create source_project_info record
+                SourceProjectInfo sourceInfo = new SourceProjectInfo();
+                sourceInfo.setSyncProjectId(syncProject.getId());
+                sourceInfo.setGitlabProjectId(project.getId());
+                sourceInfo.setPathWithNamespace(project.getPathWithNamespace());
+                sourceInfo.setName(project.getName());
+                sourceInfo.setDefaultBranch(project.getDefaultBranch());
+                sourceInfo.setVisibility(project.getVisibility());
+                sourceInfo.setArchived(project.getArchived());
+                sourceInfo.setEmptyRepo(project.getEmptyRepo());
+                sourceInfo.setStarCount(project.getStarCount());
+                sourceInfo.setForkCount(project.getForksCount());
+
+                // Extract group path from path_with_namespace
+                if (project.getNamespace() != null) {
+                    sourceInfo.setGroupPath(project.getNamespace().getFullPath());
+                }
+
+                // Set activity time
+                if (project.getLastActivityAt() != null) {
+                    sourceInfo.setLastActivityAt(convertToLocalDateTime(project.getLastActivityAt()));
+                }
+
+                // Set repository size if statistics available
+                if (project.getStatistics() != null) {
+                    sourceInfo.setRepositorySize(project.getStatistics().getRepositorySize());
+                    sourceInfo.setCommitCount(project.getStatistics().getCommitCount());
+                }
+
+                sourceInfo.setSyncedAt(LocalDateTime.now());
+
+                sourceProjectInfoMapper.insert(sourceInfo);
+                log.info("Created source_project_info for {} (id={})", project.getPathWithNamespace(), sourceInfo.getId());
+
+                // Step 3: Create pull_sync_config record
+                pullSyncConfigService.initializeConfig(syncProject.getId(), project.getPathWithNamespace());
+
+                // Step 4: Create sync_task record
+                syncTaskService.initializeTask(syncProject.getId(), "pull");
+
+                log.info("✅ Successfully initialized new project: {} (GitLab ID: {})",
+                        project.getPathWithNamespace(), project.getId());
                 added++;
+
             } catch (Exception e) {
-                log.error("Failed to add new project {}: {}", project.getPathWithNamespace(), e.getMessage(), e);
+                log.error("❌ Failed to add new project {}: {}", project.getPathWithNamespace(), e.getMessage(), e);
             }
         }
 
-        log.info("Successfully added {} new sync projects", added);
+        log.info("Successfully added {} new sync projects with complete initialization", added);
         return added;
+    }
+
+    /**
+     * Convert OffsetDateTime to LocalDateTime
+     */
+    private LocalDateTime convertToLocalDateTime(OffsetDateTime offsetDateTime) {
+        return offsetDateTime != null ? offsetDateTime.atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime() : null;
     }
 
     /**
