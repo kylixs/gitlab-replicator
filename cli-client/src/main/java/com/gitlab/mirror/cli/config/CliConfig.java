@@ -16,7 +16,7 @@ import java.util.Properties;
  */
 @Data
 public class CliConfig {
-    private String apiBaseUrl = "http://localhost:8080";
+    private String apiBaseUrl = "http://localhost:9999";
     private String apiToken;
     private int connectTimeout = 5000;
     private int readTimeout = 60000;  // 60 seconds for long-running operations like scan

@@ -163,7 +163,7 @@ public class GitLabMirrorCli {
         System.out.println("  gitlab-mirror diff mygroup/myproject");
         System.out.println();
         System.out.println(OutputFormatter.YELLOW + "Environment Variables:" + OutputFormatter.RESET);
-        System.out.println("  GITLAB_MIRROR_API_URL      API base URL (default: http://localhost:8080)");
+        System.out.println("  GITLAB_MIRROR_API_URL      API base URL (default: http://localhost:9999)");
         System.out.println("  GITLAB_MIRROR_TOKEN        API authentication token");
         System.out.println();
         System.out.println("For detailed help on each command, use: gitlab-mirror <command> --help");

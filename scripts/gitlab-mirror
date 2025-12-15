@@ -157,7 +157,7 @@ show_status() {
 
         # Try to get status from API
         if command -v curl &> /dev/null; then
-            local api_url="${GITLAB_MIRROR_API_URL:-http://localhost:8080}"
+            local api_url="${GITLAB_MIRROR_API_URL:-http://localhost:9999}"
             local response=$(curl -s "$api_url/api/status" 2>/dev/null || echo "")
             if [ -n "$response" ]; then
                 echo ""
@@ -300,7 +300,7 @@ show_usage() {
     echo "  gitlab-mirror version              Show version information"
     echo ""
     echo -e "${CYAN}Environment Variables:${NC}"
-    echo "  GITLAB_MIRROR_API_URL             API base URL (default: http://localhost:8080)"
+    echo "  GITLAB_MIRROR_API_URL             API base URL (default: http://localhost:9999)"
     echo "  GITLAB_MIRROR_TOKEN               API authentication token"
     echo ""
 }
