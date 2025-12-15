@@ -35,6 +35,7 @@ class GitLabGraphQLClientIntegrationTest {
     private static final Long PROJECT_17_ID = 17L; // ai/test-node-app2
 
     private GitLabGraphQLClient graphQLClient;
+    private RetryableGitLabClient retryableClient;
 
     @BeforeEach
     void setUp() {
@@ -45,7 +46,7 @@ class GitLabGraphQLClientIntegrationTest {
                 .build();
 
         // 创建RetryableGitLabClient
-        RetryableGitLabClient retryableClient = new RetryableGitLabClient(
+        retryableClient = new RetryableGitLabClient(
                 restTemplate, GITLAB_URL, GITLAB_TOKEN, 3, 1000L);
 
         // 创建ObjectMapper
@@ -53,7 +54,7 @@ class GitLabGraphQLClientIntegrationTest {
         objectMapper.findAndRegisterModules(); // 注册Java 8时间模块
 
         // 创建GraphQLClient
-        graphQLClient = new GitLabGraphQLClient(retryableClient, objectMapper);
+        graphQLClient = new GitLabGraphQLClient(objectMapper);
     }
 
     @Test
@@ -62,7 +63,7 @@ class GitLabGraphQLClientIntegrationTest {
         List<Long> projectIds = Arrays.asList(PROJECT_1_ID);
 
         // When
-        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds);
+        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds, retryableClient);
 
         // Then
         assertNotNull(results);
@@ -125,7 +126,7 @@ class GitLabGraphQLClientIntegrationTest {
 
         // When
         long startTime = System.currentTimeMillis();
-        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds);
+        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds, retryableClient);
         long duration = System.currentTimeMillis() - startTime;
 
         // Then
@@ -174,7 +175,7 @@ class GitLabGraphQLClientIntegrationTest {
         // When
         long startTime = System.currentTimeMillis();
         List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjectsInChunks(
-                projectIds, batchSize);
+                projectIds, batchSize, retryableClient);
         long duration = System.currentTimeMillis() - startTime;
 
         // Then
@@ -193,7 +194,7 @@ class GitLabGraphQLClientIntegrationTest {
     void testProjectIdExtraction() {
         // Given
         List<Long> projectIds = Arrays.asList(PROJECT_1_ID);
-        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds);
+        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds, retryableClient);
 
         // When
         GraphQLProjectInfo project = results.get(0);
@@ -209,7 +210,7 @@ class GitLabGraphQLClientIntegrationTest {
     void testActivityTimeComparison() {
         // Given
         List<Long> projectIds = Arrays.asList(PROJECT_1_ID);
-        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds);
+        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds, retryableClient);
         GraphQLProjectInfo project = results.get(0);
 
         // When
@@ -234,7 +235,7 @@ class GitLabGraphQLClientIntegrationTest {
         List<Long> projectIds = Arrays.asList();
 
         // When
-        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds);
+        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds, retryableClient);
 
         // Then
         assertNotNull(results);
@@ -247,7 +248,7 @@ class GitLabGraphQLClientIntegrationTest {
         List<Long> projectIds = null;
 
         // When
-        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds);
+        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds, retryableClient);
 
         // Then
         assertNotNull(results);
@@ -260,7 +261,7 @@ class GitLabGraphQLClientIntegrationTest {
         List<Long> projectIds = Arrays.asList(99999L);
 
         // When
-        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds);
+        List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds, retryableClient);
 
         // Then
         assertNotNull(results);
@@ -278,7 +279,7 @@ class GitLabGraphQLClientIntegrationTest {
         long totalDuration = 0;
         for (int i = 0; i < iterations; i++) {
             long startTime = System.currentTimeMillis();
-            List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds);
+            List<GraphQLProjectInfo> results = graphQLClient.batchQueryProjects(projectIds, retryableClient);
             long duration = System.currentTimeMillis() - startTime;
 
             totalDuration += duration;
