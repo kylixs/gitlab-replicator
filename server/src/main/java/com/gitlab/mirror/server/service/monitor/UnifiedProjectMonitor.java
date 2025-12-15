@@ -17,6 +17,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -182,6 +183,11 @@ public class UnifiedProjectMonitor {
             // Update last scan time
             updateLastScanTime(LocalDateTime.now());
 
+            // Collect all project changes
+            List<com.gitlab.mirror.server.service.monitor.model.ProjectChange> allChanges = new ArrayList<>();
+            allChanges.addAll(updateResult.getProjectChanges());
+            allChanges.addAll(targetUpdateResult.getProjectChanges());
+
             // Build result
             LocalDateTime endTime = LocalDateTime.now();
             long durationMs = Duration.between(startTime, endTime).toMillis();
@@ -208,12 +214,20 @@ public class UnifiedProjectMonitor {
             log.info("[SCAN-PERF] Step 9   (Metrics):           {}ms ({} %)", step9Duration, String.format("%.1f", step9Duration * 100.0 / durationMs));
             log.info("[SCAN-PERF] ================================");
 
+            // Log change summary
+            log.info("[SCAN-CHANGES] Total project changes detected: {}", allChanges.size());
+            for (com.gitlab.mirror.server.service.monitor.model.ProjectChange change : allChanges) {
+                log.info("[SCAN-CHANGES]   {} ({}): {} field(s) changed",
+                        change.getProjectKey(), change.getProjectType(), change.getFieldChanges().size());
+            }
+
             return resultBuilder
                     .durationMs(durationMs)
                     .projectsScanned(sourceProjects.size())
                     .projectsUpdated(updateResult.getSuccessCount() + targetUpdateResult.getSuccessCount())
                     .newProjects(newProjectsAdded)
                     .changesDetected(changesDetected)
+                    .projectChanges(allChanges)
                     .endTime(endTime)
                     .build();
 

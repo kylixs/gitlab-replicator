@@ -7,6 +7,7 @@ import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.TargetProjectInfo;
 import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
 import com.gitlab.mirror.server.mapper.TargetProjectInfoMapper;
+import com.gitlab.mirror.server.service.monitor.model.ProjectChange;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -104,6 +106,7 @@ public class UpdateProjectDataService {
 
     /**
      * Update source projects monitoring fields from GraphQL batch query (Two-stage optimization)
+     * Only updates projects with actual changes
      *
      * @param projects List of GitLab projects from API
      * @param graphQLInfos Map of project ID to GraphQL info
@@ -114,7 +117,7 @@ public class UpdateProjectDataService {
             List<GitLabProject> projects,
             Map<Long, GraphQLProjectInfo> graphQLInfos) {
 
-        log.info("Updating {} source projects from GraphQL data", projects.size());
+        log.info("Updating {} source projects from GraphQL data (only changed projects)", projects.size());
 
         UpdateResult result = new UpdateResult();
         result.setTotalCount(projects.size());
@@ -133,17 +136,25 @@ public class UpdateProjectDataService {
                     continue;
                 }
 
-                // Update fields from GraphQL data
+                // Update fields from GraphQL data and check for changes
                 GraphQLProjectInfo graphQLInfo = graphQLInfos.get(project.getId());
-                updateSourceProjectFieldsFromGraphQL(info, project, graphQLInfo);
+                ProjectChange change = updateSourceProjectFieldsFromGraphQL(info, project, graphQLInfo);
 
-                // Update record
-                int updated = sourceProjectInfoMapper.updateById(info);
-                if (updated > 0) {
-                    result.setSuccessCount(result.getSuccessCount() + 1);
+                // Only update if there are changes
+                if (change != null) {
+                    int updated = sourceProjectInfoMapper.updateById(info);
+                    if (updated > 0) {
+                        result.setSuccessCount(result.getSuccessCount() + 1);
+                        result.getProjectChanges().add(change);
+                        log.debug("Updated source project {} with {} changes",
+                                project.getPathWithNamespace(), change.getFieldChanges().size());
+                    } else {
+                        result.setFailedCount(result.getFailedCount() + 1);
+                        errors.add("Failed to update source project: " + project.getPathWithNamespace());
+                    }
                 } else {
-                    result.setFailedCount(result.getFailedCount() + 1);
-                    errors.add("Failed to update source project: " + project.getPathWithNamespace());
+                    result.setSkippedCount(result.getSkippedCount() + 1);
+                    log.debug("No changes for source project {}", project.getPathWithNamespace());
                 }
 
             } catch (Exception e) {
@@ -154,8 +165,9 @@ public class UpdateProjectDataService {
         }
 
         result.setErrors(errors);
-        log.info("Source projects GraphQL update completed - success: {}, failed: {}, skipped: {}",
-                result.getSuccessCount(), result.getFailedCount(), result.getSkippedCount());
+        log.info("Source projects GraphQL update completed - updated: {}, unchanged: {}, failed: {}, skipped: {}",
+                result.getSuccessCount(), result.getSkippedCount(), result.getFailedCount(),
+                result.getTotalCount() - result.getSuccessCount() - result.getSkippedCount() - result.getFailedCount());
 
         return result;
     }
@@ -279,6 +291,7 @@ public class UpdateProjectDataService {
 
     /**
      * Update target projects from GraphQL data (OPTIMIZED - much faster than REST API)
+     * Only updates projects with actual changes
      *
      * @param projects List of GitLab projects from API
      * @param graphQLInfos Map of project ID to GraphQL information
@@ -289,7 +302,7 @@ public class UpdateProjectDataService {
             List<GitLabProject> projects,
             Map<Long, GraphQLProjectInfo> graphQLInfos) {
 
-        log.info("Updating {} target projects from GraphQL data", projects.size());
+        log.info("Updating {} target projects from GraphQL data (only changed projects)", projects.size());
 
         UpdateResult result = new UpdateResult();
         result.setTotalCount(projects.size());
@@ -308,17 +321,25 @@ public class UpdateProjectDataService {
                     continue;
                 }
 
-                // Update fields from GraphQL data
+                // Update fields from GraphQL data and check for changes
                 GraphQLProjectInfo graphQLInfo = graphQLInfos.get(project.getId());
-                updateTargetProjectFieldsFromGraphQL(info, project, graphQLInfo);
+                ProjectChange change = updateTargetProjectFieldsFromGraphQL(info, project, graphQLInfo);
 
-                // Update record
-                int updated = targetProjectInfoMapper.updateById(info);
-                if (updated > 0) {
-                    result.setSuccessCount(result.getSuccessCount() + 1);
+                // Only update if there are changes
+                if (change != null) {
+                    int updated = targetProjectInfoMapper.updateById(info);
+                    if (updated > 0) {
+                        result.setSuccessCount(result.getSuccessCount() + 1);
+                        result.getProjectChanges().add(change);
+                        log.debug("Updated target project {} with {} changes",
+                                project.getPathWithNamespace(), change.getFieldChanges().size());
+                    } else {
+                        result.setFailedCount(result.getFailedCount() + 1);
+                        errors.add("Failed to update target project: " + project.getPathWithNamespace());
+                    }
                 } else {
-                    result.setFailedCount(result.getFailedCount() + 1);
-                    errors.add("Failed to update target project: " + project.getPathWithNamespace());
+                    result.setSkippedCount(result.getSkippedCount() + 1);
+                    log.debug("No changes for target project {}", project.getPathWithNamespace());
                 }
 
             } catch (Exception e) {
@@ -329,8 +350,9 @@ public class UpdateProjectDataService {
         }
 
         result.setErrors(errors);
-        log.info("Target projects GraphQL update completed - success: {}, failed: {}, skipped: {}",
-                result.getSuccessCount(), result.getFailedCount(), result.getSkippedCount());
+        log.info("Target projects GraphQL update completed - updated: {}, unchanged: {}, failed: {}, skipped: {}",
+                result.getSuccessCount(), result.getSkippedCount(), result.getFailedCount(),
+                result.getTotalCount() - result.getSuccessCount() - result.getSkippedCount() - result.getFailedCount());
 
         return result;
     }
@@ -370,91 +392,146 @@ public class UpdateProjectDataService {
 
     /**
      * Update source project info fields from GraphQL data (Two-stage optimization)
+     * Returns ProjectChange if there are changes, null otherwise
      */
-    private void updateSourceProjectFieldsFromGraphQL(
+    private ProjectChange updateSourceProjectFieldsFromGraphQL(
             SourceProjectInfo info,
             GitLabProject project,
             GraphQLProjectInfo graphQLInfo) {
 
+        ProjectChange change = ProjectChange.builder()
+                .projectKey(info.getPathWithNamespace())
+                .projectType("source")
+                .build();
+
         // Update from GraphQL data
         if (graphQLInfo != null) {
-            // Commit information from GraphQL
-            if (graphQLInfo.getLastCommitSha() != null) {
+            // Commit SHA
+            if (graphQLInfo.getLastCommitSha() != null &&
+                !Objects.equals(info.getLatestCommitSha(), graphQLInfo.getLastCommitSha())) {
+                change.addChange("latestCommitSha", info.getLatestCommitSha(), graphQLInfo.getLastCommitSha());
                 info.setLatestCommitSha(graphQLInfo.getLastCommitSha());
             }
 
-            // Commit count from GraphQL statistics (all branches cumulative)
-            if (graphQLInfo.getCommitCount() != null) {
+            // Commit count
+            if (graphQLInfo.getCommitCount() != null &&
+                !Objects.equals(info.getCommitCount(), graphQLInfo.getCommitCount())) {
+                change.addChange("commitCount", info.getCommitCount(), graphQLInfo.getCommitCount());
                 info.setCommitCount(graphQLInfo.getCommitCount());
             }
 
-            // Branch count from GraphQL repository.branchNames
-            if (graphQLInfo.getBranchCount() != null) {
+            // Branch count
+            if (graphQLInfo.getBranchCount() != null &&
+                !Objects.equals(info.getBranchCount(), graphQLInfo.getBranchCount())) {
+                change.addChange("branchCount", info.getBranchCount(), graphQLInfo.getBranchCount());
                 info.setBranchCount(graphQLInfo.getBranchCount());
             }
 
-            // Repository size from GraphQL statistics
-            if (graphQLInfo.getRepositorySize() != null) {
+            // Repository size
+            if (graphQLInfo.getRepositorySize() != null &&
+                !Objects.equals(info.getRepositorySize(), graphQLInfo.getRepositorySize())) {
+                change.addChange("repositorySize", info.getRepositorySize(), graphQLInfo.getRepositorySize());
                 info.setRepositorySize(graphQLInfo.getRepositorySize());
             }
 
-            // Last activity time from GraphQL
+            // Last activity time
             if (graphQLInfo.getLastActivityAt() != null) {
-                info.setLastActivityAt(convertToLocalDateTime(graphQLInfo.getLastActivityAt()));
+                LocalDateTime newActivityTime = convertToLocalDateTime(graphQLInfo.getLastActivityAt());
+                if (!Objects.equals(info.getLastActivityAt(), newActivityTime)) {
+                    change.addChange("lastActivityAt", info.getLastActivityAt(), newActivityTime);
+                    info.setLastActivityAt(newActivityTime);
+                }
             }
 
-            // Default branch from GraphQL repository.rootRef
-            if (graphQLInfo.getRepository() != null && graphQLInfo.getRepository().getRootRef() != null) {
+            // Default branch
+            if (graphQLInfo.getRepository() != null && graphQLInfo.getRepository().getRootRef() != null &&
+                !Objects.equals(info.getDefaultBranch(), graphQLInfo.getRepository().getRootRef())) {
+                change.addChange("defaultBranch", info.getDefaultBranch(), graphQLInfo.getRepository().getRootRef());
                 info.setDefaultBranch(graphQLInfo.getRepository().getRootRef());
             }
         }
 
         // Also update from project basic data if available
-        if (project.getDefaultBranch() != null) {
+        if (project.getDefaultBranch() != null &&
+            !Objects.equals(info.getDefaultBranch(), project.getDefaultBranch())) {
+            change.addChange("defaultBranch", info.getDefaultBranch(), project.getDefaultBranch());
             info.setDefaultBranch(project.getDefaultBranch());
         }
 
-        // Updated at is automatically set by MyBatis-Plus
+        // Return change only if there are actual changes
+        return change.hasChanges() ? change : null;
     }
 
     /**
      * Update target project info fields from GraphQL data
+     * Returns ProjectChange if there are changes, null otherwise
      */
-    private void updateTargetProjectFieldsFromGraphQL(
+    private ProjectChange updateTargetProjectFieldsFromGraphQL(
             TargetProjectInfo info,
             GitLabProject project,
             GraphQLProjectInfo graphQLInfo) {
 
-        // Update from GraphQL data (commit SHA, branch count, commit count)
-        if (graphQLInfo != null) {
-            info.setLatestCommitSha(graphQLInfo.getLastCommitSha());
-            info.setBranchCount(graphQLInfo.getBranchCount());
+        ProjectChange change = ProjectChange.builder()
+                .projectKey(info.getPathWithNamespace())
+                .projectType("target")
+                .build();
 
-            if (graphQLInfo.getCommitCount() != null) {
+        // Update from GraphQL data
+        if (graphQLInfo != null) {
+            // Commit SHA
+            if (graphQLInfo.getLastCommitSha() != null &&
+                !Objects.equals(info.getLatestCommitSha(), graphQLInfo.getLastCommitSha())) {
+                change.addChange("latestCommitSha", info.getLatestCommitSha(), graphQLInfo.getLastCommitSha());
+                info.setLatestCommitSha(graphQLInfo.getLastCommitSha());
+            }
+
+            // Branch count
+            if (graphQLInfo.getBranchCount() != null &&
+                !Objects.equals(info.getBranchCount(), graphQLInfo.getBranchCount())) {
+                change.addChange("branchCount", info.getBranchCount(), graphQLInfo.getBranchCount());
+                info.setBranchCount(graphQLInfo.getBranchCount());
+            }
+
+            // Commit count
+            if (graphQLInfo.getCommitCount() != null &&
+                !Objects.equals(info.getCommitCount(), graphQLInfo.getCommitCount())) {
+                change.addChange("commitCount", info.getCommitCount(), graphQLInfo.getCommitCount());
                 info.setCommitCount(graphQLInfo.getCommitCount());
             }
 
-            if (graphQLInfo.getRepositorySize() != null) {
+            // Repository size
+            if (graphQLInfo.getRepositorySize() != null &&
+                !Objects.equals(info.getRepositorySize(), graphQLInfo.getRepositorySize())) {
+                change.addChange("repositorySize", info.getRepositorySize(), graphQLInfo.getRepositorySize());
                 info.setRepositorySize(graphQLInfo.getRepositorySize());
             }
         }
 
         // Update from project statistics (if not in GraphQL)
-        if (project.getStatistics() != null && project.getStatistics().getRepositorySize() != null) {
+        if (project.getStatistics() != null && project.getStatistics().getRepositorySize() != null &&
+            !Objects.equals(info.getRepositorySize(), project.getStatistics().getRepositorySize())) {
+            change.addChange("repositorySize", info.getRepositorySize(), project.getStatistics().getRepositorySize());
             info.setRepositorySize(project.getStatistics().getRepositorySize());
         }
 
-        // Update last activity time
+        // Last activity time
         if (project.getLastActivityAt() != null) {
-            info.setLastActivityAt(convertToLocalDateTime(project.getLastActivityAt()));
+            LocalDateTime newActivityTime = convertToLocalDateTime(project.getLastActivityAt());
+            if (!Objects.equals(info.getLastActivityAt(), newActivityTime)) {
+                change.addChange("lastActivityAt", info.getLastActivityAt(), newActivityTime);
+                info.setLastActivityAt(newActivityTime);
+            }
         }
 
-        // Update default branch
-        if (project.getDefaultBranch() != null) {
+        // Default branch
+        if (project.getDefaultBranch() != null &&
+            !Objects.equals(info.getDefaultBranch(), project.getDefaultBranch())) {
+            change.addChange("defaultBranch", info.getDefaultBranch(), project.getDefaultBranch());
             info.setDefaultBranch(project.getDefaultBranch());
         }
 
-        // Updated at is automatically set by MyBatis-Plus
+        // Return change only if there are actual changes
+        return change.hasChanges() ? change : null;
     }
 
     /**
@@ -519,6 +596,7 @@ public class UpdateProjectDataService {
         private int failedCount;
         private int skippedCount;
         private List<String> errors = new ArrayList<>();
+        private List<ProjectChange> projectChanges = new ArrayList<>();
 
         public boolean isSuccess() {
             return failedCount == 0;

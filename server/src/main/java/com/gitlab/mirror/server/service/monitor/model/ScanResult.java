@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Scan Result Statistics
@@ -49,6 +51,12 @@ public class ScanResult {
      * Number of changes detected
      */
     private Integer changesDetected;
+
+    /**
+     * Detailed list of project changes
+     */
+    @Builder.Default
+    private List<ProjectChange> projectChanges = new ArrayList<>();
 
     /**
      * Scan start time
