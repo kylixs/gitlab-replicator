@@ -59,6 +59,93 @@ public class ScanCommand {
         System.out.println("╚════════════════════════════════════════╝");
         System.out.println();
 
+        // Print project changes if any
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, Object>> projectChanges =
+            (java.util.List<Map<String, Object>>) data.get("projectChanges");
+
+        if (projectChanges != null && !projectChanges.isEmpty()) {
+            System.out.println("╔═══════════════════════════════════════════════════════════════════╗");
+            System.out.println("║                        Project Changes                            ║");
+            System.out.println("╠═══════════════════════════════════════════════════════════════════╣");
+
+            for (Map<String, Object> change : projectChanges) {
+                String projectKey = (String) change.get("projectKey");
+                String projectType = (String) change.get("projectType");
+
+                @SuppressWarnings("unchecked")
+                java.util.List<Map<String, Object>> fieldChanges =
+                    (java.util.List<Map<String, Object>>) change.get("fieldChanges");
+
+                System.out.println("║                                                                   ║");
+                System.out.printf("║ %s%-65s%s║%n",
+                    OutputFormatter.CYAN, projectKey + " (" + projectType + ")", OutputFormatter.RESET);
+
+                if (fieldChanges != null) {
+                    for (Map<String, Object> fieldChange : fieldChanges) {
+                        String fieldName = (String) fieldChange.get("fieldName");
+                        String oldValue = (String) fieldChange.get("oldValue");
+                        String newValue = (String) fieldChange.get("newValue");
+
+                        // Format field name
+                        String formattedField = formatFieldName(fieldName);
+
+                        // Truncate long values
+                        String displayOld = truncateValue(oldValue, 15);
+                        String displayNew = truncateValue(newValue, 15);
+
+                        System.out.printf("║   %-20s: %s%s%s -> %s%s%s%s║%n",
+                            formattedField,
+                            OutputFormatter.RED, displayOld, OutputFormatter.RESET,
+                            OutputFormatter.GREEN, displayNew, OutputFormatter.RESET,
+                            " ".repeat(Math.max(0, 30 - displayOld.length() - displayNew.length())));
+                    }
+                }
+            }
+
+            System.out.println("╚═══════════════════════════════════════════════════════════════════╝");
+            System.out.println();
+        }
+
         OutputFormatter.printSuccess("Scan completed successfully");
+    }
+
+    /**
+     * Format field name for display
+     */
+    private String formatFieldName(String fieldName) {
+        switch (fieldName) {
+            case "latestCommitSha":
+                return "Commit SHA";
+            case "commitCount":
+                return "Commits";
+            case "branchCount":
+                return "Branches";
+            case "repositorySize":
+                return "Size (bytes)";
+            case "lastActivityAt":
+                return "Last Activity";
+            case "defaultBranch":
+                return "Default Branch";
+            default:
+                return fieldName;
+        }
+    }
+
+    /**
+     * Truncate long values for display
+     */
+    private String truncateValue(String value, int maxLength) {
+        if (value == null) {
+            return "null";
+        }
+        if (value.length() <= maxLength) {
+            return value;
+        }
+        // For commit SHA, show first 8 chars
+        if (value.length() == 40 && value.matches("[0-9a-f]+")) {
+            return value.substring(0, 8) + "...";
+        }
+        return value.substring(0, maxLength - 3) + "...";
     }
 }
