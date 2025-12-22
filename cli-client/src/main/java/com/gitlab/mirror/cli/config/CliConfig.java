@@ -108,7 +108,7 @@ public class CliConfig {
             apiUrl = resolveVariables(apiUrl, props);
             config.setApiBaseUrl(apiUrl);
 
-            String token = props.getProperty("GITLAB_MIRROR_TOKEN");
+            String token = props.getProperty("GITLAB_MIRROR_API_KEY");
             if (token != null && !token.isEmpty()) {
                 config.setApiToken(token);
             }
@@ -151,18 +151,12 @@ public class CliConfig {
                 }
             });
 
-            // Map SOURCE_GITLAB_TOKEN to GITLAB_MIRROR_TOKEN if not set
-            if (props.getProperty("SOURCE_GITLAB_TOKEN") != null &&
-                props.getProperty("GITLAB_MIRROR_TOKEN") == null) {
-                props.setProperty("GITLAB_MIRROR_TOKEN", props.getProperty("SOURCE_GITLAB_TOKEN"));
-            }
-
             // Read and resolve API URL with variable substitution
             String apiUrl = props.getProperty("GITLAB_MIRROR_API_URL", "http://localhost:9999");
             apiUrl = resolveVariables(apiUrl, props);
             config.setApiBaseUrl(apiUrl);
 
-            String token = props.getProperty("GITLAB_MIRROR_TOKEN");
+            String token = props.getProperty("GITLAB_MIRROR_API_KEY");
             if (token != null && !token.isEmpty()) {
                 config.setApiToken(token);
             }
@@ -190,7 +184,7 @@ public class CliConfig {
             config.setApiBaseUrl(apiUrl);
         }
 
-        String token = System.getenv("GITLAB_MIRROR_TOKEN");
+        String token = System.getenv("GITLAB_MIRROR_API_KEY");
         if (token != null && !token.isEmpty()) {
             config.setApiToken(token);
         }
