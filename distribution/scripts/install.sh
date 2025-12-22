@@ -56,10 +56,22 @@ replace_api_key_in_env() {
 create_env_from_template() {
     local ENV_FILE="$INSTALL_DIR/conf/.env"
     local ENV_EXAMPLE="$INSTALL_DIR/conf/.env.example"
+    local FORCE_OVERWRITE="${1:-false}"
 
     if [ ! -f "$ENV_EXAMPLE" ]; then
         echo -e "${RED}Error: Template file not found: $ENV_EXAMPLE${NC}"
         return 1
+    fi
+
+    # Check if .env already exists and ask for confirmation
+    if [ -f "$ENV_FILE" ] && [ "$FORCE_OVERWRITE" != "true" ]; then
+        echo -e "${YELLOW}.env file already exists: $ENV_FILE${NC}"
+        read -p "Do you want to overwrite it? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Keeping existing configuration"
+            return 0
+        fi
     fi
 
     # Copy template
@@ -100,20 +112,7 @@ if [ "$1" = "--create-env" ]; then
         INSTALL_DIR="$APP_HOME"
     fi
 
-    ENV_FILE="$INSTALL_DIR/conf/.env"
-
-    # Check if .env already exists
-    if [ -f "$ENV_FILE" ]; then
-        echo -e "${YELLOW}.env file already exists: $ENV_FILE${NC}"
-        read -p "Do you want to overwrite it? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo "Cancelled"
-            exit 0
-        fi
-    fi
-
-    # Create .env from template
+    # Create .env from template (with confirmation if exists)
     create_env_from_template
 
     echo ""
