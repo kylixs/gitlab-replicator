@@ -88,6 +88,39 @@ echo "  GitLab Mirror Installation Script"
 echo "======================================"
 echo ""
 
+# Check for create env mode
+if [ "$1" = "--create-env" ]; then
+    echo "Creating .env configuration file..."
+    echo ""
+
+    # Determine installation directory
+    if [ -d "/opt/gitlab-mirror" ]; then
+        INSTALL_DIR="/opt/gitlab-mirror"
+    else
+        INSTALL_DIR="$APP_HOME"
+    fi
+
+    ENV_FILE="$INSTALL_DIR/conf/.env"
+
+    # Check if .env already exists
+    if [ -f "$ENV_FILE" ]; then
+        echo -e "${YELLOW}.env file already exists: $ENV_FILE${NC}"
+        read -p "Do you want to overwrite it? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Cancelled"
+            exit 0
+        fi
+    fi
+
+    # Create .env from template
+    create_env_from_template
+
+    echo ""
+    echo -e "${GREEN}Done!${NC}"
+    exit 0
+fi
+
 # Check for regenerate API key mode
 if [ "$1" = "--regenerate-api-key" ]; then
     echo "Regenerating API key..."
@@ -105,7 +138,7 @@ if [ "$1" = "--regenerate-api-key" ]; then
     # Check if .env exists
     if [ ! -f "$ENV_FILE" ]; then
         echo -e "${RED}Error: .env file not found: $ENV_FILE${NC}"
-        echo "Please run installation first or create .env from template"
+        echo "Please run installation first or use: $0 --create-env"
         exit 1
     fi
 
