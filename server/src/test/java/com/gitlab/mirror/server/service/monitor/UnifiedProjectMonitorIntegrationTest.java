@@ -71,16 +71,22 @@ class UnifiedProjectMonitorIntegrationTest {
         MetricsExporter metricsExporter = mock(MetricsExporter.class);
         com.gitlab.mirror.server.service.ProjectDiscoveryService projectDiscoveryService = mock(com.gitlab.mirror.server.service.ProjectDiscoveryService.class);
         com.gitlab.mirror.server.mapper.SourceProjectInfoMapper sourceProjectInfoMapper = mock(com.gitlab.mirror.server.mapper.SourceProjectInfoMapper.class);
+        com.gitlab.mirror.server.mapper.TargetProjectInfoMapper targetProjectInfoMapper = mock(com.gitlab.mirror.server.mapper.TargetProjectInfoMapper.class);
         com.gitlab.mirror.server.service.PullSyncConfigService pullSyncConfigService = mock(com.gitlab.mirror.server.service.PullSyncConfigService.class);
         com.gitlab.mirror.server.service.SyncTaskService syncTaskService = mock(com.gitlab.mirror.server.service.SyncTaskService.class);
+        com.gitlab.mirror.server.client.GitLabApiClient sourceGitLabApiClient = mock(com.gitlab.mirror.server.client.GitLabApiClient.class);
+        com.gitlab.mirror.server.client.GitLabApiClient targetGitLabApiClient = mock(com.gitlab.mirror.server.client.GitLabApiClient.class);
+        com.gitlab.mirror.server.service.BranchSnapshotService branchSnapshotService = mock(com.gitlab.mirror.server.service.BranchSnapshotService.class);
 
         // Configure mock behaviors
         UpdateProjectDataService.UpdateResult mockResult = new UpdateProjectDataService.UpdateResult();
         mockResult.setSuccessCount(0);
-        when(updateProjectDataService.updateSourceProjectsFromGraphQL(anyList(), any())).thenReturn(mockResult);
+        when(updateProjectDataService.updateSourceProjectsFromGraphQL(anyList(), any(), anyBoolean())).thenReturn(mockResult);
         when(updateProjectDataService.updateTargetProjects(anyList(), any())).thenReturn(mockResult);
         when(diffCalculator.calculateDiffBatch(anyList())).thenReturn(java.util.List.of());
         when(syncProjectMapper.selectList(any())).thenReturn(java.util.List.of());
+        when(sourceGitLabApiClient.getAllBranches(any())).thenReturn(java.util.List.of());
+        when(targetGitLabApiClient.getAllBranches(any())).thenReturn(java.util.List.of());
 
         // Create UnifiedProjectMonitor
         unifiedProjectMonitor = new UnifiedProjectMonitor(
@@ -92,8 +98,12 @@ class UnifiedProjectMonitorIntegrationTest {
                 metricsExporter,
                 projectDiscoveryService,
                 sourceProjectInfoMapper,
+                targetProjectInfoMapper,
                 pullSyncConfigService,
-                syncTaskService
+                syncTaskService,
+                sourceGitLabApiClient,
+                targetGitLabApiClient,
+                branchSnapshotService
         );
     }
 

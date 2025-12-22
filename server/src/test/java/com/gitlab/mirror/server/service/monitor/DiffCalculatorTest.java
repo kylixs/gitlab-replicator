@@ -1,11 +1,13 @@
 package com.gitlab.mirror.server.service.monitor;
 
+import com.gitlab.mirror.server.client.GitLabApiClient;
 import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncProject;
 import com.gitlab.mirror.server.entity.TargetProjectInfo;
 import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
 import com.gitlab.mirror.server.mapper.SyncProjectMapper;
 import com.gitlab.mirror.server.mapper.TargetProjectInfoMapper;
+import com.gitlab.mirror.server.service.BranchSnapshotService;
 import com.gitlab.mirror.server.service.monitor.model.ProjectDiff;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,12 +37,22 @@ class DiffCalculatorTest {
     @Mock
     private TargetProjectInfoMapper targetProjectInfoMapper;
 
+    @Mock
+    private GitLabApiClient sourceGitLabApiClient;
+
+    @Mock
+    private GitLabApiClient targetGitLabApiClient;
+
+    @Mock
+    private BranchSnapshotService branchSnapshotService;
+
     private DiffCalculator diffCalculator;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        diffCalculator = new DiffCalculator(syncProjectMapper, sourceProjectInfoMapper, targetProjectInfoMapper);
+        diffCalculator = new DiffCalculator(syncProjectMapper, sourceProjectInfoMapper, targetProjectInfoMapper,
+                sourceGitLabApiClient, targetGitLabApiClient, branchSnapshotService);
     }
 
     @Test

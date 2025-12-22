@@ -295,12 +295,56 @@ public class GitLabApiClient {
     // ==================== Repository Consistency Check API ====================
 
     /**
-     * Get repository branches
+     * Get repository branches (single page, default 20 branches)
+     * <p>
+     * Note: This method only returns the first page. For projects with many branches,
+     * use {@link #getAllBranches(Long)} instead.
      */
     public List<RepositoryBranch> getBranches(Long projectId) {
         String path = "/api/v4/projects/" + projectId + "/repository/branches";
         RepositoryBranch[] branches = client.get(path, RepositoryBranch[].class);
         return branches != null ? List.of(branches) : new ArrayList<>();
+    }
+
+    /**
+     * Get all repository branches with pagination
+     * <p>
+     * Fetches all branches from a project by paginating through results.
+     * Uses max page size (100) for efficiency.
+     *
+     * @param projectId GitLab project ID
+     * @return Complete list of all branches
+     */
+    public List<RepositoryBranch> getAllBranches(Long projectId) {
+        log.debug("Fetching all branches for project {}", projectId);
+
+        List<RepositoryBranch> allBranches = new ArrayList<>();
+        int page = 1;
+        int perPage = 100;  // Maximum allowed by GitLab API
+
+        while (true) {
+            String path = String.format("/api/v4/projects/%d/repository/branches?per_page=%d&page=%d",
+                projectId, perPage, page);
+
+            RepositoryBranch[] branches = client.get(path, RepositoryBranch[].class);
+
+            if (branches == null || branches.length == 0) {
+                break;
+            }
+
+            allBranches.addAll(List.of(branches));
+            log.debug("Fetched {} branches from page {} for project {}", branches.length, page, projectId);
+
+            // If returned count is less than perPage, this is the last page
+            if (branches.length < perPage) {
+                break;
+            }
+
+            page++;
+        }
+
+        log.info("Fetched total {} branches for project {}", allBranches.size(), projectId);
+        return allBranches;
     }
 
     /**

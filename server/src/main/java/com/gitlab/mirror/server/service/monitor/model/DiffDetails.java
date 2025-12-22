@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
  * Diff Details
  * <p>
@@ -51,4 +53,49 @@ public class DiffDetails {
      * Default branch match status
      */
     private boolean defaultBranchMatches;
+
+    /**
+     * Detailed branch-level comparison
+     * Only populated when detailed diff is requested
+     */
+    private List<BranchComparison> branchComparisons;
+
+    /**
+     * Branch comparison summary
+     */
+    private BranchComparisonSummary branchSummary;
+
+    /**
+     * Branch Comparison Summary
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class BranchComparisonSummary {
+        /**
+         * Number of branches that are synced (SHA matches)
+         */
+        private int syncedCount;
+
+        /**
+         * Number of branches that are outdated (exist in both but SHA differs)
+         */
+        private int outdatedCount;
+
+        /**
+         * Number of branches missing in target
+         */
+        private int missingInTargetCount;
+
+        /**
+         * Number of extra branches in target (not in source)
+         */
+        private int extraInTargetCount;
+
+        /**
+         * Total number of unique branches across source and target
+         */
+        private int totalBranchCount;
+    }
 }

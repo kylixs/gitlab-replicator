@@ -5,6 +5,7 @@ import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.TargetProjectInfo;
 import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
 import com.gitlab.mirror.server.mapper.TargetProjectInfoMapper;
+import com.gitlab.mirror.server.service.BranchSnapshotService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -35,12 +36,16 @@ class UpdateProjectDataServiceTest {
     @Mock
     private BatchQueryExecutor batchQueryExecutor;
 
+    @Mock
+    private BranchSnapshotService branchSnapshotService;
+
     private UpdateProjectDataService updateProjectDataService;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        updateProjectDataService = new UpdateProjectDataService(sourceProjectInfoMapper, targetProjectInfoMapper, batchQueryExecutor);
+        updateProjectDataService = new UpdateProjectDataService(sourceProjectInfoMapper, targetProjectInfoMapper,
+                batchQueryExecutor, branchSnapshotService);
     }
 
     @Test

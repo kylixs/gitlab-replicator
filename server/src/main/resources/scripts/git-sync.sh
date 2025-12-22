@@ -80,8 +80,9 @@ case "$COMMAND" in
 
         log "Updating from source: $(mask_url "$SOURCE_URL")"
 
-        # Update from source
-        git remote update --prune
+        # Update from source using fetch --mirror to ensure all branches are synced
+        # This ensures new branches created in source are properly tracked and synced
+        git fetch --mirror
 
         log "Pushing to target: $(mask_url "$TARGET_URL")"
 

@@ -1,21 +1,25 @@
 package com.gitlab.mirror.server.service.monitor;
 
+import com.gitlab.mirror.common.model.RepositoryBranch;
+import com.gitlab.mirror.server.client.GitLabApiClient;
 import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncProject;
 import com.gitlab.mirror.server.entity.TargetProjectInfo;
 import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
 import com.gitlab.mirror.server.mapper.SyncProjectMapper;
 import com.gitlab.mirror.server.mapper.TargetProjectInfoMapper;
+import com.gitlab.mirror.server.service.monitor.model.BranchComparison;
 import com.gitlab.mirror.server.service.monitor.model.DiffDetails;
 import com.gitlab.mirror.server.service.monitor.model.ProjectDiff;
 import com.gitlab.mirror.server.service.monitor.model.ProjectSnapshot;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Diff Calculator Service
@@ -32,24 +36,44 @@ public class DiffCalculator {
     private final SyncProjectMapper syncProjectMapper;
     private final SourceProjectInfoMapper sourceProjectInfoMapper;
     private final TargetProjectInfoMapper targetProjectInfoMapper;
+    private final GitLabApiClient sourceGitLabApiClient;
+    private final GitLabApiClient targetGitLabApiClient;
+    private final com.gitlab.mirror.server.service.BranchSnapshotService branchSnapshotService;
 
     public DiffCalculator(
             SyncProjectMapper syncProjectMapper,
             SourceProjectInfoMapper sourceProjectInfoMapper,
-            TargetProjectInfoMapper targetProjectInfoMapper) {
+            TargetProjectInfoMapper targetProjectInfoMapper,
+            @Qualifier("sourceGitLabApiClient") GitLabApiClient sourceGitLabApiClient,
+            @Qualifier("targetGitLabApiClient") GitLabApiClient targetGitLabApiClient,
+            com.gitlab.mirror.server.service.BranchSnapshotService branchSnapshotService) {
         this.syncProjectMapper = syncProjectMapper;
         this.sourceProjectInfoMapper = sourceProjectInfoMapper;
         this.targetProjectInfoMapper = targetProjectInfoMapper;
+        this.sourceGitLabApiClient = sourceGitLabApiClient;
+        this.targetGitLabApiClient = targetGitLabApiClient;
+        this.branchSnapshotService = branchSnapshotService;
     }
 
     /**
-     * Calculate diff for a single project
+     * Calculate diff for a single project (without detailed branch comparison)
      *
      * @param syncProjectId Sync project ID
      * @return Project diff result
      */
     public ProjectDiff calculateDiff(Long syncProjectId) {
-        log.debug("Calculating diff for sync project {}", syncProjectId);
+        return calculateDiff(syncProjectId, false);
+    }
+
+    /**
+     * Calculate diff for a single project
+     *
+     * @param syncProjectId       Sync project ID
+     * @param includeDetailedBranches Whether to include detailed branch-level comparison
+     * @return Project diff result
+     */
+    public ProjectDiff calculateDiff(Long syncProjectId, boolean includeDetailedBranches) {
+        log.debug("Calculating diff for sync project {} (detailed branches: {})", syncProjectId, includeDetailedBranches);
 
         // Get sync project
         SyncProject syncProject = syncProjectMapper.selectById(syncProjectId);
@@ -77,7 +101,8 @@ public class DiffCalculator {
         log.debug("构建 Snapshot - source: {}, target: {}", sourceSnapshot != null, targetSnapshot != null);
 
         // Calculate diff details
-        DiffDetails diffDetails = calculateDiffDetails(sourceSnapshot, targetSnapshot);
+        DiffDetails diffDetails = calculateDiffDetails(syncProjectId, sourceSnapshot, targetSnapshot,
+            sourceInfo, targetInfo, includeDetailedBranches);
 
         // Determine sync status
         ProjectDiff.SyncStatus status = determineSyncStatus(sourceSnapshot, targetSnapshot, diffDetails);
@@ -95,19 +120,32 @@ public class DiffCalculator {
     }
 
     /**
-     * Calculate diffs for multiple projects
+     * Calculate diffs for multiple projects (with detailed branch comparison)
      *
      * @param syncProjectIds List of sync project IDs
      * @return List of project diffs
      */
     public List<ProjectDiff> calculateDiffBatch(List<Long> syncProjectIds) {
-        log.info("Calculating diffs for {} projects", syncProjectIds.size());
+        log.info("Calculating diffs for {} projects (with detailed branch comparison)", syncProjectIds.size());
 
         List<ProjectDiff> results = new ArrayList<>();
         for (Long id : syncProjectIds) {
-            ProjectDiff diff = calculateDiff(id);
+            // Enable detailed branch comparison to analyze each branch's differences
+            ProjectDiff diff = calculateDiff(id, true);
             if (diff != null) {
                 results.add(diff);
+
+                // Log branch comparison summary
+                if (diff.getDiff() != null && diff.getDiff().getBranchSummary() != null) {
+                    DiffDetails.BranchComparisonSummary summary = diff.getDiff().getBranchSummary();
+                    log.debug("[DIFF] Project {}: {} total branches - {} synced, {} outdated, {} missing, {} extra",
+                            diff.getProjectKey(),
+                            summary.getTotalBranchCount(),
+                            summary.getSyncedCount(),
+                            summary.getOutdatedCount(),
+                            summary.getMissingInTargetCount(),
+                            summary.getExtraInTargetCount());
+                }
             }
         }
 
@@ -154,7 +192,14 @@ public class DiffCalculator {
     /**
      * Calculate diff details between source and target
      */
-    private DiffDetails calculateDiffDetails(ProjectSnapshot source, ProjectSnapshot target) {
+    private DiffDetails calculateDiffDetails(
+            Long syncProjectId,
+            ProjectSnapshot source,
+            ProjectSnapshot target,
+            SourceProjectInfo sourceInfo,
+            TargetProjectInfo targetInfo,
+            boolean includeDetailedBranches) {
+
         if (source == null || target == null) {
             return DiffDetails.builder().build();
         }
@@ -191,6 +236,25 @@ public class DiffCalculator {
         // Default branch match
         boolean branchMatches = source.getDefaultBranch() != null && source.getDefaultBranch().equals(target.getDefaultBranch());
         builder.defaultBranchMatches(branchMatches);
+
+        // Detailed branch comparison (if requested)
+        if (includeDetailedBranches && sourceInfo != null && targetInfo != null) {
+            try {
+                List<BranchComparison> branchComparisons = compareBranches(
+                    syncProjectId,
+                    sourceInfo.getGitlabProjectId(),
+                    targetInfo.getGitlabProjectId(),
+                    source.getDefaultBranch()
+                );
+                builder.branchComparisons(branchComparisons);
+
+                // Build branch summary
+                DiffDetails.BranchComparisonSummary summary = buildBranchSummary(branchComparisons);
+                builder.branchSummary(summary);
+            } catch (Exception e) {
+                log.warn("Failed to compare branches: {}", e.getMessage());
+            }
+        }
 
         return builder.build();
     }
@@ -239,5 +303,191 @@ public class DiffCalculator {
 
         // Default to SYNCED
         return ProjectDiff.SyncStatus.SYNCED;
+    }
+
+    /**
+     * Compare branches between source and target GitLab projects
+     * <p>
+     * Priority: Use database snapshots if available, otherwise fetch from GitLab API
+     *
+     * @param syncProjectId   Sync project ID (for database snapshot lookup)
+     * @param sourceProjectId Source GitLab project ID (for API fallback)
+     * @param targetProjectId Target GitLab project ID (for API fallback)
+     * @param defaultBranch   Default branch name
+     * @return List of branch comparisons
+     */
+    private List<BranchComparison> compareBranches(Long syncProjectId, Long sourceProjectId, Long targetProjectId, String defaultBranch) {
+        log.debug("Comparing branches: syncProjectId={}, sourceGitLabId={}, targetGitLabId={}",
+                syncProjectId, sourceProjectId, targetProjectId);
+
+        // Try to use database snapshots first (for better performance and accuracy)
+        List<com.gitlab.mirror.server.entity.ProjectBranchSnapshot> sourceSnapshots =
+            branchSnapshotService.getBranchSnapshots(syncProjectId, com.gitlab.mirror.server.entity.ProjectBranchSnapshot.ProjectType.SOURCE);
+        List<com.gitlab.mirror.server.entity.ProjectBranchSnapshot> targetSnapshots =
+            branchSnapshotService.getBranchSnapshots(syncProjectId, com.gitlab.mirror.server.entity.ProjectBranchSnapshot.ProjectType.TARGET);
+
+        if (!sourceSnapshots.isEmpty() || !targetSnapshots.isEmpty()) {
+            log.debug("Using database snapshots: {} source, {} target branches", sourceSnapshots.size(), targetSnapshots.size());
+            return compareBranchesFromSnapshots(sourceSnapshots, targetSnapshots, defaultBranch);
+        }
+
+        // Fallback: Fetch branches from GitLab API (live data)
+        log.debug("No database snapshots found, fetching branches from GitLab API");
+        List<RepositoryBranch> sourceBranches = sourceGitLabApiClient.getBranches(sourceProjectId);
+        List<RepositoryBranch> targetBranches = targetGitLabApiClient.getBranches(targetProjectId);
+
+        log.debug("Fetched {} source branches, {} target branches from API", sourceBranches.size(), targetBranches.size());
+
+        return compareBranchesFromApi(sourceBranches, targetBranches, defaultBranch);
+    }
+
+    /**
+     * Compare branches from database snapshots
+     */
+    private List<BranchComparison> compareBranchesFromSnapshots(
+            List<com.gitlab.mirror.server.entity.ProjectBranchSnapshot> sourceSnapshots,
+            List<com.gitlab.mirror.server.entity.ProjectBranchSnapshot> targetSnapshots,
+            String defaultBranch) {
+
+        // Build maps for quick lookup
+        Map<String, String> sourceMap = sourceSnapshots.stream()
+            .collect(Collectors.toMap(
+                com.gitlab.mirror.server.entity.ProjectBranchSnapshot::getBranchName,
+                snapshot -> snapshot.getCommitSha() != null ? snapshot.getCommitSha() : "",
+                (a, b) -> a
+            ));
+
+        Map<String, String> targetMap = targetSnapshots.stream()
+            .collect(Collectors.toMap(
+                com.gitlab.mirror.server.entity.ProjectBranchSnapshot::getBranchName,
+                snapshot -> snapshot.getCommitSha() != null ? snapshot.getCommitSha() : "",
+                (a, b) -> a
+            ));
+
+        return compareBranchMaps(sourceMap, targetMap, defaultBranch);
+    }
+
+    /**
+     * Compare branches from GitLab API response
+     */
+    private List<BranchComparison> compareBranchesFromApi(
+            List<RepositoryBranch> sourceBranches,
+            List<RepositoryBranch> targetBranches,
+            String defaultBranch) {
+
+        // Build maps for quick lookup
+        Map<String, String> sourceMap = sourceBranches.stream()
+            .collect(Collectors.toMap(
+                RepositoryBranch::getName,
+                b -> b.getCommit() != null && b.getCommit().getId() != null ? b.getCommit().getId() : "",
+                (a, b) -> a
+            ));
+
+        Map<String, String> targetMap = targetBranches.stream()
+            .collect(Collectors.toMap(
+                RepositoryBranch::getName,
+                b -> b.getCommit() != null && b.getCommit().getId() != null ? b.getCommit().getId() : "",
+                (a, b) -> a
+            ));
+
+        return compareBranchMaps(sourceMap, targetMap, defaultBranch);
+    }
+
+    /**
+     * Compare branch maps (common logic)
+     */
+    private List<BranchComparison> compareBranchMaps(
+            Map<String, String> sourceMap,
+            Map<String, String> targetMap,
+            String defaultBranch) {
+
+        // Get all unique branch names
+        Set<String> allBranchNames = new HashSet<>();
+        allBranchNames.addAll(sourceMap.keySet());
+        allBranchNames.addAll(targetMap.keySet());
+
+        // Compare each branch
+        List<BranchComparison> comparisons = new ArrayList<>();
+        for (String branchName : allBranchNames) {
+            String sourceSha = sourceMap.get(branchName);
+            String targetSha = targetMap.get(branchName);
+
+            BranchComparison.BranchSyncStatus status;
+            if (sourceSha != null && targetSha != null) {
+                // Branch exists in both
+                status = sourceSha.equals(targetSha)
+                    ? BranchComparison.BranchSyncStatus.SYNCED
+                    : BranchComparison.BranchSyncStatus.OUTDATED;
+            } else if (sourceSha != null) {
+                // Only in source
+                status = BranchComparison.BranchSyncStatus.MISSING_IN_TARGET;
+            } else {
+                // Only in target (orphaned branch)
+                status = BranchComparison.BranchSyncStatus.EXTRA_IN_TARGET;
+            }
+
+            BranchComparison comparison = BranchComparison.builder()
+                .branchName(branchName)
+                .sourceCommitSha(sourceSha)
+                .targetCommitSha(targetSha)
+                .status(status)
+                .isDefault(branchName.equals(defaultBranch))
+                .build();
+
+            comparisons.add(comparison);
+        }
+
+        // Sort: default branch first, then by name
+        comparisons.sort((a, b) -> {
+            if (a.isDefault() && !b.isDefault()) return -1;
+            if (!a.isDefault() && b.isDefault()) return 1;
+            return a.getBranchName().compareTo(b.getBranchName());
+        });
+
+        return comparisons;
+    }
+
+    /**
+     * Build branch comparison summary
+     *
+     * @param branchComparisons List of branch comparisons
+     * @return Branch comparison summary
+     */
+    private DiffDetails.BranchComparisonSummary buildBranchSummary(List<BranchComparison> branchComparisons) {
+        if (branchComparisons == null || branchComparisons.isEmpty()) {
+            return DiffDetails.BranchComparisonSummary.builder()
+                .syncedCount(0)
+                .outdatedCount(0)
+                .missingInTargetCount(0)
+                .extraInTargetCount(0)
+                .totalBranchCount(0)
+                .build();
+        }
+
+        int synced = 0, outdated = 0, missing = 0, extra = 0;
+        for (BranchComparison comparison : branchComparisons) {
+            switch (comparison.getStatus()) {
+                case SYNCED:
+                    synced++;
+                    break;
+                case OUTDATED:
+                    outdated++;
+                    break;
+                case MISSING_IN_TARGET:
+                    missing++;
+                    break;
+                case EXTRA_IN_TARGET:
+                    extra++;
+                    break;
+            }
+        }
+
+        return DiffDetails.BranchComparisonSummary.builder()
+            .syncedCount(synced)
+            .outdatedCount(outdated)
+            .missingInTargetCount(missing)
+            .extraInTargetCount(extra)
+            .totalBranchCount(branchComparisons.size())
+            .build();
     }
 }

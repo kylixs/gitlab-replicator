@@ -37,14 +37,17 @@ public class UpdateProjectDataService {
     private final SourceProjectInfoMapper sourceProjectInfoMapper;
     private final TargetProjectInfoMapper targetProjectInfoMapper;
     private final BatchQueryExecutor batchQueryExecutor;
+    private final com.gitlab.mirror.server.service.BranchSnapshotService branchSnapshotService;
 
     public UpdateProjectDataService(
             SourceProjectInfoMapper sourceProjectInfoMapper,
             TargetProjectInfoMapper targetProjectInfoMapper,
-            BatchQueryExecutor batchQueryExecutor) {
+            BatchQueryExecutor batchQueryExecutor,
+            com.gitlab.mirror.server.service.BranchSnapshotService branchSnapshotService) {
         this.sourceProjectInfoMapper = sourceProjectInfoMapper;
         this.targetProjectInfoMapper = targetProjectInfoMapper;
         this.batchQueryExecutor = batchQueryExecutor;
+        this.branchSnapshotService = branchSnapshotService;
     }
 
     /**
@@ -110,14 +113,16 @@ public class UpdateProjectDataService {
      *
      * @param projects List of GitLab projects from API
      * @param graphQLInfos Map of project ID to GraphQL info
+     * @param isFullScan Whether this is a full scan (always update branch snapshots)
      * @return Update result statistics
      */
     @Transactional(rollbackFor = Exception.class)
     public UpdateResult updateSourceProjectsFromGraphQL(
             List<GitLabProject> projects,
-            Map<Long, GraphQLProjectInfo> graphQLInfos) {
+            Map<Long, GraphQLProjectInfo> graphQLInfos,
+            boolean isFullScan) {
 
-        log.info("Updating {} source projects from GraphQL data (only changed projects)", projects.size());
+        log.info("Updating {} source projects from GraphQL data (isFullScan: {})", projects.size(), isFullScan);
 
         UpdateResult result = new UpdateResult();
         result.setTotalCount(projects.size());
@@ -155,6 +160,22 @@ public class UpdateProjectDataService {
                 } else {
                     result.setSkippedCount(result.getSkippedCount() + 1);
                     log.debug("No changes for source project {}", project.getPathWithNamespace());
+                }
+
+                // Update branch snapshot: always in full scan, or when project changed
+                if (isFullScan || change != null) {
+                    try {
+                        if (info.getGitlabProjectId() != null) {
+                            branchSnapshotService.updateSourceBranchSnapshot(
+                                info.getSyncProjectId(),
+                                info.getGitlabProjectId(),
+                                info.getDefaultBranch()
+                            );
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to update source branch snapshot for project {}: {}",
+                            project.getPathWithNamespace(), e.getMessage());
+                    }
                 }
 
             } catch (Exception e) {
@@ -295,14 +316,16 @@ public class UpdateProjectDataService {
      *
      * @param projects List of GitLab projects from API
      * @param graphQLInfos Map of project ID to GraphQL information
+     * @param isFullScan Whether this is a full scan (always update branch snapshots)
      * @return Update result statistics
      */
     @Transactional(rollbackFor = Exception.class)
     public UpdateResult updateTargetProjectsFromGraphQL(
             List<GitLabProject> projects,
-            Map<Long, GraphQLProjectInfo> graphQLInfos) {
+            Map<Long, GraphQLProjectInfo> graphQLInfos,
+            boolean isFullScan) {
 
-        log.info("Updating {} target projects from GraphQL data (only changed projects)", projects.size());
+        log.info("Updating {} target projects from GraphQL data (isFullScan: {})", projects.size(), isFullScan);
 
         UpdateResult result = new UpdateResult();
         result.setTotalCount(projects.size());
@@ -340,6 +363,22 @@ public class UpdateProjectDataService {
                 } else {
                     result.setSkippedCount(result.getSkippedCount() + 1);
                     log.debug("No changes for target project {}", project.getPathWithNamespace());
+                }
+
+                // Update branch snapshot: always in full scan, or when project changed
+                if (isFullScan || change != null) {
+                    try {
+                        if (info.getGitlabProjectId() != null) {
+                            branchSnapshotService.updateTargetBranchSnapshot(
+                                info.getSyncProjectId(),
+                                info.getGitlabProjectId(),
+                                info.getDefaultBranch()
+                            );
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to update target branch snapshot for project {}: {}",
+                            project.getPathWithNamespace(), e.getMessage());
+                    }
                 }
 
             } catch (Exception e) {

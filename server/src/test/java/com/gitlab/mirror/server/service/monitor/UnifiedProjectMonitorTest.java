@@ -51,10 +51,22 @@ class UnifiedProjectMonitorTest {
     private com.gitlab.mirror.server.mapper.SourceProjectInfoMapper sourceProjectInfoMapper;
 
     @Mock
+    private com.gitlab.mirror.server.mapper.TargetProjectInfoMapper targetProjectInfoMapper;
+
+    @Mock
     private com.gitlab.mirror.server.service.PullSyncConfigService pullSyncConfigService;
 
     @Mock
     private com.gitlab.mirror.server.service.SyncTaskService syncTaskService;
+
+    @Mock
+    private com.gitlab.mirror.server.client.GitLabApiClient sourceGitLabApiClient;
+
+    @Mock
+    private com.gitlab.mirror.server.client.GitLabApiClient targetGitLabApiClient;
+
+    @Mock
+    private com.gitlab.mirror.server.service.BranchSnapshotService branchSnapshotService;
 
     private UnifiedProjectMonitor unifiedProjectMonitor;
 
@@ -70,8 +82,12 @@ class UnifiedProjectMonitorTest {
                 metricsExporter,
                 projectDiscoveryService,
                 sourceProjectInfoMapper,
+                targetProjectInfoMapper,
                 pullSyncConfigService,
-                syncTaskService
+                syncTaskService,
+                sourceGitLabApiClient,
+                targetGitLabApiClient,
+                branchSnapshotService
         );
     }
 
