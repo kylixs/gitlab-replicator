@@ -59,19 +59,22 @@ TARGET_GITLAB_MIRROR_URL=http://host.docker.internal:9000
 API_HOST=0.0.0.0         # Listen on all interfaces
 API_PORT=9999            # API port
 
-# API authentication token
-API_TOKEN_1=your-api-token-here
+# API authentication key (independent from GitLab tokens)
+# Used for CLI to Server authentication
+GITLAB_MIRROR_API_KEY=your-secure-api-key-here
 
 # CLI client API connection URL (supports variable substitution)
 GITLAB_MIRROR_API_URL=http://localhost:${API_PORT}
-
-# GitLab token for CLI operations
-GITLAB_MIRROR_TOKEN=glpat-xxxxxxxxxxxxxxxxxx
 ```
 
 **Variable Substitution:**
 - `${API_PORT}` is automatically replaced with the value of `API_PORT`
 - Allows server and CLI to use the same configuration
+
+**Security Notes:**
+- `GITLAB_MIRROR_API_KEY` is independent from GitLab access tokens
+- Use a strong random key (UUID or similar)
+- Change the default key in production
 
 ### Webhook Configuration (Optional)
 

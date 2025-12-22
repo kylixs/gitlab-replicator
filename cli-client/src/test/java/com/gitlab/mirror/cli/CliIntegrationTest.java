@@ -80,7 +80,7 @@ class CliIntegrationTest {
             return;
         }
 
-        // This test requires GITLAB_MIRROR_TOKEN to be set
+        // This test requires GITLAB_MIRROR_API_KEY to be set
         if (config.getApiToken() == null || config.getApiToken().isEmpty()) {
             System.out.println("Skipping authentication test - no token configured");
             return;

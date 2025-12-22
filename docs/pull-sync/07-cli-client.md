@@ -376,7 +376,7 @@ $ gitlab-mirror scheduler trigger --type=pull
 
 ## 注意事项
 
-1. **环境变量**: 需要配置 `GITLAB_MIRROR_API_URL` 和 `GITLAB_MIRROR_TOKEN`
+1. **环境变量**: 需要配置 `GITLAB_MIRROR_API_URL` 和 `GITLAB_MIRROR_API_KEY`
 2. **JSON 解析**: 输出可通过 `jq` 等工具进一步处理
 3. **错误处理**: 网络错误、认证失败等都有清晰提示
 4. **帮助信息**: 每个命令都支持 `--help` 显示帮助

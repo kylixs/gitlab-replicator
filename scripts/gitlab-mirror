@@ -301,7 +301,7 @@ show_usage() {
     echo ""
     echo -e "${CYAN}Environment Variables:${NC}"
     echo "  GITLAB_MIRROR_API_URL             API base URL (default: http://localhost:9999)"
-    echo "  GITLAB_MIRROR_TOKEN               API authentication token"
+    echo "  GITLAB_MIRROR_API_KEY             API authentication key"
     echo ""
 }
 

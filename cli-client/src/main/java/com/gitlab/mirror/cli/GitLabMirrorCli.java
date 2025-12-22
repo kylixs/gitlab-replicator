@@ -28,8 +28,8 @@ public class GitLabMirrorCli {
             String command = args[0];
             if (!command.equals("help") && !command.equals("version")) {
                 if (config.getApiToken() == null || config.getApiToken().isEmpty()) {
-                    OutputFormatter.printError("API token not configured");
-                    OutputFormatter.printInfo("Set GITLAB_MIRROR_TOKEN environment variable or configure in .env file");
+                    OutputFormatter.printError("API key not configured");
+                    OutputFormatter.printInfo("Set GITLAB_MIRROR_API_KEY environment variable or configure in .env file");
                     System.exit(1);
                 }
             }
@@ -164,7 +164,7 @@ public class GitLabMirrorCli {
         System.out.println();
         System.out.println(OutputFormatter.YELLOW + "Environment Variables:" + OutputFormatter.RESET);
         System.out.println("  GITLAB_MIRROR_API_URL      API base URL (default: http://localhost:9999)");
-        System.out.println("  GITLAB_MIRROR_TOKEN        API authentication token");
+        System.out.println("  GITLAB_MIRROR_API_KEY        API authentication token");
         System.out.println();
         System.out.println("For detailed help on each command, use: gitlab-mirror <command> --help");
         System.out.println();

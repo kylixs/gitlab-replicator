@@ -54,7 +54,7 @@ class CliConfigTest {
 
         String configContent = """
                 GITLAB_MIRROR_API_URL=http://config-test:8080
-                GITLAB_MIRROR_TOKEN=config-token-123
+                GITLAB_MIRROR_API_KEY=config-token-123
                 GITLAB_MIRROR_CONNECT_TIMEOUT=10000
                 GITLAB_MIRROR_READ_TIMEOUT=60000
                 """;
@@ -87,7 +87,7 @@ class CliConfigTest {
         Path envFile = tempDir.resolve(".env");
         String envContent = """
                 GITLAB_MIRROR_API_URL=http://env-test:8080
-                GITLAB_MIRROR_TOKEN=env-token-456
+                GITLAB_MIRROR_API_KEY=env-token-456
                 GITLAB_MIRROR_CONNECT_TIMEOUT=8000
                 GITLAB_MIRROR_READ_TIMEOUT=40000
                 """;
@@ -107,7 +107,7 @@ class CliConfigTest {
     }
 
     /**
-     * Test mapping SOURCE_GITLAB_TOKEN to GITLAB_MIRROR_TOKEN
+     * Test mapping SOURCE_GITLAB_TOKEN to GITLAB_MIRROR_API_KEY
      */
     @Test
     void testSourceGitlabTokenMapping() throws IOException {
@@ -125,12 +125,12 @@ class CliConfigTest {
         // When
         CliConfig config = CliConfig.fromEnvironment();
 
-        // Then - SOURCE_GITLAB_TOKEN should be mapped to GITLAB_MIRROR_TOKEN
+        // Then - SOURCE_GITLAB_TOKEN should be mapped to GITLAB_MIRROR_API_KEY
         assertThat(config.getApiToken()).isEqualTo("source-token-789");
     }
 
     /**
-     * Test GITLAB_MIRROR_TOKEN takes precedence over SOURCE_GITLAB_TOKEN
+     * Test GITLAB_MIRROR_API_KEY takes precedence over SOURCE_GITLAB_TOKEN
      */
     @Test
     void testGitlabMirrorTokenPrecedence() throws IOException {
@@ -138,7 +138,7 @@ class CliConfigTest {
         Path envFile = tempDir.resolve(".env");
         String envContent = """
                 SOURCE_GITLAB_TOKEN=source-token-789
-                GITLAB_MIRROR_TOKEN=mirror-token-abc
+                GITLAB_MIRROR_API_KEY=mirror-token-abc
                 """;
         Files.writeString(envFile, envContent);
 
@@ -148,7 +148,7 @@ class CliConfigTest {
         // When
         CliConfig config = CliConfig.fromEnvironment();
 
-        // Then - GITLAB_MIRROR_TOKEN should take precedence
+        // Then - GITLAB_MIRROR_API_KEY should take precedence
         assertThat(config.getApiToken()).isEqualTo("mirror-token-abc");
     }
 
@@ -164,7 +164,7 @@ class CliConfigTest {
                 GITLAB_MIRROR_API_URL=http://localhost:8080
 
                 # Token configuration
-                GITLAB_MIRROR_TOKEN=test-token
+                GITLAB_MIRROR_API_KEY=test-token
 
                 # Timeout settings
                 GITLAB_MIRROR_CONNECT_TIMEOUT=5000
@@ -192,7 +192,7 @@ class CliConfigTest {
         Path envFile = tempDir.resolve(".env");
         String envContent = """
                 GITLAB_MIRROR_API_URL=http://parent:8080
-                GITLAB_MIRROR_TOKEN=parent-token
+                GITLAB_MIRROR_API_KEY=parent-token
                 """;
         Files.writeString(envFile, envContent);
 
@@ -249,14 +249,14 @@ class CliConfigTest {
 
         String configContent = """
                 GITLAB_MIRROR_API_URL=http://user-config:8080
-                GITLAB_MIRROR_TOKEN=user-config-token
+                GITLAB_MIRROR_API_KEY=user-config-token
                 """;
         Files.writeString(configFile, configContent);
 
         Path envFile = tempDir.resolve(".env");
         String envContent = """
                 GITLAB_MIRROR_API_URL=http://env-file:8080
-                GITLAB_MIRROR_TOKEN=env-file-token
+                GITLAB_MIRROR_API_KEY=env-file-token
                 """;
         Files.writeString(envFile, envContent);
 
@@ -285,7 +285,7 @@ class CliConfigTest {
         // Given - create .env file with only some values
         Path envFile = tempDir.resolve(".env");
         String envContent = """
-                GITLAB_MIRROR_TOKEN=partial-token
+                GITLAB_MIRROR_API_KEY=partial-token
                 """;
         Files.writeString(envFile, envContent);
 
@@ -335,7 +335,7 @@ class CliConfigTest {
         Path envFile = tempDir.resolve(".env");
         String envContent = """
                 GITLAB_MIRROR_API_URL=
-                GITLAB_MIRROR_TOKEN=
+                GITLAB_MIRROR_API_KEY=
                 """;
         Files.writeString(envFile, envContent);
 
@@ -359,7 +359,7 @@ class CliConfigTest {
         Path envFile = tempDir.resolve(".env");
         String envContent = """
                 GITLAB_MIRROR_API_URL = http://spaced:8080
-                GITLAB_MIRROR_TOKEN = spaced-token
+                GITLAB_MIRROR_API_KEY = spaced-token
                 """;
         Files.writeString(envFile, envContent);
 
