@@ -180,5 +180,20 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+
+        <plugins>
+            <!-- Maven Assembly Plugin for distribution packaging -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.6.0</version>
+                <configuration>
+                    <descriptors>
+                        <descriptor>assembly.xml</descriptor>
+                    </descriptors>
+                    <finalName>gitlab-mirror-${project.version}</finalName>
+                </configuration>
+            </plugin>
+        </plugins>
     </build>
 </project>

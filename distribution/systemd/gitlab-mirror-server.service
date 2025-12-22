@@ -1,0 +1,43 @@
+[Unit]
+Description=GitLab Mirror Server
+Documentation=https://github.com/your-org/gitlab-mirror
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=forking
+User=gitlab-mirror
+Group=gitlab-mirror
+WorkingDirectory=/opt/gitlab-mirror
+EnvironmentFile=/opt/gitlab-mirror/conf/.env
+PIDFile=/opt/gitlab-mirror/server/gitlab-mirror-server.pid
+
+# Start command
+ExecStart=/opt/gitlab-mirror/server/bin/start.sh
+
+# Stop command
+ExecStop=/opt/gitlab-mirror/server/bin/stop.sh
+
+# Restart policy
+Restart=on-failure
+RestartSec=10s
+
+# Timeout settings
+TimeoutStartSec=60s
+TimeoutStopSec=30s
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gitlab-mirror-server
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

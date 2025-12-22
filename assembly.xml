@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<assembly xmlns="http://maven.apache.org/ASSEMBLY/2.1.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/ASSEMBLY/2.1.0
+          http://maven.apache.org/xsd/assembly-2.1.0.xsd">
+    <id>dist</id>
+    <formats>
+        <format>tar.gz</format>
+        <format>zip</format>
+    </formats>
+    <includeBaseDirectory>true</includeBaseDirectory>
+    <baseDirectory>gitlab-mirror-${project.version}</baseDirectory>
+
+    <fileSets>
+        <!-- Server JAR -->
+        <fileSet>
+            <directory>server/target</directory>
+            <outputDirectory>server/lib</outputDirectory>
+            <includes>
+                <include>gitlab-mirror-server-*.jar</include>
+            </includes>
+            <excludes>
+                <exclude>*-sources.jar</exclude>
+                <exclude>*-javadoc.jar</exclude>
+            </excludes>
+            <fileMode>0644</fileMode>
+        </fileSet>
+
+        <!-- CLI JAR -->
+        <fileSet>
+            <directory>cli-client/target</directory>
+            <outputDirectory>cli/lib</outputDirectory>
+            <includes>
+                <include>gitlab-mirror-cli-*.jar</include>
+            </includes>
+            <excludes>
+                <exclude>*-sources.jar</exclude>
+                <exclude>*-javadoc.jar</exclude>
+            </excludes>
+            <fileMode>0644</fileMode>
+        </fileSet>
+
+        <!-- Server configuration files -->
+        <fileSet>
+            <directory>server/src/main/resources</directory>
+            <outputDirectory>server/conf</outputDirectory>
+            <includes>
+                <include>application.yml</include>
+                <include>application-*.yml</include>
+                <include>logback-spring.xml</include>
+            </includes>
+            <fileMode>0644</fileMode>
+        </fileSet>
+
+        <!-- Server bin scripts -->
+        <fileSet>
+            <directory>distribution/server/bin</directory>
+            <outputDirectory>server/bin</outputDirectory>
+            <includes>
+                <include>*.sh</include>
+            </includes>
+            <fileMode>0755</fileMode>
+            <lineEnding>unix</lineEnding>
+        </fileSet>
+
+        <!-- Server logs directory (empty) -->
+        <fileSet>
+            <directory>distribution/server/logs</directory>
+            <outputDirectory>server/logs</outputDirectory>
+            <excludes>
+                <exclude>*</exclude>
+            </excludes>
+            <directoryMode>0755</directoryMode>
+        </fileSet>
+
+        <!-- CLI bin scripts -->
+        <fileSet>
+            <directory>distribution/cli/bin</directory>
+            <outputDirectory>cli/bin</outputDirectory>
+            <includes>
+                <include>gitlab-mirror</include>
+            </includes>
+            <fileMode>0755</fileMode>
+            <lineEnding>unix</lineEnding>
+        </fileSet>
+
+        <!-- Global configuration -->
+        <fileSet>
+            <directory>.</directory>
+            <outputDirectory>conf</outputDirectory>
+            <includes>
+                <include>.env.example</include>
+            </includes>
+            <fileMode>0644</fileMode>
+        </fileSet>
+
+        <!-- SQL scripts -->
+        <fileSet>
+            <directory>sql</directory>
+            <outputDirectory>sql</outputDirectory>
+            <includes>
+                <include>**/*.sql</include>
+            </includes>
+            <fileMode>0644</fileMode>
+        </fileSet>
+
+        <!-- Utility scripts -->
+        <fileSet>
+            <directory>distribution/scripts</directory>
+            <outputDirectory>scripts</outputDirectory>
+            <includes>
+                <include>*.sh</include>
+            </includes>
+            <fileMode>0755</fileMode>
+            <lineEnding>unix</lineEnding>
+        </fileSet>
+
+        <!-- systemd service file -->
+        <fileSet>
+            <directory>distribution/systemd</directory>
+            <outputDirectory>systemd</outputDirectory>
+            <includes>
+                <include>*.service</include>
+            </includes>
+            <fileMode>0644</fileMode>
+        </fileSet>
+
+        <!-- Documentation -->
+        <fileSet>
+            <directory>distribution/docs</directory>
+            <outputDirectory>docs</outputDirectory>
+            <includes>
+                <include>*.md</include>
+            </includes>
+            <fileMode>0644</fileMode>
+        </fileSet>
+
+        <!-- Root level files -->
+        <fileSet>
+            <directory>.</directory>
+            <outputDirectory>.</outputDirectory>
+            <includes>
+                <include>LICENSE</include>
+                <include>README.md</include>
+            </includes>
+            <fileMode>0644</fileMode>
+        </fileSet>
+    </fileSets>
+
+    <files>
+        <!-- VERSION file -->
+        <file>
+            <source>distribution/VERSION</source>
+            <outputDirectory>.</outputDirectory>
+            <fileMode>0644</fileMode>
+        </file>
+    </files>
+</assembly>
