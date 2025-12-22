@@ -11,7 +11,7 @@ CLI_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_HOME="$(cd "$CLI_HOME/.." && pwd)"
 
 # Configuration
-JAR_FILE="$CLI_HOME/lib/gitlab-mirror-cli.jar"
+LIB_DIR="$CLI_HOME/lib"
 ENV_FILE="$APP_HOME/conf/.env"
 
 # Java options for CLI (lighter than server)
@@ -24,9 +24,12 @@ if [ -f "$ENV_FILE" ]; then
     set +a
 fi
 
+# Find JAR file in lib directory
+JAR_FILE=$(find "$LIB_DIR" -maxdepth 1 -name "*.jar" -type f | head -n 1)
+
 # Check JAR file exists
-if [ ! -f "$JAR_FILE" ]; then
-    echo "Error: CLI JAR file not found at $JAR_FILE"
+if [ -z "$JAR_FILE" ] || [ ! -f "$JAR_FILE" ]; then
+    echo "Error: No JAR file found in $LIB_DIR"
     exit 1
 fi
 

@@ -11,7 +11,7 @@ SERVER_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_HOME="$(cd "$SERVER_HOME/.." && pwd)"
 
 # Configuration
-JAR_FILE="$SERVER_HOME/lib/gitlab-mirror-server.jar"
+LIB_DIR="$SERVER_HOME/lib"
 PID_FILE="$SERVER_HOME/gitlab-mirror-server.pid"
 LOG_DIR="$SERVER_HOME/logs"
 ENV_FILE="$APP_HOME/conf/.env"
@@ -43,9 +43,12 @@ if [ -f "$PID_FILE" ]; then
     fi
 fi
 
+# Find JAR file in lib directory
+JAR_FILE=$(find "$LIB_DIR" -maxdepth 1 -name "*.jar" -type f | head -n 1)
+
 # Check JAR file exists
-if [ ! -f "$JAR_FILE" ]; then
-    echo "Error: JAR file not found at $JAR_FILE"
+if [ -z "$JAR_FILE" ] || [ ! -f "$JAR_FILE" ]; then
+    echo "Error: No JAR file found in $LIB_DIR"
     exit 1
 fi
 
