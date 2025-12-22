@@ -25,11 +25,15 @@ echo "======================================${NC}"
 echo ""
 
 # Parse arguments
-SKIP_TESTS=false
+SKIP_TESTS=true  # Default: skip tests for packaging
 CLEAN=false
 
 for arg in "$@"; do
     case $arg in
+        --with-tests)
+            SKIP_TESTS=false
+            shift
+            ;;
         --skip-tests)
             SKIP_TESTS=true
             shift
@@ -42,7 +46,8 @@ for arg in "$@"; do
             echo "Usage: $0 [options]"
             echo ""
             echo "Options:"
-            echo "  --skip-tests    Skip unit tests"
+            echo "  --with-tests    Run unit tests (default: skip)"
+            echo "  --skip-tests    Skip unit tests (default)"
             echo "  --clean         Clean before build"
             echo "  --help          Show this help message"
             echo ""
@@ -91,7 +96,9 @@ fi
 MVN_OPTS=""
 if [ "$SKIP_TESTS" = true ]; then
     MVN_OPTS="-DskipTests"
-    echo -e "${YELLOW}Note: Skipping tests${NC}"
+    echo -e "${YELLOW}Note: Skipping tests (default for packaging)${NC}"
+else
+    echo "Running tests..."
 fi
 
 # Build project
@@ -144,7 +151,8 @@ if [ ! -d "$PROJECT_DIR/sql" ]; then
     mkdir -p "$PROJECT_DIR/sql"
 fi
 
-mvn assembly:single
+# Run assembly only in parent project (not in submodules)
+mvn assembly:single -N
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}Assembly failed${NC}"

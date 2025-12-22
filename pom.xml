@@ -183,10 +183,12 @@
 
         <plugins>
             <!-- Maven Assembly Plugin for distribution packaging -->
+            <!-- Only runs in parent project, not inherited by submodules -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
                 <version>3.6.0</version>
+                <inherited>false</inherited>
                 <configuration>
                     <descriptors>
                         <descriptor>assembly.xml</descriptor>

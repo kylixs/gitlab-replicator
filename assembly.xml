@@ -17,11 +17,12 @@
             <directory>server/target</directory>
             <outputDirectory>server/lib</outputDirectory>
             <includes>
-                <include>gitlab-mirror-server-*.jar</include>
+                <include>server-*.jar</include>
             </includes>
             <excludes>
                 <exclude>*-sources.jar</exclude>
                 <exclude>*-javadoc.jar</exclude>
+                <exclude>original-*.jar</exclude>
             </excludes>
             <fileMode>0644</fileMode>
         </fileSet>
@@ -31,11 +32,12 @@
             <directory>cli-client/target</directory>
             <outputDirectory>cli/lib</outputDirectory>
             <includes>
-                <include>gitlab-mirror-cli-*.jar</include>
+                <include>cli-client-*.jar</include>
             </includes>
             <excludes>
                 <exclude>*-sources.jar</exclude>
                 <exclude>*-javadoc.jar</exclude>
+                <exclude>original-*.jar</exclude>
             </excludes>
             <fileMode>0644</fileMode>
         </fileSet>
