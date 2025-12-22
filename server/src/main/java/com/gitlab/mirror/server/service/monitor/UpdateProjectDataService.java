@@ -404,61 +404,126 @@ public class UpdateProjectDataService {
                 .projectType("source")
                 .build();
 
+        String projectKey = info.getPathWithNamespace();
+        log.debug("[COMPARE] Checking project: {}", projectKey);
+
         // Update from GraphQL data
         if (graphQLInfo != null) {
             // Commit SHA
-            if (graphQLInfo.getLastCommitSha() != null &&
-                !Objects.equals(info.getLatestCommitSha(), graphQLInfo.getLastCommitSha())) {
-                change.addChange("latestCommitSha", info.getLatestCommitSha(), graphQLInfo.getLastCommitSha());
-                info.setLatestCommitSha(graphQLInfo.getLastCommitSha());
+            if (graphQLInfo.getLastCommitSha() != null) {
+                boolean equals = Objects.equals(info.getLatestCommitSha(), graphQLInfo.getLastCommitSha());
+                log.debug("[COMPARE] {} - latestCommitSha: DB=[{}] ({}), GraphQL=[{}] ({}), equals={}",
+                        projectKey,
+                        info.getLatestCommitSha(),
+                        info.getLatestCommitSha() != null ? info.getLatestCommitSha().getClass().getSimpleName() : "null",
+                        graphQLInfo.getLastCommitSha(),
+                        graphQLInfo.getLastCommitSha().getClass().getSimpleName(),
+                        equals);
+                if (!equals) {
+                    change.addChange("latestCommitSha", info.getLatestCommitSha(), graphQLInfo.getLastCommitSha());
+                    info.setLatestCommitSha(graphQLInfo.getLastCommitSha());
+                }
             }
 
             // Commit count
-            if (graphQLInfo.getCommitCount() != null &&
-                !Objects.equals(info.getCommitCount(), graphQLInfo.getCommitCount())) {
-                change.addChange("commitCount", info.getCommitCount(), graphQLInfo.getCommitCount());
-                info.setCommitCount(graphQLInfo.getCommitCount());
+            if (graphQLInfo.getCommitCount() != null) {
+                boolean equals = Objects.equals(info.getCommitCount(), graphQLInfo.getCommitCount());
+                log.debug("[COMPARE] {} - commitCount: DB=[{}] ({}), GraphQL=[{}] ({}), equals={}",
+                        projectKey,
+                        info.getCommitCount(),
+                        info.getCommitCount() != null ? info.getCommitCount().getClass().getSimpleName() : "null",
+                        graphQLInfo.getCommitCount(),
+                        graphQLInfo.getCommitCount().getClass().getSimpleName(),
+                        equals);
+                if (!equals) {
+                    change.addChange("commitCount", info.getCommitCount(), graphQLInfo.getCommitCount());
+                    info.setCommitCount(graphQLInfo.getCommitCount());
+                }
             }
 
             // Branch count
-            if (graphQLInfo.getBranchCount() != null &&
-                !Objects.equals(info.getBranchCount(), graphQLInfo.getBranchCount())) {
-                change.addChange("branchCount", info.getBranchCount(), graphQLInfo.getBranchCount());
-                info.setBranchCount(graphQLInfo.getBranchCount());
+            if (graphQLInfo.getBranchCount() != null) {
+                boolean equals = Objects.equals(info.getBranchCount(), graphQLInfo.getBranchCount());
+                log.debug("[COMPARE] {} - branchCount: DB=[{}] ({}), GraphQL=[{}] ({}), equals={}",
+                        projectKey,
+                        info.getBranchCount(),
+                        info.getBranchCount() != null ? info.getBranchCount().getClass().getSimpleName() : "null",
+                        graphQLInfo.getBranchCount(),
+                        graphQLInfo.getBranchCount().getClass().getSimpleName(),
+                        equals);
+                if (!equals) {
+                    change.addChange("branchCount", info.getBranchCount(), graphQLInfo.getBranchCount());
+                    info.setBranchCount(graphQLInfo.getBranchCount());
+                }
             }
 
             // Repository size
-            if (graphQLInfo.getRepositorySize() != null &&
-                !Objects.equals(info.getRepositorySize(), graphQLInfo.getRepositorySize())) {
-                change.addChange("repositorySize", info.getRepositorySize(), graphQLInfo.getRepositorySize());
-                info.setRepositorySize(graphQLInfo.getRepositorySize());
+            if (graphQLInfo.getRepositorySize() != null) {
+                boolean equals = Objects.equals(info.getRepositorySize(), graphQLInfo.getRepositorySize());
+                log.debug("[COMPARE] {} - repositorySize: DB=[{}] ({}), GraphQL=[{}] ({}), equals={}",
+                        projectKey,
+                        info.getRepositorySize(),
+                        info.getRepositorySize() != null ? info.getRepositorySize().getClass().getSimpleName() : "null",
+                        graphQLInfo.getRepositorySize(),
+                        graphQLInfo.getRepositorySize().getClass().getSimpleName(),
+                        equals);
+                if (!equals) {
+                    change.addChange("repositorySize", info.getRepositorySize(), graphQLInfo.getRepositorySize());
+                    info.setRepositorySize(graphQLInfo.getRepositorySize());
+                }
             }
 
             // Last activity time
             if (graphQLInfo.getLastActivityAt() != null) {
                 LocalDateTime newActivityTime = convertToLocalDateTime(graphQLInfo.getLastActivityAt());
-                if (!Objects.equals(info.getLastActivityAt(), newActivityTime)) {
+                boolean equals = Objects.equals(info.getLastActivityAt(), newActivityTime);
+                log.debug("[COMPARE] {} - lastActivityAt: DB=[{}] ({}), GraphQL=[{}] ({}), equals={}",
+                        projectKey,
+                        info.getLastActivityAt(),
+                        info.getLastActivityAt() != null ? info.getLastActivityAt().getClass().getSimpleName() : "null",
+                        newActivityTime,
+                        newActivityTime != null ? newActivityTime.getClass().getSimpleName() : "null",
+                        equals);
+                if (!equals) {
                     change.addChange("lastActivityAt", info.getLastActivityAt(), newActivityTime);
                     info.setLastActivityAt(newActivityTime);
                 }
             }
 
             // Default branch
-            if (graphQLInfo.getRepository() != null && graphQLInfo.getRepository().getRootRef() != null &&
-                !Objects.equals(info.getDefaultBranch(), graphQLInfo.getRepository().getRootRef())) {
-                change.addChange("defaultBranch", info.getDefaultBranch(), graphQLInfo.getRepository().getRootRef());
-                info.setDefaultBranch(graphQLInfo.getRepository().getRootRef());
+            if (graphQLInfo.getRepository() != null && graphQLInfo.getRepository().getRootRef() != null) {
+                boolean equals = Objects.equals(info.getDefaultBranch(), graphQLInfo.getRepository().getRootRef());
+                log.debug("[COMPARE] {} - defaultBranch: DB=[{}] ({}), GraphQL=[{}] ({}), equals={}",
+                        projectKey,
+                        info.getDefaultBranch(),
+                        info.getDefaultBranch() != null ? info.getDefaultBranch().getClass().getSimpleName() : "null",
+                        graphQLInfo.getRepository().getRootRef(),
+                        graphQLInfo.getRepository().getRootRef().getClass().getSimpleName(),
+                        equals);
+                if (!equals) {
+                    change.addChange("defaultBranch", info.getDefaultBranch(), graphQLInfo.getRepository().getRootRef());
+                    info.setDefaultBranch(graphQLInfo.getRepository().getRootRef());
+                }
             }
         }
 
         // Also update from project basic data if available
-        if (project.getDefaultBranch() != null &&
-            !Objects.equals(info.getDefaultBranch(), project.getDefaultBranch())) {
-            change.addChange("defaultBranch", info.getDefaultBranch(), project.getDefaultBranch());
-            info.setDefaultBranch(project.getDefaultBranch());
+        if (project.getDefaultBranch() != null) {
+            boolean equals = Objects.equals(info.getDefaultBranch(), project.getDefaultBranch());
+            log.debug("[COMPARE] {} - defaultBranch (from project): DB=[{}], Project=[{}], equals={}",
+                    projectKey, info.getDefaultBranch(), project.getDefaultBranch(), equals);
+            if (!equals) {
+                change.addChange("defaultBranch", info.getDefaultBranch(), project.getDefaultBranch());
+                info.setDefaultBranch(project.getDefaultBranch());
+            }
         }
 
         // Return change only if there are actual changes
+        if (change.hasChanges()) {
+            log.debug("[COMPARE] {} - CHANGES DETECTED: {} field(s)", projectKey, change.getFieldChanges().size());
+        } else {
+            log.debug("[COMPARE] {} - NO CHANGES", projectKey);
+        }
         return change.hasChanges() ? change : null;
     }
 

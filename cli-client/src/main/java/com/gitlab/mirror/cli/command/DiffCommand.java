@@ -47,12 +47,18 @@ public class DiffCommand {
         }
     }
 
-    private void showSingleDiff(String projectKey) throws Exception {
-        OutputFormatter.printInfo("Fetching diff for project: " + projectKey);
+    private void showSingleDiff(String projectKeyOrId) throws Exception {
+        OutputFormatter.printInfo("Fetching diff for project: " + projectKeyOrId);
 
         // Build query parameters
         Map<String, String> params = new HashMap<>();
-        params.put("projectKey", projectKey);
+
+        // Check if input is numeric (ID) or string (key)
+        if (isNumeric(projectKeyOrId)) {
+            params.put("syncProjectId", projectKeyOrId);
+        } else {
+            params.put("projectKey", projectKeyOrId);
+        }
 
         // Call API
         ApiClient.ApiResponse<Map<String, Object>> response = apiClient.get(
@@ -73,6 +79,21 @@ public class DiffCommand {
         }
 
         printDiff(diff);
+    }
+
+    /**
+     * Check if string is numeric
+     */
+    private boolean isNumeric(String str) {
+        if (str == null || str.isEmpty()) {
+            return false;
+        }
+        try {
+            Long.parseLong(str);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -123,14 +144,18 @@ public class DiffCommand {
     @SuppressWarnings("unchecked")
     private void printDiffTable(List<Map<String, Object>> diffs) {
         System.out.println();
-        System.out.println("╔═══╦═══════════════════════════╦══════════════╦═══════════╦═══════╦═══════╦═══════════╗");
-        System.out.println("║   ║ Project Key               ║ Status       ║ Commit    ║ Δ Cmt ║ Δ Brn ║ Delay(m)  ║");
-        System.out.println("╠═══╬═══════════════════════════╬══════════════╬═══════════╬═══════╬═══════╬═══════════╣");
+        System.out.println("╔══════╦═══════════════════════════════════════════╦══════════════╦═══════════╦═══════╦═══════╦═══════════╗");
+        System.out.println("║ ID   ║ Project Key                               ║ Status       ║ Commit    ║ Δ Cmt ║ Δ Brn ║ Delay(m)  ║");
+        System.out.println("╠══════╬═══════════════════════════════════════════╬══════════════╬═══════════╬═══════╬═══════╬═══════════╣");
 
         for (Map<String, Object> diff : diffs) {
+            // Get project ID
+            Object syncProjectIdObj = diff.get("syncProjectId");
+            String projectId = syncProjectIdObj != null ? String.valueOf(((Number) syncProjectIdObj).longValue()) : "N/A";
+
             String status = (String) diff.get("status");
             String statusIcon = getStatusIcon(status);
-            String projectKey = truncate((String) diff.get("projectKey"), 25);
+            String projectKey = smartTruncate((String) diff.get("projectKey"), 45);
 
             Map<String, Object> diffDetails = (Map<String, Object>) diff.get("diff");
             String commitMatch = "N/A";
@@ -164,16 +189,20 @@ public class DiffCommand {
                 }
             }
 
-            System.out.printf("║ %s ║ %-25s ║ %-12s ║ %-9s ║ %-5s ║ %-5s ║ %-9s ║%n",
-                    statusIcon, projectKey, truncate(status, 12), commitMatch, commitDelta, branchDelta, delay);
+            System.out.printf("║ %s ║ %s ║ %-12s ║ %-9s ║ %-5s ║ %-5s ║ %-9s ║%n",
+                    String.format("%-4s", projectId),
+                    String.format("%-45s", projectKey),
+                    truncate(status, 12), commitMatch, commitDelta, branchDelta, delay);
         }
 
-        System.out.println("╚═══╩═══════════════════════════╩══════════════╩═══════════╩═══════╩═══════╩═══════════╝");
+        System.out.println("╚══════╩═══════════════════════════════════════════╩══════════════╩═══════════╩═══════╩═══════╩═══════════╝");
     }
 
     @SuppressWarnings("unchecked")
     private void printDiff(Map<String, Object> diff) {
         String projectKey = (String) diff.get("projectKey");
+        Object syncProjectIdObj = diff.get("syncProjectId");
+        String projectId = syncProjectIdObj != null ? String.valueOf(((Number) syncProjectIdObj).longValue()) : "N/A";
         String status = (String) diff.get("status");
         String checkedAt = (String) diff.get("checkedAt");
 
@@ -184,6 +213,7 @@ public class DiffCommand {
         System.out.println();
         System.out.println("╔════════════════════════════════════════════════════════════════════════════╗");
         System.out.printf("║ Project: %-66s ║%n", truncate(projectKey, 66));
+        System.out.printf("║ ID: %-71s ║%n", projectId);
         System.out.println("╠════════════════════════════════════════════════════════════════════════════╣");
 
         // Status
@@ -284,7 +314,7 @@ public class DiffCommand {
         Object shaMatchesObj = diffDetails.get("commitShaMatches");
         Object commitDeltaObj = diffDetails.get("commitBehind");
         Object branchDeltaObj = diffDetails.get("branchDiff");
-        Object sizeDeltaBytesObj = diffDetails.get("sizeDiffPercent");
+        Object sizeDiffPercentObj = diffDetails.get("sizeDiffPercent");
         Object delayMinutesObj = diffDetails.get("syncDelayMinutes");
 
         // SHA match
@@ -308,18 +338,48 @@ public class DiffCommand {
             System.out.printf("║   Branch Delta:   %s%-55d ║%n", sign, branchDelta);
         }
 
-        // Size delta
-        if (sizeDeltaBytesObj != null) {
-            Long sizeDeltaBytes = ((Number) sizeDeltaBytesObj).longValue();
-            String sizeStr = formatBytes(Math.abs(sizeDeltaBytes));
-            String sign = sizeDeltaBytes >= 0 ? "+" : "-";
-            System.out.printf("║   Size Delta:     %s%-55s ║%n", sign, sizeStr);
+        // Size diff percentage
+        if (sizeDiffPercentObj != null) {
+            Double sizeDiffPercent = ((Number) sizeDiffPercentObj).doubleValue();
+            System.out.printf("║   Size Diff:      %.2f%% %-48s ║%n", sizeDiffPercent, "");
         }
 
         // Sync delay
         if (delayMinutesObj != null) {
             Long delayMinutes = ((Number) delayMinutesObj).longValue();
             System.out.printf("║   Sync Delay:     %-52d min ║%n", delayMinutes);
+        }
+
+        // Analyze and show inconsistency reasons
+        boolean hasInconsistency = false;
+        StringBuilder reasons = new StringBuilder();
+
+        if (branchDeltaObj != null) {
+            Integer branchDelta = ((Number) branchDeltaObj).intValue();
+            if (Math.abs(branchDelta) > 0) {
+                hasInconsistency = true;
+                reasons.append("Branch count mismatch; ");
+            }
+        }
+
+        if (sizeDiffPercentObj != null) {
+            Double sizeDiffPercent = ((Number) sizeDiffPercentObj).doubleValue();
+            if (sizeDiffPercent > 10.0) {
+                hasInconsistency = true;
+                reasons.append(String.format("Size diff %.2f%% > 10%% threshold", sizeDiffPercent));
+            }
+        }
+
+        // Show inconsistency reason if exists
+        if (hasInconsistency && reasons.length() > 0) {
+            System.out.println("╠════════════════════════════════════════════════════════════════════════════╣");
+            System.out.println("║ ⚠️ Inconsistency Reason                                                   ║");
+            System.out.println("╠════════════════════════════════════════════════════════════════════════════╣");
+            String reasonStr = reasons.toString();
+            if (reasonStr.endsWith("; ")) {
+                reasonStr = reasonStr.substring(0, reasonStr.length() - 2);
+            }
+            System.out.printf("║   %s%-72s ║%n", "", reasonStr);
         }
     }
 
@@ -357,10 +417,45 @@ public class DiffCommand {
         return str.substring(0, maxLength - 3) + "...";
     }
 
+    /**
+     * Smart truncate - keep prefix and suffix, omit middle
+     * Prefix length = min(first group name length, 40% of total)
+     * Suffix gets remaining space
+     *
+     * Examples:
+     *   ai/test-rails-5  →  ai/test-rails-5  (no truncate)
+     *   test-integration-projects-deletion_scheduled-31/test-project-1765623228747-deletion_scheduled-15
+     *     →  test-integration-pr...tion_scheduled-15
+     */
+    private String smartTruncate(String projectKey, int maxLength) {
+        if (projectKey == null) return "";
+        if (projectKey.length() <= maxLength) return projectKey;
+
+        int availableSpace = maxLength - 3; // Reserve 3 chars for "..."
+
+        // Calculate prefix length: min(first group length, 40% of available space)
+        int maxPrefixLen = (int) (availableSpace * 0.4);
+        int prefixLen = maxPrefixLen;
+
+        // Try to preserve first-level group name (before first '/')
+        int firstSlash = projectKey.indexOf('/');
+        if (firstSlash > 0) {
+            // Prefix = min(first group length, 40%)
+            prefixLen = Math.min(firstSlash, maxPrefixLen);
+        }
+
+        int suffixLen = availableSpace - prefixLen;
+
+        String prefix = projectKey.substring(0, prefixLen);
+        String suffix = projectKey.substring(projectKey.length() - suffixLen);
+
+        return prefix + "..." + suffix;
+    }
+
     private void printUsage() {
         System.out.println("Usage:");
         System.out.println("  gitlab-mirror diff                     List all project diffs");
-        System.out.println("  gitlab-mirror diff <project-key>       Show single project diff");
+        System.out.println("  gitlab-mirror diff <project-key|id>    Show single project diff by key or ID");
         System.out.println();
         System.out.println("Options:");
         System.out.println("  --status=<status>   Filter by status (SYNCED|OUTDATED|FAILED|INCONSISTENT)");
@@ -371,5 +466,6 @@ public class DiffCommand {
         System.out.println("  gitlab-mirror diff");
         System.out.println("  gitlab-mirror diff --status=OUTDATED");
         System.out.println("  gitlab-mirror diff mygroup/myproject");
+        System.out.println("  gitlab-mirror diff 984");
     }
 }

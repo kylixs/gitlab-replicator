@@ -144,7 +144,7 @@ class SyncControllerTest {
 
         // When
         ResponseEntity<SyncController.ApiResponse<ProjectDiff>> response =
-                syncController.getProjectDiff("test/project");
+                syncController.getProjectDiff("test/project", null);
 
         // Then
         assertNotNull(response);
@@ -163,7 +163,7 @@ class SyncControllerTest {
 
         // When
         ResponseEntity<SyncController.ApiResponse<ProjectDiff>> response =
-                syncController.getProjectDiff("test/project");
+                syncController.getProjectDiff("test/project", null);
 
         // Then
         assertNotNull(response);
@@ -181,7 +181,7 @@ class SyncControllerTest {
 
         // When
         ResponseEntity<SyncController.ApiResponse<ProjectDiff>> response =
-                syncController.getProjectDiff("test/project");
+                syncController.getProjectDiff("test/project", null);
 
         // Then
         assertNotNull(response);

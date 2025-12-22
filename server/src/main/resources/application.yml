@@ -15,7 +15,7 @@ spring:
 
 # Server Configuration
 server:
-  port: ${API_PORT:8080}
+  port: ${API_PORT:9999}
   shutdown: graceful
 
 # Actuator Configuration

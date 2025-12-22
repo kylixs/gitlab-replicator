@@ -182,31 +182,46 @@ public class SyncController {
      * Get project diff
      *
      * GET /api/sync/diff?projectKey=devops/gitlab-mirror
+     * GET /api/sync/diff?syncProjectId=984
      */
     @GetMapping("/diff")
     public ResponseEntity<ApiResponse<ProjectDiff>> getProjectDiff(
-            @RequestParam String projectKey) {
-        log.info("Query project diff - projectKey: {}", projectKey);
+            @RequestParam(required = false) String projectKey,
+            @RequestParam(required = false) Long syncProjectId) {
+        log.info("Query project diff - projectKey: {}, syncProjectId: {}", projectKey, syncProjectId);
 
         try {
-            // Try to get from cache first
-            ProjectDiff cachedDiff = cacheManager.get("diff:" + projectKey);
-            if (cachedDiff != null) {
-                log.debug("Diff found in cache for project: {}", projectKey);
-                return ResponseEntity.ok(ApiResponse.success(cachedDiff));
-            }
+            SyncProject project = null;
 
-            // Calculate diff if not in cache
-            QueryWrapper<SyncProject> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("project_key", projectKey);
-            SyncProject project = syncProjectMapper.selectOne(queryWrapper);
+            // Query by syncProjectId first (if provided)
+            if (syncProjectId != null) {
+                project = syncProjectMapper.selectById(syncProjectId);
+                if (project != null) {
+                    projectKey = project.getProjectKey();
+                }
+            }
+            // Query by projectKey (if provided and not found by ID)
+            else if (projectKey != null && !projectKey.isEmpty()) {
+                // Try to get from cache first
+                ProjectDiff cachedDiff = cacheManager.get("diff:" + projectKey);
+                if (cachedDiff != null) {
+                    log.debug("Diff found in cache for project: {}", projectKey);
+                    return ResponseEntity.ok(ApiResponse.success(cachedDiff));
+                }
+
+                QueryWrapper<SyncProject> queryWrapper = new QueryWrapper<>();
+                queryWrapper.eq("project_key", projectKey);
+                project = syncProjectMapper.selectOne(queryWrapper);
+            } else {
+                return ResponseEntity.ok(ApiResponse.error("Either projectKey or syncProjectId must be provided"));
+            }
 
             if (project == null) {
                 return ResponseEntity.ok(ApiResponse.error("Project not found"));
             }
 
             ProjectDiff diff = diffCalculator.calculateDiff(project.getId());
-            if (diff != null) {
+            if (diff != null && projectKey != null) {
                 // Cache the result
                 cacheManager.put("diff:" + projectKey, diff, 15);
             }

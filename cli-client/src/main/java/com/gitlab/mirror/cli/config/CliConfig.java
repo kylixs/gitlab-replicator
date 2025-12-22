@@ -72,6 +72,30 @@ public class CliConfig {
     }
 
     /**
+     * Resolve variables in string (e.g., ${API_PORT} -> 9999)
+     */
+    private static String resolveVariables(String value, Properties props) {
+        if (value == null || value.isEmpty()) {
+            return value;
+        }
+
+        // Match ${VAR_NAME} pattern
+        String result = value;
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\$\\{([^}]+)\\}");
+        java.util.regex.Matcher matcher = pattern.matcher(value);
+
+        while (matcher.find()) {
+            String varName = matcher.group(1);
+            String varValue = props.getProperty(varName);
+            if (varValue != null) {
+                result = result.replace("${" + varName + "}", varValue);
+            }
+        }
+
+        return result;
+    }
+
+    /**
      * Load configuration from properties file
      */
     private static void loadFromPropertiesFile(CliConfig config, Path path) {
@@ -79,10 +103,10 @@ public class CliConfig {
         try (FileInputStream fis = new FileInputStream(path.toFile())) {
             props.load(fis);
 
-            String apiUrl = props.getProperty("GITLAB_MIRROR_API_URL");
-            if (apiUrl != null && !apiUrl.isEmpty()) {
-                config.setApiBaseUrl(apiUrl);
-            }
+            // Read and resolve API URL with variable substitution
+            String apiUrl = props.getProperty("GITLAB_MIRROR_API_URL", "http://localhost:9999");
+            apiUrl = resolveVariables(apiUrl, props);
+            config.setApiBaseUrl(apiUrl);
 
             String token = props.getProperty("GITLAB_MIRROR_TOKEN");
             if (token != null && !token.isEmpty()) {
@@ -133,10 +157,10 @@ public class CliConfig {
                 props.setProperty("GITLAB_MIRROR_TOKEN", props.getProperty("SOURCE_GITLAB_TOKEN"));
             }
 
-            String apiUrl = props.getProperty("GITLAB_MIRROR_API_URL");
-            if (apiUrl != null && !apiUrl.isEmpty()) {
-                config.setApiBaseUrl(apiUrl);
-            }
+            // Read and resolve API URL with variable substitution
+            String apiUrl = props.getProperty("GITLAB_MIRROR_API_URL", "http://localhost:9999");
+            apiUrl = resolveVariables(apiUrl, props);
+            config.setApiBaseUrl(apiUrl);
 
             String token = props.getProperty("GITLAB_MIRROR_TOKEN");
             if (token != null && !token.isEmpty()) {
