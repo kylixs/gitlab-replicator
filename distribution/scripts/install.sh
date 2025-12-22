@@ -23,6 +23,16 @@ SYSTEMD_SERVICE_FILE="/etc/systemd/system/gitlab-mirror-server.service"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Function to determine installation directory
+get_install_dir() {
+    # For non-installation commands, check if already installed
+    if [ -d "/opt/gitlab-mirror" ]; then
+        echo "/opt/gitlab-mirror"
+    else
+        echo "$APP_HOME"
+    fi
+}
+
 # Function to generate random API key
 generate_api_key() {
     # Try different methods to generate a secure random key
@@ -106,11 +116,7 @@ if [ "$1" = "--create-env" ]; then
     echo ""
 
     # Determine installation directory
-    if [ -d "/opt/gitlab-mirror" ]; then
-        INSTALL_DIR="/opt/gitlab-mirror"
-    else
-        INSTALL_DIR="$APP_HOME"
-    fi
+    INSTALL_DIR=$(get_install_dir)
 
     # Create .env from template (with confirmation if exists)
     create_env_from_template
@@ -126,12 +132,7 @@ if [ "$1" = "--regenerate-api-key" ]; then
     echo ""
 
     # Determine installation directory
-    if [ -d "/opt/gitlab-mirror" ]; then
-        INSTALL_DIR="/opt/gitlab-mirror"
-    else
-        INSTALL_DIR="$APP_HOME"
-    fi
-
+    INSTALL_DIR=$(get_install_dir)
     ENV_FILE="$INSTALL_DIR/conf/.env"
 
     # Check if .env exists
