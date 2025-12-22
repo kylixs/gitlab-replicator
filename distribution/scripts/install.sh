@@ -23,10 +23,100 @@ SYSTEMD_SERVICE_FILE="/etc/systemd/system/gitlab-mirror-server.service"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Function to generate random API key
+generate_api_key() {
+    # Try different methods to generate a secure random key
+    if command -v openssl &> /dev/null; then
+        openssl rand -hex 32
+    elif command -v uuidgen &> /dev/null; then
+        # Use UUID without dashes
+        uuidgen | tr -d '-'
+    else
+        # Fallback: use /dev/urandom
+        cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 64 | head -n 1
+    fi
+}
+
+# Function to replace API key in .env file
+replace_api_key_in_env() {
+    local ENV_FILE="$1"
+    local API_KEY="$2"
+
+    # Backup existing .env
+    cp "$ENV_FILE" "$ENV_FILE.backup.$(date +%Y%m%d%H%M%S)"
+
+    # Replace GITLAB_MIRROR_API_KEY line with new key
+    sed -i.bak "/^GITLAB_MIRROR_API_KEY=/c\\GITLAB_MIRROR_API_KEY=$API_KEY" "$ENV_FILE"
+    rm -f "$ENV_FILE.bak"
+
+    echo -e "${GREEN}✓${NC} Replaced API key: ${API_KEY:0:16}..."
+}
+
+# Function to create .env from template
+create_env_from_template() {
+    local ENV_FILE="$INSTALL_DIR/conf/.env"
+    local ENV_EXAMPLE="$INSTALL_DIR/conf/.env.example"
+
+    if [ ! -f "$ENV_EXAMPLE" ]; then
+        echo -e "${RED}Error: Template file not found: $ENV_EXAMPLE${NC}"
+        return 1
+    fi
+
+    # Copy template
+    cp "$ENV_EXAMPLE" "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
+
+    echo -e "${GREEN}✓${NC} Created .env from template"
+
+    # Generate and replace API key
+    local API_KEY=$(generate_api_key)
+    sed -i.bak "/^GITLAB_MIRROR_API_KEY=/c\\GITLAB_MIRROR_API_KEY=$API_KEY" "$ENV_FILE"
+    rm -f "$ENV_FILE.bak"
+
+    echo -e "${GREEN}✓${NC} Generated secure API key: ${API_KEY:0:16}..."
+    echo ""
+    echo -e "${YELLOW}Important:${NC}"
+    echo "  - Configuration file: $ENV_FILE"
+    echo "  - File permissions: 600 (read/write for owner only)"
+    echo "  - Please edit to configure:"
+    echo "    * Database credentials (DB_HOST, DB_PASSWORD, etc.)"
+    echo "    * GitLab URLs and tokens (SOURCE_GITLAB_URL, TARGET_GITLAB_URL, etc.)"
+}
+
 echo "======================================"
 echo "  GitLab Mirror Installation Script"
 echo "======================================"
 echo ""
+
+# Check for regenerate API key mode
+if [ "$1" = "--regenerate-api-key" ]; then
+    echo "Regenerating API key..."
+    echo ""
+
+    # Determine installation directory
+    if [ -d "/opt/gitlab-mirror" ]; then
+        INSTALL_DIR="/opt/gitlab-mirror"
+    else
+        INSTALL_DIR="$APP_HOME"
+    fi
+
+    ENV_FILE="$INSTALL_DIR/conf/.env"
+
+    # Check if .env exists
+    if [ ! -f "$ENV_FILE" ]; then
+        echo -e "${RED}Error: .env file not found: $ENV_FILE${NC}"
+        echo "Please run installation first or create .env from template"
+        exit 1
+    fi
+
+    # Generate new API key and replace
+    NEW_API_KEY=$(generate_api_key)
+    replace_api_key_in_env "$ENV_FILE" "$NEW_API_KEY"
+
+    echo ""
+    echo -e "${YELLOW}Important: Restart the server to apply changes${NC}"
+    exit 0
+fi
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
@@ -102,13 +192,16 @@ fi
 mkdir -p "$INSTALL_DIR"
 rsync -av --exclude='distribution' "$APP_HOME/" "$INSTALL_DIR/"
 
-# Create .env from example if not exists
-if [ ! -f "$INSTALL_DIR/conf/.env" ]; then
-    if [ -f "$INSTALL_DIR/conf/.env.example" ]; then
-        cp "$INSTALL_DIR/conf/.env.example" "$INSTALL_DIR/conf/.env"
-        echo -e "${GREEN}✓${NC} Created conf/.env from template"
-        echo -e "${YELLOW}  Please edit $INSTALL_DIR/conf/.env with your configuration${NC}"
-    fi
+# Generate .env configuration file
+echo ""
+echo "Setting up configuration file..."
+if [ -f "$INSTALL_DIR/conf/.env" ]; then
+    echo -e "${YELLOW}Configuration file already exists, keeping it${NC}"
+    echo "  File: $INSTALL_DIR/conf/.env"
+    echo "  To regenerate API key: $0 --regenerate-api-key"
+else
+    # Create .env from template
+    create_env_from_template
 fi
 
 # Set ownership
