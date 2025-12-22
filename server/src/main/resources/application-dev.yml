@@ -45,6 +45,9 @@ gitlab:
     max-retries: 3
     retry-delay: 1000
   mirror:
+    # API Authentication (independent from GitLab tokens)
+    api:
+      key: ${GITLAB_MIRROR_API_KEY:dev-api-key-change-in-production}
     source:
       url: ${SOURCE_GITLAB_URL:http://localhost:8000}
       token: ${SOURCE_GITLAB_TOKEN:glpat-QfaqawuLrzcPfJ3oEgiStG86MQp1OjEH.01.0w01363lq}

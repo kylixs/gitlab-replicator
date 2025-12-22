@@ -49,6 +49,9 @@ gitlab:
     max-retries: 3
     retry-delay: 1000
   mirror:
+    # API Authentication (independent from GitLab tokens)
+    api:
+      key: ${GITLAB_MIRROR_API_KEY:default-api-key-change-in-production}
     monitor:
       # Incremental scan interval (milliseconds)
       incremental-interval: 300000  # 5 minutes

@@ -60,10 +60,9 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private boolean isValidToken(String token) {
-        // For MVP, we use a simple token validation
-        // In production, you should use JWT or OAuth2
-        String apiToken = properties.getSource().getToken();
-        return apiToken != null && apiToken.equals(token);
+        // Validate against independent API key (not GitLab tokens)
+        String apiKey = properties.getApi().getKey();
+        return apiKey != null && apiKey.equals(token);
     }
 
     private void sendUnauthorizedResponse(HttpServletResponse response, String message) throws IOException {

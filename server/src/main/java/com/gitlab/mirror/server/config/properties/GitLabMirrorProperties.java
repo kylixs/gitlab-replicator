@@ -45,6 +45,12 @@ public class GitLabMirrorProperties {
     private PerformanceConfig performance = new PerformanceConfig();
 
     /**
+     * API Configuration
+     */
+    @Valid
+    private ApiConfig api = new ApiConfig();
+
+    /**
      * GitLab Instance Configuration
      */
     @Data
@@ -227,5 +233,18 @@ public class GitLabMirrorProperties {
          * API rate limit delay in milliseconds
          */
         private Integer apiRateLimitDelay = 100;
+    }
+
+    /**
+     * API Configuration
+     */
+    @Data
+    public static class ApiConfig {
+        /**
+         * API authentication key
+         * Independent from GitLab access tokens
+         */
+        @NotBlank(message = "API key is required")
+        private String key;
     }
 }
