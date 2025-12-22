@@ -13,25 +13,28 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Configuration
-INSTALL_DIR="/opt/gitlab-mirror"
-SERVICE_USER="gitlab-mirror"
-SERVICE_GROUP="gitlab-mirror"
-SYSTEMD_SERVICE_FILE="/etc/systemd/system/gitlab-mirror-server.service"
-
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Function to determine installation directory
-get_install_dir() {
-    # For non-installation commands, check if already installed
-    if [ -d "/opt/gitlab-mirror" ]; then
-        echo "/opt/gitlab-mirror"
-    else
-        echo "$APP_HOME"
-    fi
-}
+# Configuration - default values
+DEFAULT_INSTALL_DIR="/opt/gitlab-mirror"
+SERVICE_USER="gitlab-mirror"
+SERVICE_GROUP="gitlab-mirror"
+SYSTEMD_SERVICE_FILE="/etc/systemd/system/gitlab-mirror-server.service"
+
+# Determine installation directory
+# Priority: 1. User specified (environment variable GITLAB_MIRROR_INSTALL_DIR)
+#          2. Default installation directory
+if [ -n "$GITLAB_MIRROR_INSTALL_DIR" ]; then
+    # User specified via environment variable
+    INSTALL_DIR="$GITLAB_MIRROR_INSTALL_DIR"
+else
+    # Use default installation directory
+    INSTALL_DIR="$DEFAULT_INSTALL_DIR"
+fi
+
+echo "INSTALL_DIR: $INSTALL_DIR"
 
 # Function to generate random API key
 generate_api_key() {
@@ -115,9 +118,6 @@ if [ "$1" = "--create-env" ]; then
     echo "Creating .env configuration file..."
     echo ""
 
-    # Determine installation directory
-    INSTALL_DIR=$(get_install_dir)
-
     # Create .env from template (with confirmation if exists)
     create_env_from_template
 
@@ -131,8 +131,6 @@ if [ "$1" = "--regenerate-api-key" ]; then
     echo "Regenerating API key..."
     echo ""
 
-    # Determine installation directory
-    INSTALL_DIR=$(get_install_dir)
     ENV_FILE="$INSTALL_DIR/conf/.env"
 
     # Check if .env exists
