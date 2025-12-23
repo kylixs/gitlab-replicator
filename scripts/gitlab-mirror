@@ -295,6 +295,9 @@ show_usage() {
     echo "  gitlab-mirror diff                 List all project diffs"
     echo "  gitlab-mirror diff <project-key>   Show single project diff details"
     echo ""
+    echo -e "${YELLOW}Branch Commands:${NC}"
+    echo "  gitlab-mirror branches <project-key> Show branch comparison for project"
+    echo ""
     echo -e "${YELLOW}Help:${NC}"
     echo "  gitlab-mirror help                 Show this help message"
     echo "  gitlab-mirror version              Show version information"
@@ -337,7 +340,7 @@ main() {
             shift
             show_logs "$@"
             ;;
-        projects|mirrors|mirror|events|discover|export|compensate|sync|pull|task|scheduler|webhook|monitor|scan|diff)
+        projects|mirrors|mirror|events|discover|export|compensate|sync|pull|task|scheduler|webhook|monitor|scan|diff|branches)
             execute_cli_command "$@"
             ;;
         help|--help|-h)

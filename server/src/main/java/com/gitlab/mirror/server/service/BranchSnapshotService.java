@@ -119,7 +119,7 @@ public class BranchSnapshotService {
             snapshot.setProjectType(projectType);
             snapshot.setBranchName(branch.getName());
             snapshot.setCommitSha(branch.getCommit() != null ? branch.getCommit().getId() : null);
-            snapshot.setCommitMessage(branch.getCommit() != null ? branch.getCommit().getMessage() : null);
+            snapshot.setCommitMessage(extractCommitTitle(branch.getCommit() != null ? branch.getCommit().getMessage() : null));
             snapshot.setCommitAuthor(branch.getCommit() != null && branch.getCommit().getAuthorName() != null
                 ? branch.getCommit().getAuthorName() : null);
 
@@ -171,5 +171,27 @@ public class BranchSnapshotService {
      */
     public int countBranches(Long syncProjectId, String projectType) {
         return branchSnapshotMapper.countByProject(syncProjectId, projectType);
+    }
+
+    /**
+     * Extract commit title (first line) from commit message and truncate if too long
+     *
+     * @param commitMessage Full commit message
+     * @return Commit title (first line, max 200 chars)
+     */
+    private String extractCommitTitle(String commitMessage) {
+        if (commitMessage == null || commitMessage.isEmpty()) {
+            return null;
+        }
+
+        // Extract first line
+        String firstLine = commitMessage.split("\n")[0].trim();
+
+        // Truncate if too long (max 200 chars)
+        if (firstLine.length() > 200) {
+            return firstLine.substring(0, 197) + "...";
+        }
+
+        return firstLine;
     }
 }

@@ -80,17 +80,20 @@ case "$COMMAND" in
 
         log "Updating from source: $(mask_url "$SOURCE_URL")"
 
-        # Update from source using fetch --mirror to ensure all branches are synced
-        # This ensures new branches created in source are properly tracked and synced
-        git fetch --mirror
+        # Update from source using fetch to ensure all branches (including new ones) are synced
+        # --prune removes remote-tracking refs that no longer exist on the remote
+        git fetch origin --prune
 
         log "Pushing to target: $(mask_url "$TARGET_URL")"
 
         # Set push URL
         git remote set-url --push origin "$TARGET_URL"
 
-        # Push to target
-        git push --mirror
+        # Push all branches and tags to target
+        # Note: We use --all and --tags instead of --mirror to avoid pushing hidden refs (like pipeline refs)
+        # which would be rejected by the target GitLab instance
+        git push --all origin --force
+        git push --tags origin --force
 
         # Get final SHA
         FINAL_SHA=$(git rev-parse HEAD)

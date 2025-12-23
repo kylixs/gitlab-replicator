@@ -86,6 +86,9 @@ public class GitLabMirrorCli {
                 case "diff":
                     new DiffCommand(apiClient).execute(commandArgs);
                     break;
+                case "branches":
+                    new BranchesCommand(apiClient).execute(commandArgs);
+                    break;
                 case "help":
                 case "--help":
                 case "-h":
@@ -145,6 +148,9 @@ public class GitLabMirrorCli {
         System.out.println("  diff                  List all project diffs");
         System.out.println("  diff <project-key>    Show single project diff details");
         System.out.println();
+        System.out.println(OutputFormatter.YELLOW + "Branch Commands:" + OutputFormatter.RESET);
+        System.out.println("  branches <project-key> Show branch comparison for project");
+        System.out.println();
         System.out.println(OutputFormatter.YELLOW + "General Commands:" + OutputFormatter.RESET);
         System.out.println("  help                  Show this help message");
         System.out.println("  version               Show version information");
@@ -161,6 +167,7 @@ public class GitLabMirrorCli {
         System.out.println("  gitlab-mirror diff");
         System.out.println("  gitlab-mirror diff --status=OUTDATED");
         System.out.println("  gitlab-mirror diff mygroup/myproject");
+        System.out.println("  gitlab-mirror branches ai/test-android-app-3");
         System.out.println();
         System.out.println(OutputFormatter.YELLOW + "Environment Variables:" + OutputFormatter.RESET);
         System.out.println("  GITLAB_MIRROR_API_URL      API base URL (default: http://localhost:9999)");

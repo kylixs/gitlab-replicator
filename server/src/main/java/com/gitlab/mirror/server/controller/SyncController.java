@@ -1,7 +1,9 @@
 package com.gitlab.mirror.server.controller;
 
+import com.gitlab.mirror.server.entity.ProjectBranchSnapshot;
 import com.gitlab.mirror.server.entity.SyncProject;
 import com.gitlab.mirror.server.mapper.SyncProjectMapper;
+import com.gitlab.mirror.server.service.BranchSnapshotService;
 import com.gitlab.mirror.server.service.monitor.DiffCalculator;
 import com.gitlab.mirror.server.service.monitor.LocalCacheManager;
 import com.gitlab.mirror.server.service.monitor.UnifiedProjectMonitor;
@@ -14,9 +16,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Sync Controller
@@ -34,16 +36,19 @@ public class SyncController {
     private final SyncProjectMapper syncProjectMapper;
     private final DiffCalculator diffCalculator;
     private final LocalCacheManager cacheManager;
+    private final BranchSnapshotService branchSnapshotService;
 
     public SyncController(
             UnifiedProjectMonitor unifiedProjectMonitor,
             SyncProjectMapper syncProjectMapper,
             DiffCalculator diffCalculator,
-            LocalCacheManager cacheManager) {
+            LocalCacheManager cacheManager,
+            BranchSnapshotService branchSnapshotService) {
         this.unifiedProjectMonitor = unifiedProjectMonitor;
         this.syncProjectMapper = syncProjectMapper;
         this.diffCalculator = diffCalculator;
         this.cacheManager = cacheManager;
+        this.branchSnapshotService = branchSnapshotService;
     }
 
     /**
@@ -231,6 +236,187 @@ public class SyncController {
             log.error("Query project diff failed", e);
             return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
         }
+    }
+
+    /**
+     * Get project branches comparison
+     *
+     * GET /api/sync/branches?projectKey=ai/test-android-app-3
+     * GET /api/sync/branches?syncProjectId=986
+     */
+    @GetMapping("/branches")
+    public ResponseEntity<ApiResponse<BranchComparisonResult>> getProjectBranches(
+            @RequestParam(required = false) String projectKey,
+            @RequestParam(required = false) Long syncProjectId) {
+        log.info("Query project branches - projectKey: {}, syncProjectId: {}", projectKey, syncProjectId);
+
+        try {
+            SyncProject project = null;
+
+            // Query by syncProjectId first (if provided)
+            if (syncProjectId != null) {
+                project = syncProjectMapper.selectById(syncProjectId);
+                if (project != null) {
+                    projectKey = project.getProjectKey();
+                }
+            }
+            // Query by projectKey (if provided and not found by ID)
+            else if (projectKey != null && !projectKey.isEmpty()) {
+                QueryWrapper<SyncProject> queryWrapper = new QueryWrapper<>();
+                queryWrapper.eq("project_key", projectKey);
+                project = syncProjectMapper.selectOne(queryWrapper);
+            } else {
+                return ResponseEntity.ok(ApiResponse.error("Either projectKey or syncProjectId must be provided"));
+            }
+
+            if (project == null) {
+                return ResponseEntity.ok(ApiResponse.error("Project not found"));
+            }
+
+            // Get source and target branch snapshots
+            List<ProjectBranchSnapshot> sourceBranches = branchSnapshotService.getBranchSnapshots(project.getId(), "source");
+            List<ProjectBranchSnapshot> targetBranches = branchSnapshotService.getBranchSnapshots(project.getId(), "target");
+
+            // Build comparison result
+            BranchComparisonResult result = compareBranches(project, sourceBranches, targetBranches);
+
+            return ResponseEntity.ok(ApiResponse.success(result));
+        } catch (Exception e) {
+            log.error("Query project branches failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Compare source and target branches
+     */
+    private BranchComparisonResult compareBranches(
+            SyncProject project,
+            List<ProjectBranchSnapshot> sourceBranches,
+            List<ProjectBranchSnapshot> targetBranches) {
+
+        BranchComparisonResult result = new BranchComparisonResult();
+        result.setProjectKey(project.getProjectKey());
+        result.setSyncProjectId(project.getId());
+        result.setSourceBranchCount(sourceBranches.size());
+        result.setTargetBranchCount(targetBranches.size());
+
+        // Build maps for quick lookup
+        Map<String, ProjectBranchSnapshot> sourceMap = sourceBranches.stream()
+                .collect(Collectors.toMap(ProjectBranchSnapshot::getBranchName, b -> b));
+        Map<String, ProjectBranchSnapshot> targetMap = targetBranches.stream()
+                .collect(Collectors.toMap(ProjectBranchSnapshot::getBranchName, b -> b));
+
+        List<BranchInfo> branches = new ArrayList<>();
+
+        // Process source branches
+        for (ProjectBranchSnapshot source : sourceBranches) {
+            ProjectBranchSnapshot target = targetMap.get(source.getBranchName());
+            BranchInfo info = new BranchInfo();
+            info.setBranchName(source.getBranchName());
+            info.setSourceCommitSha(source.getCommitSha());
+            info.setSourceCommitMessage(source.getCommitMessage());
+            info.setSourceCommitAuthor(source.getCommitAuthor());
+            info.setSourceCommittedAt(source.getCommittedAt());
+            info.setIsDefault(source.getIsDefault());
+            info.setIsProtected(source.getIsProtected());
+
+            if (target != null) {
+                info.setTargetCommitSha(target.getCommitSha());
+                info.setTargetCommitMessage(target.getCommitMessage());
+                info.setTargetCommitAuthor(target.getCommitAuthor());
+                info.setTargetCommittedAt(target.getCommittedAt());
+
+                // Determine status
+                if (source.getCommitSha() != null && source.getCommitSha().equals(target.getCommitSha())) {
+                    info.setStatus("synced");
+                } else {
+                    info.setStatus("outdated");
+                }
+            } else {
+                info.setStatus("missing_in_target");
+            }
+
+            branches.add(info);
+        }
+
+        // Find branches only in target
+        for (ProjectBranchSnapshot target : targetBranches) {
+            if (!sourceMap.containsKey(target.getBranchName())) {
+                BranchInfo info = new BranchInfo();
+                info.setBranchName(target.getBranchName());
+                info.setTargetCommitSha(target.getCommitSha());
+                info.setTargetCommitMessage(target.getCommitMessage());
+                info.setTargetCommitAuthor(target.getCommitAuthor());
+                info.setTargetCommittedAt(target.getCommittedAt());
+                info.setStatus("extra_in_target");
+                branches.add(info);
+            }
+        }
+
+        // Sort branches: default first, then alphabetically
+        branches.sort((a, b) -> {
+            if (Boolean.TRUE.equals(a.getIsDefault()) && !Boolean.TRUE.equals(b.getIsDefault())) {
+                return -1;
+            } else if (!Boolean.TRUE.equals(a.getIsDefault()) && Boolean.TRUE.equals(b.getIsDefault())) {
+                return 1;
+            }
+            return a.getBranchName().compareTo(b.getBranchName());
+        });
+
+        result.setBranches(branches);
+
+        // Count differences
+        long syncedCount = branches.stream().filter(b -> "synced".equals(b.getStatus())).count();
+        long outdatedCount = branches.stream().filter(b -> "outdated".equals(b.getStatus())).count();
+        long missingCount = branches.stream().filter(b -> "missing_in_target".equals(b.getStatus())).count();
+        long extraCount = branches.stream().filter(b -> "extra_in_target".equals(b.getStatus())).count();
+
+        result.setSyncedCount((int) syncedCount);
+        result.setOutdatedCount((int) outdatedCount);
+        result.setMissingInTargetCount((int) missingCount);
+        result.setExtraInTargetCount((int) extraCount);
+
+        return result;
+    }
+
+    /**
+     * Branch comparison result
+     */
+    @Data
+    public static class BranchComparisonResult {
+        private String projectKey;
+        private Long syncProjectId;
+        private Integer sourceBranchCount;
+        private Integer targetBranchCount;
+        private Integer syncedCount;
+        private Integer outdatedCount;
+        private Integer missingInTargetCount;
+        private Integer extraInTargetCount;
+        private List<BranchInfo> branches;
+    }
+
+    /**
+     * Branch info
+     */
+    @Data
+    public static class BranchInfo {
+        private String branchName;
+        private String status; // synced, outdated, missing_in_target, extra_in_target
+        private Boolean isDefault;
+        private Boolean isProtected;
+
+        // Source branch info
+        private String sourceCommitSha;
+        private String sourceCommitMessage;
+        private String sourceCommitAuthor;
+        private LocalDateTime sourceCommittedAt;
+
+        // Target branch info
+        private String targetCommitSha;
+        private String targetCommitMessage;
+        private String targetCommitAuthor;
+        private LocalDateTime targetCommittedAt;
     }
 
     /**
