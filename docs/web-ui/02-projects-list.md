@@ -94,7 +94,7 @@ GET /api/sync/projects/groups
 ---
 
 ### T2.2 后端 API - 批量操作
-**状态**: ⏸️ 待处理
+**状态**: ✅ 已完成 (Completed)
 **依赖**: T2.1
 
 **任务目标**:

@@ -8,6 +8,7 @@ import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
 import com.gitlab.mirror.server.mapper.SyncProjectMapper;
 import com.gitlab.mirror.server.service.BranchSnapshotService;
 import com.gitlab.mirror.server.service.ProjectListService;
+import com.gitlab.mirror.server.service.PullSyncExecutorService;
 import com.gitlab.mirror.server.service.monitor.DiffCalculator;
 import com.gitlab.mirror.server.service.monitor.LocalCacheManager;
 import com.gitlab.mirror.server.service.monitor.UnifiedProjectMonitor;
@@ -43,6 +44,7 @@ public class SyncController {
     private final BranchSnapshotService branchSnapshotService;
     private final ProjectListService projectListService;
     private final SourceProjectInfoMapper sourceProjectInfoMapper;
+    private final PullSyncExecutorService pullSyncExecutorService;
 
     public SyncController(
             UnifiedProjectMonitor unifiedProjectMonitor,
@@ -51,7 +53,8 @@ public class SyncController {
             LocalCacheManager cacheManager,
             BranchSnapshotService branchSnapshotService,
             ProjectListService projectListService,
-            SourceProjectInfoMapper sourceProjectInfoMapper) {
+            SourceProjectInfoMapper sourceProjectInfoMapper,
+            PullSyncExecutorService pullSyncExecutorService) {
         this.unifiedProjectMonitor = unifiedProjectMonitor;
         this.syncProjectMapper = syncProjectMapper;
         this.diffCalculator = diffCalculator;
@@ -59,6 +62,7 @@ public class SyncController {
         this.branchSnapshotService = branchSnapshotService;
         this.projectListService = projectListService;
         this.sourceProjectInfoMapper = sourceProjectInfoMapper;
+        this.pullSyncExecutorService = pullSyncExecutorService;
     }
 
     /**
@@ -561,5 +565,202 @@ public class SyncController {
         private Long total;
         private Integer page;
         private Integer size;
+    }
+
+    /**
+     * Batch trigger sync for multiple projects
+     *
+     * POST /api/sync/projects/batch-sync
+     */
+    @PostMapping("/projects/batch-sync")
+    public ResponseEntity<ApiResponse<BatchOperationResult>> batchTriggerSync(
+            @RequestBody BatchOperationRequest request) {
+        log.info("Batch trigger sync - projectIds: {}", request.getProjectIds());
+
+        try {
+            BatchOperationResult result = new BatchOperationResult();
+            List<String> successList = new ArrayList<>();
+            List<String> failedList = new ArrayList<>();
+
+            for (Long projectId : request.getProjectIds()) {
+                try {
+                    SyncProject project = syncProjectMapper.selectById(projectId);
+                    if (project == null) {
+                        failedList.add("Project ID " + projectId + " not found");
+                        continue;
+                    }
+
+                    // Trigger sync asynchronously
+                    pullSyncExecutorService.executePullSync(project.getProjectKey());
+                    successList.add(project.getProjectKey());
+                } catch (Exception e) {
+                    failedList.add("Project ID " + projectId + ": " + e.getMessage());
+                }
+            }
+
+            result.setTotal(request.getProjectIds().size());
+            result.setSuccess(successList.size());
+            result.setFailed(failedList.size());
+            result.setSuccessList(successList);
+            result.setFailedList(failedList);
+
+            return ResponseEntity.ok(ApiResponse.success(result));
+        } catch (Exception e) {
+            log.error("Batch trigger sync failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Batch operation failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Batch pause projects
+     *
+     * POST /api/sync/projects/batch-pause
+     */
+    @PostMapping("/projects/batch-pause")
+    public ResponseEntity<ApiResponse<BatchOperationResult>> batchPause(
+            @RequestBody BatchOperationRequest request) {
+        log.info("Batch pause projects - projectIds: {}", request.getProjectIds());
+
+        try {
+            BatchOperationResult result = new BatchOperationResult();
+            List<String> successList = new ArrayList<>();
+            List<String> failedList = new ArrayList<>();
+
+            for (Long projectId : request.getProjectIds()) {
+                try {
+                    SyncProject project = syncProjectMapper.selectById(projectId);
+                    if (project == null) {
+                        failedList.add("Project ID " + projectId + " not found");
+                        continue;
+                    }
+
+                    project.setEnabled(false);
+                    project.setSyncStatus("paused");
+                    syncProjectMapper.updateById(project);
+                    successList.add(project.getProjectKey());
+                } catch (Exception e) {
+                    failedList.add("Project ID " + projectId + ": " + e.getMessage());
+                }
+            }
+
+            result.setTotal(request.getProjectIds().size());
+            result.setSuccess(successList.size());
+            result.setFailed(failedList.size());
+            result.setSuccessList(successList);
+            result.setFailedList(failedList);
+
+            return ResponseEntity.ok(ApiResponse.success(result));
+        } catch (Exception e) {
+            log.error("Batch pause failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Batch operation failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Batch resume projects
+     *
+     * POST /api/sync/projects/batch-resume
+     */
+    @PostMapping("/projects/batch-resume")
+    public ResponseEntity<ApiResponse<BatchOperationResult>> batchResume(
+            @RequestBody BatchOperationRequest request) {
+        log.info("Batch resume projects - projectIds: {}", request.getProjectIds());
+
+        try {
+            BatchOperationResult result = new BatchOperationResult();
+            List<String> successList = new ArrayList<>();
+            List<String> failedList = new ArrayList<>();
+
+            for (Long projectId : request.getProjectIds()) {
+                try {
+                    SyncProject project = syncProjectMapper.selectById(projectId);
+                    if (project == null) {
+                        failedList.add("Project ID " + projectId + " not found");
+                        continue;
+                    }
+
+                    project.setEnabled(true);
+                    project.setSyncStatus("active");
+                    syncProjectMapper.updateById(project);
+                    successList.add(project.getProjectKey());
+                } catch (Exception e) {
+                    failedList.add("Project ID " + projectId + ": " + e.getMessage());
+                }
+            }
+
+            result.setTotal(request.getProjectIds().size());
+            result.setSuccess(successList.size());
+            result.setFailed(failedList.size());
+            result.setSuccessList(successList);
+            result.setFailedList(failedList);
+
+            return ResponseEntity.ok(ApiResponse.success(result));
+        } catch (Exception e) {
+            log.error("Batch resume failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Batch operation failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Batch delete projects
+     *
+     * POST /api/sync/projects/batch-delete
+     */
+    @PostMapping("/projects/batch-delete")
+    public ResponseEntity<ApiResponse<BatchOperationResult>> batchDelete(
+            @RequestBody BatchOperationRequest request) {
+        log.info("Batch delete projects - projectIds: {}", request.getProjectIds());
+
+        try {
+            BatchOperationResult result = new BatchOperationResult();
+            List<String> successList = new ArrayList<>();
+            List<String> failedList = new ArrayList<>();
+
+            for (Long projectId : request.getProjectIds()) {
+                try {
+                    SyncProject project = syncProjectMapper.selectById(projectId);
+                    if (project == null) {
+                        failedList.add("Project ID " + projectId + " not found");
+                        continue;
+                    }
+
+                    syncProjectMapper.deleteById(projectId);
+                    successList.add(project.getProjectKey());
+                } catch (Exception e) {
+                    failedList.add("Project ID " + projectId + ": " + e.getMessage());
+                }
+            }
+
+            result.setTotal(request.getProjectIds().size());
+            result.setSuccess(successList.size());
+            result.setFailed(failedList.size());
+            result.setSuccessList(successList);
+            result.setFailedList(failedList);
+
+            return ResponseEntity.ok(ApiResponse.success(result));
+        } catch (Exception e) {
+            log.error("Batch delete failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Batch operation failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Batch operation request
+     */
+    @Data
+    public static class BatchOperationRequest {
+        private List<Long> projectIds;
+    }
+
+    /**
+     * Batch operation result
+     */
+    @Data
+    public static class BatchOperationResult {
+        private Integer total;
+        private Integer success;
+        private Integer failed;
+        private List<String> successList;
+        private List<String> failedList;
     }
 }
