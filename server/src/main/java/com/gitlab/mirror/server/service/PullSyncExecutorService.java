@@ -42,6 +42,7 @@ public class PullSyncExecutorService {
     private final SyncEventMapper syncEventMapper;
     private final GitLabMirrorProperties properties;
     private final TaskStatusUpdateService taskStatusUpdateService;
+    private final BranchSnapshotService branchSnapshotService;
 
     public PullSyncExecutorService(
             GitCommandExecutor gitCommandExecutor,
@@ -55,7 +56,8 @@ public class PullSyncExecutorService {
             TargetProjectInfoMapper targetProjectInfoMapper,
             SyncEventMapper syncEventMapper,
             GitLabMirrorProperties properties,
-            TaskStatusUpdateService taskStatusUpdateService) {
+            TaskStatusUpdateService taskStatusUpdateService,
+            BranchSnapshotService branchSnapshotService) {
         this.gitCommandExecutor = gitCommandExecutor;
         this.sourceGitLabApiClient = sourceGitLabApiClient;
         this.targetProjectManagementService = targetProjectManagementService;
@@ -68,6 +70,7 @@ public class PullSyncExecutorService {
         this.syncEventMapper = syncEventMapper;
         this.properties = properties;
         this.taskStatusUpdateService = taskStatusUpdateService;
+        this.branchSnapshotService = branchSnapshotService;
     }
 
     /**
@@ -195,7 +198,24 @@ public class PullSyncExecutorService {
         String finalSha = result.getParsedValue("FINAL_SHA");
         updateTaskAfterSuccess(task, true, finalSha, finalSha);
 
-        // 8. Record sync finished event
+        // 8. Update branch snapshots after successful sync
+        try {
+            branchSnapshotService.updateSourceBranchSnapshot(
+                project.getId(), sourceInfo.getGitlabProjectId(), sourceInfo.getDefaultBranch());
+            branchSnapshotService.updateTargetBranchSnapshot(
+                project.getId(), targetInfo.getGitlabProjectId(), targetInfo.getDefaultBranch());
+            log.info("Updated branch snapshots after first sync");
+
+            // Update target_project_info branch count from snapshot
+            int targetBranchCount = branchSnapshotService.countBranches(project.getId(), "target");
+            targetInfo.setBranchCount(targetBranchCount);
+            targetProjectInfoMapper.updateById(targetInfo);
+            log.info("Updated target project info: branch_count={}", targetBranchCount);
+        } catch (Exception e) {
+            log.warn("Failed to update branch snapshots after sync: {}", e.getMessage());
+        }
+
+        // 9. Record sync finished event
         recordSyncFinishedEvent(project, task, finalSha, "First sync completed");
 
         log.info("First sync completed successfully for project: {}", project.getProjectKey());
@@ -242,26 +262,42 @@ public class PullSyncExecutorService {
         String targetUrl = buildGitUrl(properties.getTarget().getUrl(),
             properties.getTarget().getToken(), targetInfo.getPathWithNamespace());
 
-        // 5. Check for changes using GitLab API (optimization - avoid git ls-remote hang)
-        String remoteHeadSha = getRemoteHeadShaViaApi(sourceInfo.getPathWithNamespace());
-        if (remoteHeadSha == null) {
-            // Fallback: try direct git fetch (will fail fast with timeout)
-            log.warn("Failed to get remote SHA via API, will proceed with direct sync");
-            remoteHeadSha = "unknown";
-        }
+        // 5. Check for branch-level changes using branch snapshot comparison
+        boolean hasChanges = checkForBranchChanges(project.getId(),
+            sourceInfo.getGitlabProjectId(), targetInfo.getGitlabProjectId());
 
-        String lastSyncedSha = task.getSourceCommitSha();
+        // 6. If no changes, skip sync but still update snapshots to ensure accuracy
+        if (!hasChanges) {
+            log.info("No branch changes detected for project: {}, skipping sync", project.getProjectKey());
+            String currentHeadSha = task.getSourceCommitSha();
+            updateTaskAfterSuccess(task, false, currentHeadSha, currentHeadSha);
 
-        // 6. If no changes, skip sync
-        if (!"unknown".equals(remoteHeadSha) && remoteHeadSha.equals(lastSyncedSha)) {
-            log.info("No changes detected for project: {}, skipping sync", project.getProjectKey());
-            updateTaskAfterSuccess(task, false, remoteHeadSha, remoteHeadSha);
-            recordSyncFinishedEvent(project, task, remoteHeadSha,
-                "No changes detected, sync skipped");
+            // Update snapshots even when skipping sync to keep database accurate
+            try {
+                branchSnapshotService.updateSourceBranchSnapshot(
+                    project.getId(), sourceInfo.getGitlabProjectId(), sourceInfo.getDefaultBranch());
+                branchSnapshotService.updateTargetBranchSnapshot(
+                    project.getId(), targetInfo.getGitlabProjectId(), targetInfo.getDefaultBranch());
+                log.info("Updated branch snapshots (no changes detected)");
+
+                // Update target_project_info branch count from snapshot
+                int targetBranchCount = branchSnapshotService.countBranches(project.getId(), "target");
+                targetInfo.setBranchCount(targetBranchCount);
+                targetProjectInfoMapper.updateById(targetInfo);
+                log.info("Updated target project info: branch_count={}", targetBranchCount);
+            } catch (Exception e) {
+                log.warn("Failed to update branch snapshots: {}", e.getMessage());
+            }
+
+            recordSyncFinishedEvent(project, task, currentHeadSha,
+                "No branch changes detected, sync skipped");
             return;
         }
 
+        log.info("Branch changes detected for project: {}, proceeding with sync", project.getProjectKey());
+
         // 7. Execute git sync-incremental (remote update + push)
+        String lastSyncedSha = task.getSourceCommitSha();
         GitCommandExecutor.GitResult result = gitCommandExecutor.syncIncremental(
             sourceUrl, targetUrl, localRepoPath
         );
@@ -274,7 +310,24 @@ public class PullSyncExecutorService {
         String finalSha = result.getParsedValue("FINAL_SHA");
         updateTaskAfterSuccess(task, true, finalSha, finalSha);
 
-        // 9. Record sync finished event
+        // 9. Update branch snapshots after successful sync
+        try {
+            branchSnapshotService.updateSourceBranchSnapshot(
+                project.getId(), sourceInfo.getGitlabProjectId(), sourceInfo.getDefaultBranch());
+            branchSnapshotService.updateTargetBranchSnapshot(
+                project.getId(), targetInfo.getGitlabProjectId(), targetInfo.getDefaultBranch());
+            log.info("Updated branch snapshots after incremental sync");
+
+            // Update target_project_info branch count from snapshot
+            int targetBranchCount = branchSnapshotService.countBranches(project.getId(), "target");
+            targetInfo.setBranchCount(targetBranchCount);
+            targetProjectInfoMapper.updateById(targetInfo);
+            log.info("Updated target project info: branch_count={}", targetBranchCount);
+        } catch (Exception e) {
+            log.warn("Failed to update branch snapshots after sync: {}", e.getMessage());
+        }
+
+        // 10. Record sync finished event
         recordSyncFinishedEvent(project, task, finalSha,
             String.format("Incremental sync completed, SHA: %s → %s", lastSyncedSha, finalSha));
 
@@ -635,6 +688,85 @@ public class PullSyncExecutorService {
         } catch (Exception e) {
             log.error("Failed to get remote HEAD SHA via API for: {}", projectPath, e);
             return null;
+        }
+    }
+
+    /**
+     * Check for branch-level changes by comparing source branches with target branches
+     * <p>
+     * Detects:
+     * - New branches in source (not in target)
+     * - Updated branches (different commit SHA between source and target)
+     * - Branches in source that need to be synced to target
+     *
+     * @param syncProjectId Sync project ID
+     * @param sourceProjectId Source GitLab project ID
+     * @param targetProjectId Target GitLab project ID
+     * @return true if any branch differences detected
+     */
+    private boolean checkForBranchChanges(Long syncProjectId, Long sourceProjectId, Long targetProjectId) {
+        try {
+            log.debug("Checking for branch changes, syncProjectId={}, sourceProjectId={}, targetProjectId={}",
+                syncProjectId, sourceProjectId, targetProjectId);
+
+            // Get source and target branch snapshots from database (updated by scan)
+            java.util.List<ProjectBranchSnapshot> sourceSnapshot =
+                branchSnapshotService.getBranchSnapshots(syncProjectId, "source");
+            java.util.List<ProjectBranchSnapshot> targetSnapshot =
+                branchSnapshotService.getBranchSnapshots(syncProjectId, "target");
+
+            if (sourceSnapshot == null || sourceSnapshot.isEmpty()) {
+                log.info("No source branch snapshot found, will proceed with sync");
+                return true;
+            }
+
+            if (targetSnapshot == null || targetSnapshot.isEmpty()) {
+                log.info("No target branch snapshot found, will proceed with sync");
+                return true;
+            }
+
+            // Build maps for comparison
+            java.util.Map<String, String> sourceBranchMap = new java.util.HashMap<>();
+            for (ProjectBranchSnapshot snapshot : sourceSnapshot) {
+                sourceBranchMap.put(snapshot.getBranchName(), snapshot.getCommitSha());
+            }
+
+            java.util.Map<String, String> targetBranchMap = new java.util.HashMap<>();
+            for (ProjectBranchSnapshot snapshot : targetSnapshot) {
+                targetBranchMap.put(snapshot.getBranchName(), snapshot.getCommitSha());
+            }
+
+            // Check for new or updated branches in source
+            for (java.util.Map.Entry<String, String> entry : sourceBranchMap.entrySet()) {
+                String branchName = entry.getKey();
+                String sourceSha = entry.getValue();
+                String targetSha = targetBranchMap.get(branchName);
+
+                if (targetSha == null) {
+                    log.info("New branch in source (missing in target): {}", branchName);
+                    return true;
+                }
+
+                if (!sourceSha.equals(targetSha)) {
+                    log.info("Branch differs: {}, source={}, target={}", branchName, sourceSha, targetSha);
+                    return true;
+                }
+            }
+
+            // Check for deleted branches in source (exist in target but not in source)
+            for (String branchName : targetBranchMap.keySet()) {
+                if (!sourceBranchMap.containsKey(branchName)) {
+                    log.info("Branch deleted in source (still in target): {}", branchName);
+                    return true;
+                }
+            }
+
+            log.debug("No branch differences between source and target");
+            return false;
+
+        } catch (Exception e) {
+            log.error("Failed to check branch changes, will proceed with sync", e);
+            return true;  // On error, proceed with sync to be safe
         }
     }
 }
