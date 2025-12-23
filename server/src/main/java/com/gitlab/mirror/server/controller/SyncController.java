@@ -1,6 +1,7 @@
 package com.gitlab.mirror.server.controller;
 
 import com.gitlab.mirror.server.controller.dto.ProjectListDTO;
+import com.gitlab.mirror.server.controller.dto.ProjectOverviewDTO;
 import com.gitlab.mirror.server.entity.ProjectBranchSnapshot;
 import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncProject;
@@ -263,6 +264,30 @@ public class SyncController {
             return ResponseEntity.ok(ApiResponse.success(project));
         } catch (Exception e) {
             log.error("Query project details failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get project overview
+     *
+     * GET /api/sync/projects/{id}/overview
+     */
+    @GetMapping("/projects/{id}/overview")
+    public ResponseEntity<ApiResponse<ProjectOverviewDTO>> getProjectOverview(
+            @PathVariable Long id) {
+        log.info("Query project overview - id: {}", id);
+
+        try {
+            SyncProject project = syncProjectMapper.selectById(id);
+            if (project == null) {
+                return ResponseEntity.ok(ApiResponse.error("Project not found"));
+            }
+
+            ProjectOverviewDTO overview = projectListService.buildProjectOverview(project);
+            return ResponseEntity.ok(ApiResponse.success(overview));
+        } catch (Exception e) {
+            log.error("Query project overview failed", e);
             return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
         }
     }
@@ -590,8 +615,9 @@ public class SyncController {
                         continue;
                     }
 
-                    // Trigger sync asynchronously
-                    pullSyncExecutorService.executePullSync(project.getProjectKey());
+                    // Mark project as pending sync (actual sync will be triggered by scheduler)
+                    project.setSyncStatus("pending");
+                    syncProjectMapper.updateById(project);
                     successList.add(project.getProjectKey());
                 } catch (Exception e) {
                     failedList.add("Project ID " + projectId + ": " + e.getMessage());

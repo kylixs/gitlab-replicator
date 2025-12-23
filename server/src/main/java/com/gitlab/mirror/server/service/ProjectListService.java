@@ -1,6 +1,7 @@
 package com.gitlab.mirror.server.service;
 
 import com.gitlab.mirror.server.controller.dto.ProjectListDTO;
+import com.gitlab.mirror.server.controller.dto.ProjectOverviewDTO;
 import com.gitlab.mirror.server.entity.ProjectBranchSnapshot;
 import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncProject;
@@ -169,5 +170,47 @@ public class ProjectListService {
             long days = seconds / 86400;
             return days + "天";
         }
+    }
+
+    /**
+     * Build project overview DTO
+     */
+    public ProjectOverviewDTO buildProjectOverview(SyncProject project) {
+        ProjectOverviewDTO overview = new ProjectOverviewDTO();
+        overview.setProject(project);
+
+        // Get source and target project info
+        QueryWrapper<SourceProjectInfo> sourceQuery = new QueryWrapper<>();
+        sourceQuery.eq("sync_project_id", project.getId());
+        SourceProjectInfo sourceInfo = sourceProjectInfoMapper.selectOne(sourceQuery);
+        overview.setSource(sourceInfo);
+
+        QueryWrapper<TargetProjectInfo> targetQuery = new QueryWrapper<>();
+        targetQuery.eq("sync_project_id", project.getId());
+        TargetProjectInfo targetInfo = targetProjectInfoMapper.selectOne(targetQuery);
+        overview.setTarget(targetInfo);
+
+        // Calculate diff
+        ProjectOverviewDTO.DiffInfo diff = new ProjectOverviewDTO.DiffInfo();
+        ProjectListDTO.DiffInfo listDiff = calculateDiff(project.getId());
+        diff.setBranchNew(listDiff.getBranchNew());
+        diff.setBranchDeleted(listDiff.getBranchDeleted());
+        diff.setBranchOutdated(listDiff.getBranchOutdated());
+        diff.setCommitDiff(listDiff.getCommitDiff());
+        overview.setDiff(diff);
+
+        // Calculate delay
+        Long delaySeconds = calculateDelay(project.getId());
+        ProjectOverviewDTO.DelayInfo delay = new ProjectOverviewDTO.DelayInfo();
+        delay.setSeconds(delaySeconds);
+        delay.setFormatted(formatDelay(delaySeconds));
+        overview.setDelay(delay);
+
+        // Estimate next sync time (simplified - just add 5 minutes to last sync)
+        if (project.getLastSyncAt() != null) {
+            overview.setNextSyncTime(project.getLastSyncAt().plusMinutes(5));
+        }
+
+        return overview;
     }
 }
