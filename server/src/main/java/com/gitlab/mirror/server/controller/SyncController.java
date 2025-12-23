@@ -1,9 +1,13 @@
 package com.gitlab.mirror.server.controller;
 
+import com.gitlab.mirror.server.controller.dto.ProjectListDTO;
 import com.gitlab.mirror.server.entity.ProjectBranchSnapshot;
+import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncProject;
+import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
 import com.gitlab.mirror.server.mapper.SyncProjectMapper;
 import com.gitlab.mirror.server.service.BranchSnapshotService;
+import com.gitlab.mirror.server.service.ProjectListService;
 import com.gitlab.mirror.server.service.monitor.DiffCalculator;
 import com.gitlab.mirror.server.service.monitor.LocalCacheManager;
 import com.gitlab.mirror.server.service.monitor.UnifiedProjectMonitor;
@@ -37,18 +41,24 @@ public class SyncController {
     private final DiffCalculator diffCalculator;
     private final LocalCacheManager cacheManager;
     private final BranchSnapshotService branchSnapshotService;
+    private final ProjectListService projectListService;
+    private final SourceProjectInfoMapper sourceProjectInfoMapper;
 
     public SyncController(
             UnifiedProjectMonitor unifiedProjectMonitor,
             SyncProjectMapper syncProjectMapper,
             DiffCalculator diffCalculator,
             LocalCacheManager cacheManager,
-            BranchSnapshotService branchSnapshotService) {
+            BranchSnapshotService branchSnapshotService,
+            ProjectListService projectListService,
+            SourceProjectInfoMapper sourceProjectInfoMapper) {
         this.unifiedProjectMonitor = unifiedProjectMonitor;
         this.syncProjectMapper = syncProjectMapper;
         this.diffCalculator = diffCalculator;
         this.cacheManager = cacheManager;
         this.branchSnapshotService = branchSnapshotService;
+        this.projectListService = projectListService;
+        this.sourceProjectInfoMapper = sourceProjectInfoMapper;
     }
 
     /**
@@ -71,28 +81,77 @@ public class SyncController {
     }
 
     /**
-     * Get project list with pagination
+     * Get project list with enhanced filtering and sorting
      *
-     * GET /api/sync/projects?status=synced&page=1&size=20
+     * GET /api/sync/projects?status=synced&syncMethod=pull_sync&group=ai&search=test&sortBy=delay&sortOrder=desc&page=1&size=20
      */
     @GetMapping("/projects")
-    public ResponseEntity<ApiResponse<PageResult<SyncProject>>> getProjects(
+    public ResponseEntity<ApiResponse<PageResult<ProjectListDTO>>> getProjects(
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String syncMethod,
+            @RequestParam(required = false) String group,
+            @RequestParam(required = false) String delayRange,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "asc") String sortOrder,
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "20") Integer size) {
-        log.info("Query projects - status: {}, page: {}, size: {}", status, page, size);
+        log.info("Query projects - status: {}, syncMethod: {}, group: {}, search: {}, sortBy: {}, page: {}, size: {}",
+                status, syncMethod, group, search, sortBy, page, size);
 
         try {
             QueryWrapper<SyncProject> queryWrapper = new QueryWrapper<>();
+
+            // Filter by status
             if (status != null && !status.isEmpty()) {
                 queryWrapper.eq("sync_status", status);
+            }
+
+            // Filter by sync method
+            if (syncMethod != null && !syncMethod.isEmpty()) {
+                queryWrapper.eq("sync_method", syncMethod);
+            }
+
+            // Filter by group (need to join with source_project_info)
+            if (group != null && !group.isEmpty()) {
+                List<SourceProjectInfo> sourceInfos = sourceProjectInfoMapper.selectList(
+                        new QueryWrapper<SourceProjectInfo>().eq("group_path", group));
+                if (!sourceInfos.isEmpty()) {
+                    List<Long> projectIds = sourceInfos.stream()
+                            .map(SourceProjectInfo::getSyncProjectId)
+                            .collect(Collectors.toList());
+                    queryWrapper.in("id", projectIds);
+                } else {
+                    // No projects in this group
+                    queryWrapper.eq("id", -1); // Force empty result
+                }
+            }
+
+            // Filter by search (project_key like search)
+            if (search != null && !search.isEmpty()) {
+                queryWrapper.like("project_key", search);
             }
 
             Page<SyncProject> pageQuery = new Page<>(page, size);
             Page<SyncProject> result = syncProjectMapper.selectPage(pageQuery, queryWrapper);
 
-            PageResult<SyncProject> pageResult = new PageResult<>();
-            pageResult.setItems(result.getRecords());
+            // Build DTOs with diff and delay
+            List<ProjectListDTO> dtos = result.getRecords().stream()
+                    .map(projectListService::buildProjectListDTO)
+                    .collect(Collectors.toList());
+
+            // Apply delay range filter (post-processing since it's calculated)
+            if (delayRange != null && !delayRange.isEmpty()) {
+                dtos = filterByDelayRange(dtos, delayRange);
+            }
+
+            // Apply sorting (post-processing for calculated fields)
+            if (sortBy != null && !sortBy.isEmpty()) {
+                dtos = sortProjects(dtos, sortBy, sortOrder);
+            }
+
+            PageResult<ProjectListDTO> pageResult = new PageResult<>();
+            pageResult.setItems(dtos);
             pageResult.setTotal(result.getTotal());
             pageResult.setPage(page);
             pageResult.setSize(size);
@@ -102,6 +161,80 @@ public class SyncController {
             log.error("Query projects failed", e);
             return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
         }
+    }
+
+    /**
+     * Get all groups
+     *
+     * GET /api/sync/projects/groups
+     */
+    @GetMapping("/projects/groups")
+    public ResponseEntity<ApiResponse<List<String>>> getGroups() {
+        log.info("Query all groups");
+
+        try {
+            List<SourceProjectInfo> sourceInfos = sourceProjectInfoMapper.selectList(null);
+            List<String> groups = sourceInfos.stream()
+                    .map(SourceProjectInfo::getGroupPath)
+                    .filter(g -> g != null && !g.isEmpty())
+                    .distinct()
+                    .sorted()
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(ApiResponse.success(groups));
+        } catch (Exception e) {
+            log.error("Query groups failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Filter projects by delay range
+     */
+    private List<ProjectListDTO> filterByDelayRange(List<ProjectListDTO> projects, String delayRange) {
+        // delayRange format: "0-3600" (seconds) or "3600-86400" or "86400+"
+        if (delayRange.endsWith("+")) {
+            long minSeconds = Long.parseLong(delayRange.substring(0, delayRange.length() - 1));
+            return projects.stream()
+                    .filter(p -> p.getDelaySeconds() != null && p.getDelaySeconds() >= minSeconds)
+                    .collect(Collectors.toList());
+        } else {
+            String[] parts = delayRange.split("-");
+            if (parts.length == 2) {
+                long minSeconds = Long.parseLong(parts[0]);
+                long maxSeconds = Long.parseLong(parts[1]);
+                return projects.stream()
+                        .filter(p -> p.getDelaySeconds() != null &&
+                                     p.getDelaySeconds() >= minSeconds &&
+                                     p.getDelaySeconds() < maxSeconds)
+                        .collect(Collectors.toList());
+            }
+        }
+        return projects;
+    }
+
+    /**
+     * Sort projects by specified field
+     */
+    private List<ProjectListDTO> sortProjects(List<ProjectListDTO> projects, String sortBy, String sortOrder) {
+        boolean ascending = "asc".equalsIgnoreCase(sortOrder);
+
+        Comparator<ProjectListDTO> comparator = switch (sortBy) {
+            case "delay" -> Comparator.comparing(ProjectListDTO::getDelaySeconds,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "updatedAt" -> Comparator.comparing(ProjectListDTO::getUpdatedAt,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "lastSyncAt" -> Comparator.comparing(ProjectListDTO::getLastSyncAt,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "projectKey" -> Comparator.comparing(ProjectListDTO::getProjectKey);
+            default -> Comparator.comparing(ProjectListDTO::getId);
+        };
+
+        if (!ascending) {
+            comparator = comparator.reversed();
+        }
+
+        return projects.stream().sorted(comparator).collect(Collectors.toList());
     }
 
     /**

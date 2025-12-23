@@ -68,6 +68,12 @@ public class SyncProject {
     private LocalDateTime updatedAt;
 
     /**
+     * Last successful sync time
+     */
+    @TableField("last_sync_at")
+    private LocalDateTime lastSyncAt;
+
+    /**
      * Sync method constants
      */
     public static class SyncMethod {
