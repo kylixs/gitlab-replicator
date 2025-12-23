@@ -201,14 +201,6 @@ public class UnifiedProjectMonitor {
             long step4Duration = System.currentTimeMillis() - step4Start;
             log.info("[FULL-SCAN] Step 4 completed: {} diffs calculated - {}ms", diffs.size(), step4Duration);
 
-            // Step 5: Cache diff results
-            long step5Start = System.currentTimeMillis();
-            for (ProjectDiff diff : diffs) {
-                cacheManager.put("diff:" + diff.getProjectKey(), diff, 15);
-            }
-            long step5Duration = System.currentTimeMillis() - step5Start;
-            log.info("[FULL-SCAN] Step 5: Cached {} diff results - {}ms", diffs.size(), step5Duration);
-
             // Count changes
             int changesDetected = (int) diffs.stream()
                     .filter(d -> d.getStatus() != ProjectDiff.SyncStatus.SYNCED)
@@ -225,7 +217,7 @@ public class UnifiedProjectMonitor {
             long step6Start = System.currentTimeMillis();
             metricsExporter.recordScanDuration(durationMs);
             metricsExporter.refreshSystemMetrics();
-            metricsExporter.refreshProjectMetrics();
+            metricsExporter.refreshProjectMetrics(diffs);
             long step6Duration = System.currentTimeMillis() - step6Start;
             log.info("[FULL-SCAN] Step 6: Updated metrics - {}ms", step6Duration);
 
@@ -236,8 +228,7 @@ public class UnifiedProjectMonitor {
             log.info("[FULL-SCAN] Step 2 (Fetch Branches):     {}ms ({}%)", step2Duration, String.format("%.1f", step2Duration * 100.0 / durationMs));
             log.info("[FULL-SCAN] Step 3 (Compare & Update):   {}ms ({}%)", step3Duration, String.format("%.1f", step3Duration * 100.0 / durationMs));
             log.info("[FULL-SCAN] Step 4 (Calculate Diffs):    {}ms ({}%)", step4Duration, String.format("%.1f", step4Duration * 100.0 / durationMs));
-            log.info("[FULL-SCAN] Step 5 (Cache Results):      {}ms ({}%)", step5Duration, String.format("%.1f", step5Duration * 100.0 / durationMs));
-            log.info("[FULL-SCAN] Step 6 (Update Metrics):     {}ms ({}%)", step6Duration, String.format("%.1f", step6Duration * 100.0 / durationMs));
+            log.info("[FULL-SCAN] Step 5 (Update Metrics):     {}ms ({}%)", step6Duration, String.format("%.1f", step6Duration * 100.0 / durationMs));
             log.info("[FULL-SCAN] ================================");
 
             return resultBuilder
@@ -357,14 +348,6 @@ public class UnifiedProjectMonitor {
             long step7Duration = System.currentTimeMillis() - step7Start;
             log.info("[INCR-SCAN] Step 7: Calculate {} project diffs - {}ms", diffs.size(), step7Duration);
 
-            // Step 8: Cache diff results
-            long step8Start = System.currentTimeMillis();
-            for (ProjectDiff diff : diffs) {
-                cacheManager.put("diff:" + diff.getProjectKey(), diff, 15);
-            }
-            long step8Duration = System.currentTimeMillis() - step8Start;
-            log.info("[INCR-SCAN] Step 8: Cache {} diff results - {}ms", diffs.size(), step8Duration);
-
             // Count changes
             int changesDetected = (int) diffs.stream()
                     .filter(d -> d.getStatus() != ProjectDiff.SyncStatus.SYNCED)
@@ -386,7 +369,7 @@ public class UnifiedProjectMonitor {
             long step9Start = System.currentTimeMillis();
             metricsExporter.recordScanDuration(durationMs);
             metricsExporter.refreshSystemMetrics();
-            metricsExporter.refreshProjectMetrics();
+            metricsExporter.refreshProjectMetrics(diffs);
             long step9Duration = System.currentTimeMillis() - step9Start;
             log.info("[INCR-SCAN] Step 9: Update metrics - {}ms", step9Duration);
 
@@ -400,8 +383,7 @@ public class UnifiedProjectMonitor {
             log.info("[INCR-SCAN] Step 5 (GraphQL Target):    {}ms ({}%)", step5Duration, String.format("%.1f", step5Duration * 100.0 / durationMs));
             log.info("[INCR-SCAN] Step 6 (Update Target):     {}ms ({}%)", step6Duration, String.format("%.1f", step6Duration * 100.0 / durationMs));
             log.info("[INCR-SCAN] Step 7 (Calculate Diff):    {}ms ({}%)", step7Duration, String.format("%.1f", step7Duration * 100.0 / durationMs));
-            log.info("[INCR-SCAN] Step 8 (Cache Results):     {}ms ({}%)", step8Duration, String.format("%.1f", step8Duration * 100.0 / durationMs));
-            log.info("[INCR-SCAN] Step 9 (Metrics):           {}ms ({}%)", step9Duration, String.format("%.1f", step9Duration * 100.0 / durationMs));
+            log.info("[INCR-SCAN] Step 8 (Metrics):           {}ms ({}%)", step9Duration, String.format("%.1f", step9Duration * 100.0 / durationMs));
             log.info("[INCR-SCAN] ================================");
 
             return resultBuilder

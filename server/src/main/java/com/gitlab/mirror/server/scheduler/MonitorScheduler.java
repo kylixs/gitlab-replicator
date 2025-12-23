@@ -5,6 +5,7 @@ import com.gitlab.mirror.server.entity.MonitorAlert;
 import com.gitlab.mirror.server.entity.SyncProject;
 import com.gitlab.mirror.server.mapper.MonitorAlertMapper;
 import com.gitlab.mirror.server.mapper.SyncProjectMapper;
+import com.gitlab.mirror.server.service.monitor.DiffCalculator;
 import com.gitlab.mirror.server.service.monitor.LocalCacheManager;
 import com.gitlab.mirror.server.service.monitor.SyncMonitorService;
 import com.gitlab.mirror.server.service.monitor.UnifiedProjectMonitor;
@@ -44,18 +45,21 @@ public class MonitorScheduler {
     private final LocalCacheManager cacheManager;
     private final MonitorAlertMapper monitorAlertMapper;
     private final SyncProjectMapper syncProjectMapper;
+    private final DiffCalculator diffCalculator;
 
     public MonitorScheduler(
             UnifiedProjectMonitor unifiedProjectMonitor,
             SyncMonitorService syncMonitorService,
             LocalCacheManager cacheManager,
             MonitorAlertMapper monitorAlertMapper,
-            SyncProjectMapper syncProjectMapper) {
+            SyncProjectMapper syncProjectMapper,
+            DiffCalculator diffCalculator) {
         this.unifiedProjectMonitor = unifiedProjectMonitor;
         this.syncMonitorService = syncMonitorService;
         this.cacheManager = cacheManager;
         this.monitorAlertMapper = monitorAlertMapper;
         this.syncProjectMapper = syncProjectMapper;
+        this.diffCalculator = diffCalculator;
     }
 
     /**
@@ -170,22 +174,14 @@ public class MonitorScheduler {
         int resolvedCount = 0;
 
         try {
-            // Get all cached diffs
-            Map<String, ProjectDiff> diffMap = new HashMap<>();
-
-            // Query all sync projects to get their diffs from cache
+            // Query all sync projects and calculate diffs
             List<SyncProject> syncProjects = syncProjectMapper.selectList(null);
 
-            // For each project, get cached diff
-            for (SyncProject project : syncProjects) {
-                ProjectDiff diff = cacheManager.get("diff:" + project.getProjectKey());
-                if (diff != null) {
-                    diffMap.put(project.getProjectKey(), diff);
-                }
-            }
-
-            // Convert to list
-            List<ProjectDiff> diffs = new ArrayList<>(diffMap.values());
+            // Calculate diffs for all projects
+            List<ProjectDiff> diffs = syncProjects.stream()
+                .map(project -> diffCalculator.calculateDiff(project.getId()))
+                .filter(diff -> diff != null)
+                .toList();
 
             // Auto-resolve alerts
             resolvedCount = syncMonitorService.autoResolveAlerts(diffs);

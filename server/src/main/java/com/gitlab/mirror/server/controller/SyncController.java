@@ -153,20 +153,7 @@ public class SyncController {
 
             // Calculate diffs for each project
             List<ProjectDiff> diffs = result.getRecords().stream()
-                    .map(project -> {
-                        // Try cache first
-                        ProjectDiff cachedDiff = cacheManager.get("diff:" + project.getProjectKey());
-                        if (cachedDiff != null) {
-                            return cachedDiff;
-                        }
-
-                        // Calculate and cache
-                        ProjectDiff diff = diffCalculator.calculateDiff(project.getId());
-                        if (diff != null) {
-                            cacheManager.put("diff:" + project.getProjectKey(), diff, 15);
-                        }
-                        return diff;
-                    })
+                    .map(project -> diffCalculator.calculateDiff(project.getId()))
                     .filter(diff -> diff != null)
                     .toList();
 
@@ -207,13 +194,6 @@ public class SyncController {
             }
             // Query by projectKey (if provided and not found by ID)
             else if (projectKey != null && !projectKey.isEmpty()) {
-                // Try to get from cache first
-                ProjectDiff cachedDiff = cacheManager.get("diff:" + projectKey);
-                if (cachedDiff != null) {
-                    log.debug("Diff found in cache for project: {}", projectKey);
-                    return ResponseEntity.ok(ApiResponse.success(cachedDiff));
-                }
-
                 QueryWrapper<SyncProject> queryWrapper = new QueryWrapper<>();
                 queryWrapper.eq("project_key", projectKey);
                 project = syncProjectMapper.selectOne(queryWrapper);
@@ -226,10 +206,6 @@ public class SyncController {
             }
 
             ProjectDiff diff = diffCalculator.calculateDiff(project.getId());
-            if (diff != null && projectKey != null) {
-                // Cache the result
-                cacheManager.put("diff:" + projectKey, diff, 15);
-            }
 
             return ResponseEntity.ok(ApiResponse.success(diff));
         } catch (Exception e) {

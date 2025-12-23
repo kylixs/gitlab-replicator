@@ -165,22 +165,14 @@ public class MetricsExporter {
     }
 
     /**
-     * Refresh project-level metrics from cache
+     * Refresh project-level metrics from diffs
      */
-    public void refreshProjectMetrics() {
+    public void refreshProjectMetrics(List<com.gitlab.mirror.server.service.monitor.model.ProjectDiff> diffs) {
         log.debug("Refreshing project-level metrics");
 
         try {
-            // Get all project diffs from cache
-            List<SyncProject> projects = syncProjectMapper.selectList(null);
-
-            for (SyncProject project : projects) {
-                String cacheKey = "diff:" + project.getProjectKey();
-                ProjectDiff diff = cacheManager.get(cacheKey);
-
-                if (diff != null) {
-                    updateProjectMetrics(project.getProjectKey(), diff);
-                }
+            for (com.gitlab.mirror.server.service.monitor.model.ProjectDiff diff : diffs) {
+                updateProjectMetrics(diff.getProjectKey(), diff);
             }
 
             log.debug("Project metrics refreshed for {} projects", projectMetricsCache.size());
