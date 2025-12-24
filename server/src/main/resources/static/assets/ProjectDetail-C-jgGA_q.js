@@ -1,1 +1,0 @@
-import{_ as o,k as a,a as t,o as c}from"./index-C07AZsbA.js";const r={},s={class:"project-detail"};function n(l,e){return c(),a("div",s,[...e[0]||(e[0]=[t("h1",null,"Project Detail",-1),t("p",null,"Project Detail page is under construction...",-1)])])}const i=o(r,[["render",n],["__scopeId","data-v-2376dd5b"]]);export{i as default};
