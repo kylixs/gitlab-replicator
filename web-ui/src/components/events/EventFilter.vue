@@ -59,6 +59,10 @@
       <el-form-item>
         <el-button type="primary" @click="handleSearch">Search</el-button>
         <el-button @click="handleReset">Reset</el-button>
+        <el-button @click="handleExport">
+          <el-icon><Download /></el-icon>
+          Export CSV
+        </el-button>
       </el-form-item>
     </el-form>
   </el-card>
@@ -83,6 +87,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:modelValue': [filters: Filters]
   search: []
+  export: []
 }>()
 
 const dateRange = ref<[Date, Date] | null>(null)
@@ -121,6 +126,10 @@ const handleReset = () => {
   filters.search = ''
   dateRange.value = null
   emit('search')
+}
+
+const handleExport = () => {
+  emit('export')
 }
 </script>
 

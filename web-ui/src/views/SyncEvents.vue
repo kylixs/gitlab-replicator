@@ -7,6 +7,7 @@
     <EventFilter
       v-model="filters"
       @search="loadEvents"
+      @export="handleExport"
     />
 
     <!-- Events Table -->
@@ -267,6 +268,54 @@ const stopAutoRefresh = () => {
   if (refreshTimer) {
     clearInterval(refreshTimer)
     refreshTimer = null
+  }
+}
+
+const handleExport = () => {
+  try {
+    // CSV headers
+    const headers = [
+      'Time',
+      'Project',
+      'Event Type',
+      'Status',
+      'Message',
+      'Duration'
+    ]
+
+    // Convert events data to CSV rows
+    const rows = events.value.map(event => [
+      formatTime(event.createdAt),
+      event.projectKey,
+      formatEventType(event.eventType),
+      event.status,
+      event.message || '',
+      event.durationMs ? formatDuration(event.durationMs) : '-'
+    ])
+
+    // Create CSV content
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n')
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+
+    link.setAttribute('href', url)
+    link.setAttribute('download', `sync_events_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    ElMessage.success(`Exported ${events.value.length} events`)
+  } catch (error) {
+    ElMessage.error('Failed to export events')
+    console.error('Export failed:', error)
   }
 }
 
