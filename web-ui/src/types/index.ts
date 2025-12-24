@@ -117,3 +117,54 @@ export interface EventDetails {
   }
   details: Record<string, any>
 }
+
+// Configuration
+export interface SystemConfig {
+  gitlab: GitLabConfig
+  scanSettings: ScanSettings
+  syncSettings: SyncSettings
+  defaultSyncRules: DefaultSyncRules
+  thresholds: Thresholds
+}
+
+export interface GitLabConfig {
+  source: GitLabInstance
+  target: GitLabInstance
+}
+
+export interface GitLabInstance {
+  url: string
+  token: string
+}
+
+export interface ScanSettings {
+  incrementalInterval: number
+  fullScanCron: string
+  enabled: boolean
+}
+
+export interface SyncSettings {
+  syncInterval: number
+  concurrency: number
+}
+
+export interface DefaultSyncRules {
+  method: string
+  excludeArchived: boolean
+  excludeEmpty: boolean
+  excludePattern: string
+}
+
+export interface Thresholds {
+  delayWarningHours: number
+  delayCriticalHours: number
+  maxRetryAttempts: number
+  timeoutSeconds: number
+}
+
+export interface ConnectionTestResult {
+  connected: boolean
+  version?: string
+  latencyMs?: number
+  error?: string
+}
