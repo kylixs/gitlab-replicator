@@ -1,1 +1,0 @@
-import{_ as o,c as t,a as s,o as c}from"./index-86LAOQ0_.js";const r={},n={class:"projects"};function a(_,e){return c(),t("div",n,[...e[0]||(e[0]=[s("h1",null,"Projects",-1),s("p",null,"Projects page is under construction...",-1)])])}const l=o(r,[["render",a],["__scopeId","data-v-a1384345"]]);export{l as default};

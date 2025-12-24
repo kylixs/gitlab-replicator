@@ -92,7 +92,7 @@ GET /api/dashboard/recent-events?limit=20
 ---
 
 ### T1.2 前端页面 - Dashboard 布局
-**状态**: ⏸️ 待处理
+**状态**: ✅ 已完成 (Completed)
 **依赖**: T1.1
 
 **任务目标**:
