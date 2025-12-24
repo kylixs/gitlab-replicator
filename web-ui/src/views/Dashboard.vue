@@ -1,5 +1,27 @@
 <template>
   <div class="dashboard">
+    <!-- Action Bar -->
+    <el-card class="action-bar" shadow="never">
+      <el-space>
+        <el-button
+          type="primary"
+          :loading="scanningIncremental"
+          @click="handleIncrementalScan"
+        >
+          <el-icon><Refresh /></el-icon>
+          Incremental Scan
+        </el-button>
+        <el-button
+          type="warning"
+          :loading="scanningFull"
+          @click="handleFullScan"
+        >
+          <el-icon><FolderOpened /></el-icon>
+          Full Scan
+        </el-button>
+      </el-space>
+    </el-card>
+
     <!-- Statistics Cards -->
     <el-row :gutter="24" class="stat-cards">
       <el-col :xs="24" :sm="12" :md="8" :lg="24 / 5">
@@ -75,12 +97,13 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import StatCard from '@/components/dashboard/StatCard.vue'
 import StatusChart from '@/components/dashboard/StatusChart.vue'
 import DelayedTable from '@/components/dashboard/DelayedTable.vue'
 import ActivityTimeline from '@/components/dashboard/ActivityTimeline.vue'
 import { dashboardApi } from '@/api/dashboard'
+import { syncApi } from '@/api/sync'
 import type {
   DashboardStats,
   StatusDistribution,
@@ -93,6 +116,8 @@ const stats = ref<DashboardStats | null>(null)
 const distribution = ref<StatusDistribution | null>(null)
 const delayedProjects = ref<DelayedProject[] | null>(null)
 const recentEvents = ref<RecentEvent[] | null>(null)
+const scanningIncremental = ref(false)
+const scanningFull = ref(false)
 
 let refreshTimer: number | null = null
 
@@ -135,6 +160,78 @@ const handleSync = async (project: DelayedProject) => {
   }
 }
 
+const handleIncrementalScan = async () => {
+  try {
+    await ElMessageBox.confirm(
+      'This will trigger an incremental scan to detect project changes. Continue?',
+      'Confirm Incremental Scan',
+      {
+        confirmButtonText: 'Scan',
+        cancelButtonText: 'Cancel',
+        type: 'info'
+      }
+    )
+
+    scanningIncremental.value = true
+    const response = await syncApi.triggerScan('incremental')
+
+    if (response.success) {
+      const result = response.data
+      ElMessage.success(
+        `Scan completed: ${result.scannedCount} projects scanned, ` +
+        `${result.addedCount} added, ${result.updatedCount} updated`
+      )
+      // Refresh dashboard data
+      await loadData()
+    } else {
+      ElMessage.error('Scan failed: ' + (response.message || 'Unknown error'))
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('Failed to trigger incremental scan')
+      console.error('Incremental scan failed:', error)
+    }
+  } finally {
+    scanningIncremental.value = false
+  }
+}
+
+const handleFullScan = async () => {
+  try {
+    await ElMessageBox.confirm(
+      'This will trigger a full scan of all projects. This may take several minutes. Continue?',
+      'Confirm Full Scan',
+      {
+        confirmButtonText: 'Scan',
+        cancelButtonText: 'Cancel',
+        type: 'warning'
+      }
+    )
+
+    scanningFull.value = true
+    const response = await syncApi.triggerScan('full')
+
+    if (response.success) {
+      const result = response.data
+      ElMessage.success(
+        `Full scan completed: ${result.scannedCount} projects scanned, ` +
+        `${result.addedCount} added, ${result.updatedCount} updated, ${result.removedCount} removed`
+      )
+      // Refresh dashboard data
+      await loadData()
+    } else {
+      ElMessage.error('Full scan failed: ' + (response.message || 'Unknown error'))
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('Failed to trigger full scan')
+      console.error('Full scan failed:', error)
+    }
+  } finally {
+    scanningFull.value = false
+  }
+}
+
 const startAutoRefresh = () => {
   // Refresh every 30 seconds
   refreshTimer = window.setInterval(() => {
@@ -164,6 +261,14 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+.action-bar {
+  margin-bottom: 0;
+}
+
+.action-bar :deep(.el-card__body) {
+  padding: 16px;
 }
 
 .stat-cards {
