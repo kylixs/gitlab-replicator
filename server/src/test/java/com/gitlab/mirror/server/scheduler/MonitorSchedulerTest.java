@@ -49,6 +49,9 @@ class MonitorSchedulerTest {
     @Mock
     private SyncProjectMapper syncProjectMapper;
 
+    @Mock
+    private com.gitlab.mirror.server.service.monitor.DiffCalculator diffCalculator;
+
     private MonitorScheduler monitorScheduler;
 
     @BeforeEach
@@ -58,7 +61,8 @@ class MonitorSchedulerTest {
                 syncMonitorService,
                 cacheManager,
                 monitorAlertMapper,
-                syncProjectMapper
+                syncProjectMapper,
+                diffCalculator
         );
     }
 

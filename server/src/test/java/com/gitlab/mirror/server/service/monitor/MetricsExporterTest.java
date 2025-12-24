@@ -173,7 +173,7 @@ class MetricsExporterTest {
         when(cacheManager.get("diff:group1/project-b")).thenReturn(null);
 
         // Refresh project metrics
-        metricsExporter.refreshProjectMetrics();
+        metricsExporter.refreshProjectMetrics(java.util.Collections.singletonList(diff1));
 
         // Verify metrics are updated for cached projects
         assertThat(meterRegistry.find("gitlab_mirror_project_commits")
