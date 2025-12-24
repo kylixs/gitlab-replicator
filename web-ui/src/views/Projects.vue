@@ -5,6 +5,7 @@
       v-model="filters"
       :groups="groups"
       @search="loadProjects"
+      @export="handleExport"
     />
 
     <!-- Batch Operation Bar -->
@@ -322,6 +323,62 @@ const formatSyncMethod = (method: string) => {
 const formatTime = (time: string) => {
   if (!time) return '-'
   return new Date(time).toLocaleString()
+}
+
+const handleExport = () => {
+  try {
+    // CSV headers
+    const headers = [
+      'Project',
+      'Status',
+      'Branch New',
+      'Branch Deleted',
+      'Branch Outdated',
+      'Commit Diff',
+      'Delay',
+      'Sync Method',
+      'Last Sync',
+      'Updated'
+    ]
+
+    // Convert projects data to CSV rows
+    const rows = projects.value.map(project => [
+      project.projectKey,
+      project.syncStatus,
+      project.diff.branchNew.toString(),
+      project.diff.branchDeleted.toString(),
+      project.diff.branchOutdated.toString(),
+      project.diff.commitDiff.toString(),
+      project.delayFormatted,
+      formatSyncMethod(project.syncMethod),
+      formatTime(project.lastSyncAt),
+      formatTime(project.updatedAt)
+    ])
+
+    // Create CSV content
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n')
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+
+    link.setAttribute('href', url)
+    link.setAttribute('download', `projects_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    ElMessage.success(`Exported ${projects.value.length} projects`)
+  } catch (error) {
+    ElMessage.error('Failed to export projects')
+    console.error('Export failed:', error)
+  }
 }
 
 onMounted(() => {
