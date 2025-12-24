@@ -1,0 +1,1 @@
+import{_ as s,k as t,a as n,o as c}from"./index-B-lgWqfe.js";const o={},a={class:"sync-events"};function r(_,e){return c(),t("div",a,[...e[0]||(e[0]=[n("h1",null,"Sync Events",-1),n("p",null,"Sync Events page is under construction...",-1)])])}const l=s(o,[["render",r],["__scopeId","data-v-efbd476e"]]);export{l as default};
