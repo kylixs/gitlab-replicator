@@ -128,8 +128,8 @@ public class BranchSnapshotService {
                 snapshot.setCommittedAt(branch.getCommit().getCommittedDate().toLocalDateTime());
             }
 
-            snapshot.setIsDefault(Boolean.TRUE.equals(branch.getIsDefault()));
-            snapshot.setIsProtected(Boolean.TRUE.equals(branch.getIsProtected()));
+            snapshot.setIsDefault(Boolean.TRUE.equals(branch.getDefault()));
+            snapshot.setIsProtected(Boolean.TRUE.equals(branch.getProtected()));
             snapshot.setSnapshotAt(snapshotTime);
 
             branchSnapshotMapper.insert(snapshot);
