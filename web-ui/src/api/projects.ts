@@ -1,5 +1,5 @@
 import client from './client'
-import type { ProjectListItem, PageResult, ProjectOverview } from '@/types'
+import type { ProjectListItem, PageResult, ProjectOverview, BranchComparison } from '@/types'
 
 export const projectsApi = {
   getProjects: (params: {
@@ -38,5 +38,9 @@ export const projectsApi = {
 
   batchDelete: (projectIds: number[]) => {
     return client.post('/sync/projects/batch-delete', { projectIds })
+  },
+
+  getBranchComparison: (params: { syncProjectId?: number; projectKey?: string }) => {
+    return client.get<any, { data: BranchComparison }>('/sync/branches', { params })
   }
 }

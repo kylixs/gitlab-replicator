@@ -85,6 +85,35 @@ export interface ProjectOverview {
   nextSyncTime: string
 }
 
+// Branch Comparison
+export interface BranchComparison {
+  projectKey: string
+  syncProjectId: number
+  sourceBranchCount: number
+  targetBranchCount: number
+  syncedCount: number
+  outdatedCount: number
+  missingInTargetCount: number
+  extraInTargetCount: number
+  branches: BranchInfo[]
+}
+
+export interface BranchInfo {
+  branchName: string
+  syncStatus: 'synced' | 'outdated' | 'missing_in_target' | 'extra_in_target'
+  sourceCommitId?: string
+  sourceCommitShort?: string
+  sourceCommitCount?: number
+  sourceLastCommitAt?: string
+  targetCommitId?: string
+  targetCommitShort?: string
+  targetCommitCount?: number
+  targetLastCommitAt?: string
+  commitDiff?: number
+  delaySeconds?: number
+  delayFormatted?: string
+}
+
 // Events
 export interface EventListItem {
   id: number
