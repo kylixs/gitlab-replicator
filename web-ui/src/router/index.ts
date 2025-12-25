@@ -48,7 +48,7 @@ const router = createRouter({
 })
 
 // Global navigation guard
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const { isAuthenticated, checkAuth } = useAuth()
 
   // Check authentication status if not already authenticated

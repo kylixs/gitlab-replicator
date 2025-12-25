@@ -175,8 +175,9 @@ describe('SCRAM-SHA-256 Client Utility', () => {
       // 5. Recover ClientKey from ClientProof (XOR operation)
       const clientProofWordArray = CryptoJS.enc.Hex.parse(clientProof)
       const recoveredClientKeyWords: number[] = []
-      for (let i = 0; i < clientProofWordArray.words.length; i++) {
-        recoveredClientKeyWords[i] = clientProofWordArray.words[i] ^ clientSignature.words[i]
+      const minLength = Math.min(clientProofWordArray.words.length, clientSignature.words.length)
+      for (let i = 0; i < minLength; i++) {
+        recoveredClientKeyWords[i] = (clientProofWordArray.words[i] ?? 0) ^ (clientSignature.words[i] ?? 0)
       }
       const recoveredClientKey = CryptoJS.lib.WordArray.create(
         recoveredClientKeyWords,

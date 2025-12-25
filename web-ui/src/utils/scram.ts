@@ -36,9 +36,10 @@ function xor(a: CryptoJS.lib.WordArray, b: CryptoJS.lib.WordArray): string {
   const aWords = a.words
   const bWords = b.words
   const resultWords: number[] = []
+  const minLength = Math.min(aWords.length, bWords.length)
 
-  for (let i = 0; i < aWords.length; i++) {
-    resultWords[i] = aWords[i] ^ bWords[i]
+  for (let i = 0; i < minLength; i++) {
+    resultWords[i] = (aWords[i] ?? 0) ^ (bWords[i] ?? 0)
   }
 
   return CryptoJS.lib.WordArray.create(resultWords, a.sigBytes).toString(CryptoJS.enc.Hex)

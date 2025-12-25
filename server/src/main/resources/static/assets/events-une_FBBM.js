@@ -1,0 +1,1 @@
+import{H as e}from"./index-T99Mt4LO.js";const n={getEvents:t=>e.get("/sync/events",{params:t}),getEventStats:t=>e.get("/sync/events/stats",{params:{date:t}}),getEventDetails:t=>e.get(`/sync/events/${t}/details`)};export{n as e};

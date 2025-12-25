@@ -7,8 +7,7 @@ import type {
   LoginResponse,
   TokenVerifyResponse,
   ApiResponse,
-  ApiError,
-  ErrorCode
+  ApiError
 } from './types/auth'
 
 const TOKEN_KEY = 'auth_token'
