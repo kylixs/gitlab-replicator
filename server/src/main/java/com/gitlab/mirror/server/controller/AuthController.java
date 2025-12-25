@@ -8,6 +8,11 @@ import com.gitlab.mirror.server.service.auth.AuthenticationService;
 import com.gitlab.mirror.server.service.auth.exception.AccountLockedException;
 import com.gitlab.mirror.server.service.auth.exception.AuthenticationException;
 import com.gitlab.mirror.server.service.auth.model.ChallengeInfo;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +34,7 @@ import java.time.LocalDateTime;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Tag(name = "Authentication", description = "Authentication API endpoints")
 public class AuthController {
 
     private final AuthenticationService authenticationService;
@@ -41,7 +47,12 @@ public class AuthController {
      * @return Challenge response with salt and iterations
      */
     @PostMapping("/challenge")
-    public ResponseEntity<ApiResponse<ChallengeResponse>> getChallenge(
+    @Operation(summary = "Get authentication challenge", description = "Generate SCRAM challenge for authentication")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Challenge generated successfully"),
+            @ApiResponse(responseCode = "404", description = "User not found")
+    })
+    public ResponseEntity<com.gitlab.mirror.common.model.auth.ApiResponse<ChallengeResponse>> getChallenge(
             @Valid @RequestBody ChallengeRequest request) {
 
         try {
@@ -54,12 +65,12 @@ public class AuthController {
                     .expiresAt(challengeInfo.getExpiresAt())
                     .build();
 
-            return ResponseEntity.ok(ApiResponse.success(response));
+            return ResponseEntity.ok(com.gitlab.mirror.common.model.auth.ApiResponse.success(response));
 
         } catch (AuthenticationException e) {
             // User not found or disabled - return 404
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.error("USER_NOT_FOUND", e.getMessage()));
+                    .body(com.gitlab.mirror.common.model.auth.ApiResponse.error("USER_NOT_FOUND", e.getMessage()));
         }
     }
 
@@ -71,7 +82,13 @@ public class AuthController {
      * @return Login response with token
      */
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<LoginResponse>> login(
+    @Operation(summary = "Login", description = "Authenticate with SCRAM-SHA-256 and obtain access token")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Login successful"),
+            @ApiResponse(responseCode = "401", description = "Authentication failed"),
+            @ApiResponse(responseCode = "423", description = "Account locked due to too many failed attempts")
+    })
+    public ResponseEntity<com.gitlab.mirror.common.model.auth.ApiResponse<LoginResponse>> login(
             @Valid @RequestBody LoginRequest request,
             HttpServletRequest httpRequest) {
 
@@ -102,17 +119,17 @@ public class AuthController {
                             .build())
                     .build();
 
-            return ResponseEntity.ok(ApiResponse.success(response));
+            return ResponseEntity.ok(com.gitlab.mirror.common.model.auth.ApiResponse.success(response));
 
         } catch (AccountLockedException e) {
             // Account locked - return 423 (Locked)
             return ResponseEntity.status(HttpStatus.LOCKED)
-                    .body(ApiResponse.accountLocked(e.getLockoutSeconds(), e.getFailureCount()));
+                    .body(com.gitlab.mirror.common.model.auth.ApiResponse.accountLocked(e.getLockoutSeconds(), e.getFailureCount()));
 
         } catch (AuthenticationException e) {
             // Authentication failed - return 401
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("AUTHENTICATION_ERROR", e.getMessage()));
+                    .body(com.gitlab.mirror.common.model.auth.ApiResponse.error("AUTHENTICATION_ERROR", e.getMessage()));
         }
     }
 
@@ -123,7 +140,12 @@ public class AuthController {
      * @return Success response
      */
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<Void>> logout(HttpServletRequest httpRequest) {
+    @Operation(summary = "Logout", description = "Logout and invalidate current token")
+    @SecurityRequirement(name = "Bearer Token")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Logout successful")
+    })
+    public ResponseEntity<com.gitlab.mirror.common.model.auth.ApiResponse<Void>> logout(HttpServletRequest httpRequest) {
         String token = extractToken(httpRequest);
 
         if (token != null) {
@@ -131,7 +153,7 @@ public class AuthController {
             log.debug("User logged out successfully");
         }
 
-        return ResponseEntity.ok(ApiResponse.success());
+        return ResponseEntity.ok(com.gitlab.mirror.common.model.auth.ApiResponse.success());
     }
 
     /**
@@ -141,12 +163,18 @@ public class AuthController {
      * @return Token verification response
      */
     @GetMapping("/verify")
-    public ResponseEntity<ApiResponse<TokenVerifyResponse>> verifyToken(HttpServletRequest httpRequest) {
+    @Operation(summary = "Verify token", description = "Verify if current token is valid")
+    @SecurityRequirement(name = "Bearer Token")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Token is valid"),
+            @ApiResponse(responseCode = "401", description = "Token is invalid or expired")
+    })
+    public ResponseEntity<com.gitlab.mirror.common.model.auth.ApiResponse<TokenVerifyResponse>> verifyToken(HttpServletRequest httpRequest) {
         String token = extractToken(httpRequest);
 
         if (token == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("MISSING_TOKEN", "Missing authentication token"));
+                    .body(com.gitlab.mirror.common.model.auth.ApiResponse.error("MISSING_TOKEN", "Missing authentication token"));
         }
 
         User user = authenticationService.validateToken(token);
@@ -157,7 +185,7 @@ public class AuthController {
                     .build();
 
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("INVALID_TOKEN", "Token is invalid or expired"));
+                    .body(com.gitlab.mirror.common.model.auth.ApiResponse.error("INVALID_TOKEN", "Token is invalid or expired"));
         }
 
         // Token is valid
@@ -172,7 +200,7 @@ public class AuthController {
                         .build())
                 .build();
 
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return ResponseEntity.ok(com.gitlab.mirror.common.model.auth.ApiResponse.success(response));
     }
 
     /**
