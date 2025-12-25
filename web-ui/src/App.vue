@@ -1,5 +1,9 @@
 <template>
-  <el-container class="app-container">
+  <!-- Login page without sidebar -->
+  <router-view v-if="isLoginPage" />
+
+  <!-- Main app layout with sidebar -->
+  <el-container v-else class="app-container">
     <el-aside width="200px" class="sidebar">
       <div class="logo">
         <h2>GitLab Mirror</h2>
@@ -47,6 +51,8 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
+
+const isLoginPage = computed(() => route.path === '/login')
 
 const activeMenu = computed(() => {
   const path = route.path
