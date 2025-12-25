@@ -530,6 +530,100 @@ ClientSignature
 - ✅ **自动清理**: 定时任务清理过期 Token 和挑战码
 - ✅ **数据库存储**: Token 持久化，支持跨服务器验证
 
+### 6. 防暴力破解保护
+
+#### 6.1 多层防护策略
+
+采用**深度防御**原则，结合多种防护机制：
+
+| 防护层级 | 机制 | 目的 |
+|---------|------|-----|
+| 第1层 | IP级别限流 | 防止单个IP大量尝试 |
+| 第2层 | 账户级别限流 | 防止分布式暴力破解 |
+| 第3层 | 指数退避锁定 | 逐步增加攻击成本 |
+| 第4层 | 审计告警 | 检测异常行为 |
+
+#### 6.2 指数退避机制（推荐）
+
+相比固定锁定时间，**指数退避**更智能：
+
+```
+失败次数  →  锁定时长
+   1-2    →  无锁定
+   3      →  1秒
+   4      →  2秒
+   5      →  4秒
+   6      →  8秒
+   7      →  16秒
+   8      →  32秒
+   9      →  64秒
+  10+     →  300秒 (5分钟，上限)
+```
+
+**优势**：
+- ✅ 对正常用户友好（偶尔输错密码影响小）
+- ✅ 对攻击者有效（持续失败会快速累积惩罚）
+- ✅ 避免DoS攻击（不会永久锁定账户）
+- ✅ 自动恢复（成功登录后重置计数）
+
+#### 6.3 限流策略
+
+**IP级别限流**（防止单点暴力破解）：
+- 窗口时间：10分钟
+- 限制次数：20次失败尝试
+- 超限处理：返回 429 Too Many Requests，要求等待或CAPTCHA
+
+**账户级别限流**（防止分布式暴力破解）：
+- 窗口时间：10分钟
+- 限制次数：10次失败尝试
+- 超限处理：账户临时锁定（指数退避）
+
+**实现方式**：
+- 使用 **Caffeine Cache** 或 **Redis** 存储失败计数
+- Key格式：`login_fail:ip:{ip}` 和 `login_fail:user:{username}`
+
+#### 6.4 审计和告警
+
+**记录失败登录事件**：
+```java
+CREATE TABLE login_audit_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50),
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    login_result ENUM('SUCCESS', 'FAILURE', 'LOCKED', 'RATE_LIMITED'),
+    failure_reason VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_username (username),
+    INDEX idx_ip (ip_address),
+    INDEX idx_created_at (created_at)
+);
+```
+
+**告警条件**：
+- 单个IP在5分钟内失败超过30次
+- 单个账户在10分钟内从10个不同IP登录失败
+- 检测到异常模式（如按字典顺序尝试）
+
+**告警方式**：
+- 写入日志文件
+- 发送邮件通知管理员
+- 集成到监控系统（Prometheus/Grafana）
+
+#### 6.5 安全建议
+
+**OWASP 最佳实践**：
+- ✅ 失败次数与账户绑定，不与IP绑定（防止IP轮换）
+- ✅ 使用指数退避而非固定锁定（避免DoS）
+- ✅ 不要泄露用户是否存在（统一错误消息）
+- ✅ 成功登录后重置失败计数
+- ✅ 记录审计日志用于分析
+
+**Microsoft 智能锁定参考**：
+- 识别合法用户和攻击者
+- 对合法用户友好（如从不同地点登录）
+- 对攻击者严格限制
+
 ---
 
 ## 📡 API 接口定义（SCRAM-SHA-256）
@@ -615,11 +709,38 @@ Content-Type: application/json
 ```
 
 **错误码**：
-- `INVALID_CREDENTIALS`: 用户名或密码错误
+- `INVALID_CREDENTIALS`: 用户名或密码错误（统一消息，不泄露用户是否存在）
 - `CHALLENGE_EXPIRED`: 挑战码已过期
 - `CHALLENGE_USED`: 挑战码已被使用
 - `CHALLENGE_NOT_FOUND`: 挑战码不存在
 - `USER_DISABLED`: 用户已被禁用
+- `ACCOUNT_LOCKED`: 账户临时锁定（防暴力破解）
+- `TOO_MANY_REQUESTS`: IP请求过于频繁（429状态码）
+
+**锁定响应示例**：
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ACCOUNT_LOCKED",
+    "message": "账户已临时锁定，请稍后再试",
+    "retryAfter": 32,
+    "failedAttempts": 7
+  }
+}
+```
+
+**频率限制响应**（429）：
+```json
+{
+  "success": false,
+  "error": {
+    "code": "TOO_MANY_REQUESTS",
+    "message": "请求过于频繁，请稍后再试",
+    "retryAfter": 600
+  }
+}
+```
 
 ### 3. 登出
 
@@ -680,35 +801,56 @@ Authorization: Bearer 7c9e6679-7425-40de-944b-e07fc1f90ae7
    - `ChallengeInfo.java` - 挑战码信息（内存数据结构）
    - Repository接口：`UserRepository`, `AuthTokenRepository`
 
-### Phase 2: 后端API实现（2天）
+### Phase 2: 后端API实现（2.5天）
 
 1. **实现 SCRAM 工具类**
    - `ScramUtils.java` - PBKDF2、HMAC-SHA256、XOR 等工具方法
    - 用户创建时的 StoredKey 计算
    - ClientProof 验证逻辑
 
-2. **实现认证服务**
+2. **实现防暴力破解服务**
+   - `BruteForceProtectionService.java`
+   - 失败计数器（Caffeine Cache）
+     - IP级别计数：`login_fail:ip:{ip}`
+     - 账户级别计数：`login_fail:user:{username}`
+   - 指数退避计算：`lockoutSeconds = Math.min(2^(failCount-2), 300)`
+   - 成功登录后重置计数
+
+3. **实现审计日志服务**
+   - `LoginAuditService.java`
+   - 记录所有登录尝试（成功/失败）
+   - 异步写入数据库（避免影响性能）
+   - 提供查询接口用于安全分析
+
+4. **实现认证服务**
    - `AuthenticationService.java`
    - 挑战码生成和验证（内存存储 ConcurrentHashMap）
    - ClientProof 验证（SCRAM机制）
    - Token 生成和管理
+   - 集成防暴力破解检查
+   - 集成审计日志记录
 
-3. **实现认证控制器**
+5. **实现认证控制器**
    - `AuthController.java`
    - `POST /api/auth/challenge` - 获取挑战码和Salt
    - `POST /api/auth/login` - 验证ClientProof并返回Token
+     - 登录前检查IP和账户限流
+     - 登录失败时记录审计日志
+     - 返回锁定信息（如果账户被锁定）
    - `POST /api/auth/logout` - 登出
    - `GET /api/auth/verify` - 验证Token
 
-4. **修改Token过滤器**
+6. **修改Token过滤器**
    - 支持Token验证
    - 白名单：`/api/auth/**`, `/actuator/**`
+   - 提取客户端IP（考虑代理头 X-Forwarded-For）
 
-5. **定时任务**
+7. **定时任务**
    - 清理过期挑战码（从内存Map删除，每分钟执行）
    - 清理过期Token（从数据库删除，每小时执行）
+   - 清理过期审计日志（保留90天，每天执行）
 
-### Phase 3: 前端实现（1.5天）
+### Phase 3: 前端实现（2天）
 
 1. **安装依赖**
    ```bash
@@ -720,13 +862,22 @@ Authorization: Bearer 7c9e6679-7425-40de-944b-e07fc1f90ae7
    - `scram.ts` - PBKDF2、HMAC、XOR 工具函数
    - ClientProof 计算逻辑
 
-3. **创建登录页面**
+3. **创建登录页面（增强版）**
    - `Login.vue` - 用户名/密码输入表单
    - 集成 crypto-js 进行 SCRAM-SHA-256 计算
+   - **防暴力破解UI**：
+     - 显示账户锁定倒计时（如果被锁定）
+     - 显示友好的错误提示（不泄露用户是否存在）
+     - 禁用登录按钮（当账户被锁定时）
 
 4. **实现认证逻辑**
    - `auth.ts` - 认证API客户端
+     - 处理 `ACCOUNT_LOCKED` 错误（显示重试时间）
+     - 处理 `TOO_MANY_REQUESTS` 错误（提示稍后重试）
    - `useAuth.ts` - 认证状态管理（Composition API）
+     - 登录状态
+     - 失败次数计数（本地显示，仅用于UI提示）
+     - 锁定倒计时
 
 5. **路由守卫**
    - 未登录重定向到登录页
@@ -735,23 +886,43 @@ Authorization: Bearer 7c9e6679-7425-40de-944b-e07fc1f90ae7
 6. **全局请求拦截器**
    - 自动添加 `Authorization: Bearer <token>` Header
    - Token过期处理（401响应 → 重定向登录）
+   - 429响应处理（显示限流提示）
 
-### Phase 4: 初始化和测试（0.5天）
+### Phase 4: 初始化和测试（1天）
 
 1. **数据库初始化脚本**
+   - 创建 `users` 表（SCRAM字段）
+   - 创建 `auth_tokens` 表
+   - 创建 `login_audit_log` 表
    - 创建默认管理员账户（使用SCRAM计算StoredKey）
-   - 用户名: `admin`
-   - 默认密码: `Admin@123`
+     - 用户名: `admin`
+     - 默认密码: `Admin@123`
 
-2. **集成测试**
-   - 测试完整登录流程
+2. **功能测试**
+   - 测试完整SCRAM登录流程
    - 测试挑战码过期处理
    - 测试重放攻击防护
+   - 测试Token生成和验证
 
-3. **安全性测试**
-   - 验证密码无法反推
+3. **防暴力破解测试**
+   - 测试IP级别限流（连续失败20次）
+   - 测试账户级别限流（连续失败10次）
+   - 测试指数退避锁定机制（失败3/4/5次的锁定时长）
+   - 测试成功登录后计数重置
+   - 测试审计日志记录
+
+4. **安全性测试**
+   - 验证密码无法反推（即使知道StoredKey）
    - 验证挑战码单次使用
-   - 验证Token有效性
+   - 验证Token有效性和过期
+   - 验证不泄露用户是否存在
+   - 验证无法通过DoS攻击锁定账户（指数退避上限）
+
+5. **性能测试**
+   - 测试PBKDF2计算时间（4096次迭代，应<100ms）
+   - 测试内存存储挑战码性能
+   - 测试Caffeine Cache限流性能
+   - 测试异步审计日志写入性能
 
 ---
 
@@ -764,11 +935,29 @@ Authorization: Bearer 7c9e6679-7425-40de-944b-e07fc1f90ae7
   - SHA-256: `java.security.MessageDigest`
   - 编解码: Apache Commons Codec (Hex)
 - **UUID 生成**: `java.util.UUID`
-- **内存存储**: `java.util.concurrent.ConcurrentHashMap`
+- **内存存储**:
+  - 挑战码: `java.util.concurrent.ConcurrentHashMap`
+  - 限流缓存: **Caffeine Cache** (高性能、带过期时间)
 - **定时任务**: Spring `@Scheduled`
+- **异步处理**: Spring `@Async` (审计日志异步写入)
 - **依赖库**:
-  - `spring-boot-starter-security` (可选，如需更多安全特性)
+  - `spring-boot-starter-web`
+  - `spring-boot-starter-data-jpa`
   - `commons-codec` (Hex编解码)
+  - `com.github.ben-manes.caffeine:caffeine` (限流缓存)
+  - `spring-boot-starter-security` (可选，用于密码编码器等工具)
+
+**Maven依赖示例**:
+```xml
+<dependency>
+    <groupId>com.github.ben-manes.caffeine</groupId>
+    <artifactId>caffeine</artifactId>
+</dependency>
+<dependency>
+    <groupId>commons-codec</groupId>
+    <artifactId>commons-codec</artifactId>
+</dependency>
+```
 
 ### 前端
 - **SCRAM 计算**: `crypto-js` (PBKDF2, HMAC-SHA256, SHA-256)
@@ -777,6 +966,18 @@ Authorization: Bearer 7c9e6679-7425-40de-944b-e07fc1f90ae7
 - **依赖库**:
   - `crypto-js` (^4.2.0)
   - `@types/crypto-js` (开发依赖)
+
+**NPM依赖示例**:
+```json
+{
+  "dependencies": {
+    "crypto-js": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/crypto-js": "^4.2.1"
+  }
+}
+```
 
 ---
 
@@ -792,6 +993,83 @@ Authorization: Bearer 7c9e6679-7425-40de-944b-e07fc1f90ae7
 | 状态 | 启用 |
 
 **首次登录后建议立即修改密码**（后续可实现强制修改密码功能）。
+
+---
+
+## ⚙️ 配置参数
+
+### 认证配置（application.yml）
+
+```yaml
+auth:
+  # SCRAM 配置
+  scram:
+    iterations: 4096  # PBKDF2迭代次数（推荐4096-10000）
+    salt-length: 16   # Salt长度（字节）
+
+  # 挑战码配置
+  challenge:
+    ttl: 30  # 有效期（秒）
+    cleanup-interval: 60000  # 清理间隔（毫秒）
+
+  # Token配置
+  token:
+    ttl: 7  # 有效期（天）
+    cleanup-interval: 3600000  # 清理间隔（毫秒，1小时）
+
+  # 防暴力破解配置
+  brute-force-protection:
+    enabled: true
+
+    # IP级别限流
+    ip-rate-limit:
+      window: 600  # 时间窗口（秒，10分钟）
+      max-attempts: 20  # 最大失败次数
+
+    # 账户级别限流
+    account-rate-limit:
+      window: 600  # 时间窗口（秒，10分钟）
+      max-attempts: 10  # 最大失败次数
+
+    # 指数退避锁定
+    exponential-backoff:
+      enabled: true
+      start-after: 3  # 失败N次后开始锁定
+      max-lockout: 300  # 最大锁定时长（秒，5分钟）
+
+    # 审计日志
+    audit-log:
+      enabled: true
+      async: true  # 异步写入
+      retention-days: 90  # 保留天数
+```
+
+### 配置说明
+
+| 配置项 | 默认值 | 说明 | 建议 |
+|--------|-------|------|------|
+| `scram.iterations` | 4096 | PBKDF2迭代次数 | 开发环境可降低到1024提升速度，生产环境4096-10000 |
+| `challenge.ttl` | 30秒 | 挑战码有效期 | 生产环境保持30秒，开发环境可延长到300秒 |
+| `token.ttl` | 7天 | Token有效期 | 根据业务需求调整，内部系统可延长到30天 |
+| `ip-rate-limit.max-attempts` | 20 | IP失败次数限制 | 根据用户规模调整，大型系统可适当提高 |
+| `account-rate-limit.max-attempts` | 10 | 账户失败次数限制 | 建议保持较低值，防止暴力破解 |
+| `exponential-backoff.max-lockout` | 300秒 | 最大锁定时长 | 避免DoS攻击，不建议超过600秒 |
+
+### 环境变量覆盖
+
+```bash
+# 开发环境 - 宽松配置
+export AUTH_SCRAM_ITERATIONS=1024
+export AUTH_CHALLENGE_TTL=300
+export AUTH_BRUTE_FORCE_PROTECTION_ENABLED=false
+
+# 生产环境 - 严格配置
+export AUTH_SCRAM_ITERATIONS=4096
+export AUTH_CHALLENGE_TTL=30
+export AUTH_BRUTE_FORCE_PROTECTION_ENABLED=true
+export AUTH_IP_RATE_LIMIT_MAX_ATTEMPTS=15
+export AUTH_ACCOUNT_RATE_LIMIT_MAX_ATTEMPTS=5
+```
 
 ---
 
