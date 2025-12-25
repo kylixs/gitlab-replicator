@@ -138,7 +138,6 @@
 - 编译通过
 - 字段映射正确
 - Spring Boot启动无错误
-- 编写并通过单元测试验证实体映射
 
 **提交**: `feat(auth): add MyBatis-Plus entities for authentication`
 
@@ -185,7 +184,7 @@
 - 所有Mapper方法正确
 - 可执行基本CRUD操作
 - 自定义查询正常工作
-- 编写并通过单元测试验证所有Mapper方法
+- 编写并通过单元测试验证所有Mapper方法, 验证实体映射正确
 
 **提交**: `feat(auth): add MyBatis-Plus mappers for authentication`
 
