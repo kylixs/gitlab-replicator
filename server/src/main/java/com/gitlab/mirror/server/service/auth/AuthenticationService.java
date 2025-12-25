@@ -113,7 +113,7 @@ public class AuthenticationService {
             throw new AuthenticationException("用户名或密码错误");
         }
 
-        if (challengeInfo.getUsed()) {
+        if (challengeInfo.isUsed()) {
             log.debug("Login failed - challenge already used: {}", challenge);
             recordFailureAndAudit(username, ip, userAgent, "挑战码已使用");
             throw new AuthenticationException("用户名或密码错误");
