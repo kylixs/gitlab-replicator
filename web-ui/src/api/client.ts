@@ -27,6 +27,12 @@ client.interceptors.request.use(
 // Response interceptor - Handle errors and token expiration
 client.interceptors.response.use(
   (response) => {
+    // For auth APIs, return the full response (they handle ApiResponse unwrapping)
+    if (response.config.url?.includes('/auth/')) {
+      return response
+    }
+
+    // For other APIs, check success and unwrap data
     const data = response.data
     if (data.success === false) {
       return Promise.reject(new Error(data.message || 'Request failed'))

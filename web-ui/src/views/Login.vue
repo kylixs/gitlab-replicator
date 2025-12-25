@@ -103,10 +103,6 @@
           </el-button>
         </el-form-item>
       </el-form>
-
-      <div class="login-footer">
-        <p>Default credentials: admin / Admin@123</p>
-      </div>
     </el-card>
   </div>
 </template>
@@ -199,19 +195,6 @@ async function handleLogin() {
 
 .alert-box {
   margin-bottom: 16px;
-}
-
-.login-footer {
-  text-align: center;
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid #dcdfe6;
-}
-
-.login-footer p {
-  margin: 0;
-  font-size: 13px;
-  color: #909399;
 }
 
 :deep(.el-form-item__label) {
