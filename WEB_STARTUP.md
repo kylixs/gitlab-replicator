@@ -7,7 +7,34 @@
 3. **MySQL 8.0** (通过Docker运行)
 4. **环境配置** (.env文件)
 
-## 🚀 快速启动
+## 🚀 快速启动（开发模式 - 推荐）
+
+### 一键启动开发环境
+
+```bash
+# 启动前端开发服务器 + 后端API服务器
+./start-dev.sh
+```
+
+这个脚本会：
+- ✅ 自动检查数据库连接
+- ✅ 启动后端Spring Boot服务器（端口9999）
+- ✅ 启动前端Vite开发服务器（端口3000，支持热更新）
+- ✅ 配置API代理（前端自动代理到后端）
+
+启动后访问：
+- **前端开发服务器**: http://localhost:3000 （支持热更新）
+- **后端API**: http://localhost:9999/api
+
+### 停止开发环境
+
+```bash
+./stop-dev.sh
+```
+
+---
+
+## 📦 生产模式启动
 
 ### 1. 启动数据库
 
@@ -108,11 +135,23 @@ java -jar server/target/server-1.0.0-SNAPSHOT.jar
 - 访问: http://localhost:9999/configuration
 - 功能: GitLab实例配置、连接测试、调度设置、同步规则
 
-## 🔧 开发模式
+## 🔧 开发模式（详细说明）
 
-### 前端开发（热更新）
+### 推荐方式：使用开发启动脚本
 
-如果需要修改前端代码并实时查看效果：
+```bash
+./start-dev.sh
+```
+
+**优势**：
+- ✅ 前端代码修改后自动热更新，无需重新编译
+- ✅ 后端和前端同时启动
+- ✅ 自动配置API代理
+- ✅ 日志集中管理
+
+### 手动启动（如需要单独调试）
+
+#### 只启动前端开发服务器
 
 ```bash
 cd web-ui
@@ -120,16 +159,28 @@ npm install
 npm run dev
 ```
 
-然后访问: http://localhost:5173
+访问: http://localhost:3000
 
-### 后端开发
-
-修改后端代码后，重启Spring Boot应用即可：
+#### 只启动后端服务器
 
 ```bash
-# Ctrl+C 停止当前运行
-# 然后重新启动
-./server/bin/start.sh
+cd server
+mvn spring-boot:run
+```
+
+访问: http://localhost:9999
+
+### 查看日志
+
+```bash
+# 后端日志
+tail -f logs/backend.log
+
+# 前端日志
+tail -f logs/frontend.log
+
+# 同时查看两者
+tail -f logs/backend.log logs/frontend.log
 ```
 
 ## 📊 API端点
