@@ -96,6 +96,12 @@
             <artifactId>commons-codec</artifactId>
         </dependency>
 
+        <!-- Caffeine Cache (for brute-force protection) -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- .env file support -->
         <dependency>
             <groupId>me.paulschwarz</groupId>
