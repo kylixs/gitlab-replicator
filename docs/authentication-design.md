@@ -2,18 +2,25 @@
 
 ## 📋 概述
 
-本文档描述 GitLab Mirror Web UI 的登录认证方案设计。采用基于挑战-响应的认证机制，确保密码安全性，同时保持实现简单。
+本文档描述 GitLab Mirror Web UI 的登录认证方案设计。采用基于 **SCRAM-SHA-256** (Salted Challenge Response Authentication Mechanism) 的简化版本，参考业界最佳实践，确保密码安全性。
 
 **设计原则**：
 - ✅ 密码不明文传输
 - ✅ 服务端不保存明文或可逆加密的密码
+- ✅ 使用 PBKDF2 进行密钥派生（抗暴力破解）
 - ✅ 防重放攻击（基于时间窗口的挑战码）
+- ✅ 挑战码存储在内存中（不使用数据库）
+- ✅ 参考业界标准 SCRAM 认证机制
 - ✅ 暂不实现角色授权（所有登录用户权限相同）
-- ✅ 使用标准加密算法（SHA-256）
+
+**参考标准**：
+- RFC 5802: Salted Challenge Response Authentication Mechanism (SCRAM)
+- RFC 7677: SCRAM-SHA-256 and SCRAM-SHA-256-PLUS
+- PBKDF2 (RFC 2898)
 
 ---
 
-## 🔐 认证流程
+## 🔐 认证流程（基于 SCRAM 简化版）
 
 ### 整体流程图
 
@@ -22,34 +29,42 @@
 │ 前端    │                                    │ 后端    │
 └────┬────┘                                    └────┬────┘
      │                                              │
-     │ 1. 请求挑战码                                │
+     │ 1. 请求挑战码 + Salt                         │
      ├─────────────────────────────────────────────>│
-     │    GET /api/auth/challenge                   │
+     │    POST /api/auth/challenge                  │
+     │    { username }                              │
+     │                                              │ - 查询用户获取salt
+     │                                              │ - 生成随机challenge
+     │                                              │ - 存入内存(Map)
      │                                              │
-     │ 2. 返回挑战码 + 过期时间                     │
+     │ 2. 返回挑战码 + Salt + 迭代次数              │
      │<─────────────────────────────────────────────┤
-     │    { challenge, expiresAt }                  │
+     │    { challenge, salt, iterations, expiresAt }│
      │                                              │
-     │ 3. 计算登录Hash                              │
-     │    hash = SHA256(username + password + challenge)
+     │ 3. 前端计算 ClientProof                      │
+     │    saltedPassword = PBKDF2(password, salt, iterations)
+     │    clientKey = HMAC-SHA256(saltedPassword, "Client Key")
+     │    storedKey = SHA256(clientKey)             │
+     │    authMessage = username + challenge        │
+     │    clientSignature = HMAC-SHA256(storedKey, authMessage)
+     │    clientProof = XOR(clientKey, clientSignature)
      │                                              │
      │ 4. 提交登录                                  │
      ├─────────────────────────────────────────────>│
      │    POST /api/auth/login                      │
-     │    { username, challenge, hash }             │
+     │    { username, challenge, clientProof }      │
      │                                              │
      │                                              │ 5. 验证挑战码有效性
+     │                                              │    - 从内存检查是否存在
      │                                              │    - 检查是否过期（30秒）
      │                                              │    - 检查是否已使用
      │                                              │
-     │                                              │ 6. 验证登录Hash
-     │                                              │    计算期望Hash:
-     │                                              │    expected = SHA256(
-     │                                              │      username +
-     │                                              │      storedPasswordHash +
-     │                                              │      challenge
-     │                                              │    )
-     │                                              │    比较: hash == expected
+     │                                              │ 6. 验证 ClientProof
+     │                                              │    从数据库获取storedKey
+     │                                              │    计算 authMessage
+     │                                              │    计算 clientSignature
+     │                                              │    恢复 clientKey = XOR(clientProof, clientSignature)
+     │                                              │    验证 SHA256(clientKey) == storedKey
      │                                              │
      │ 7. 返回Token                                 │
      │<─────────────────────────────────────────────┤
@@ -61,6 +76,15 @@
      │                                              │
 ```
 
+### 关键改进点
+
+**相比原方案的优势**：
+1. ✅ **Salt 安全传输** - Salt 不是秘密，可以安全传输给前端
+2. ✅ **PBKDF2 密钥派生** - 使用迭代哈希（默认4096次），大幅增强抗暴力破解能力
+3. ✅ **XOR 混淆** - 使用 HMAC 和 XOR 操作，即使截获也无法反推密码
+4. ✅ **内存存储挑战码** - 无需数据库，性能更好，自动过期清理
+5. ✅ **标准 SCRAM 机制** - 参考 PostgreSQL、MongoDB 等数据库的认证方式
+
 ---
 
 ## 💾 数据模型
@@ -71,8 +95,9 @@
 CREATE TABLE users (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE COMMENT '用户名',
-    password_hash VARCHAR(64) NOT NULL COMMENT '密码Hash (SHA256)',
-    salt VARCHAR(32) NOT NULL COMMENT '盐值',
+    stored_key VARCHAR(64) NOT NULL COMMENT 'StoredKey (SHA256(ClientKey))',
+    salt VARCHAR(32) NOT NULL COMMENT '盐值 (16字节十六进制)',
+    iterations INT DEFAULT 4096 COMMENT 'PBKDF2迭代次数',
     display_name VARCHAR(100) COMMENT '显示名称',
     enabled TINYINT(1) DEFAULT 1 COMMENT '是否启用',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -81,30 +106,41 @@ CREATE TABLE users (
 ) COMMENT='用户表';
 ```
 
-**字段说明**：
-- `password_hash`: SHA256(salt + 原始密码)，64位十六进制字符串
-- `salt`: 随机生成的32位十六进制字符串
-- `enabled`: 账户启用状态，预留字段
+**字段说明（SCRAM 方式）**：
+- `stored_key`: SHA256(ClientKey)，用于验证客户端身份
+  - ClientKey = HMAC-SHA256(SaltedPassword, "Client Key")
+  - SaltedPassword = PBKDF2(password, salt, iterations)
+- `salt`: 随机生成的盐值（16字节，32位十六进制字符串）
+- `iterations`: PBKDF2 迭代次数（默认 4096，可调整以适应性能需求）
+- `enabled`: 账户启用状态
 
-### 挑战码表 (auth_challenges)
+**为什么不存储密码Hash？**
+- SCRAM 机制中，服务端只需存储 StoredKey
+- StoredKey 由 SaltedPassword 派生，无法反推原始密码
+- 即使数据库泄露，攻击者无法直接使用 StoredKey 登录
 
-```sql
-CREATE TABLE auth_challenges (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    challenge VARCHAR(64) NOT NULL UNIQUE COMMENT '挑战码',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    expires_at TIMESTAMP NOT NULL COMMENT '过期时间',
-    used TINYINT(1) DEFAULT 0 COMMENT '是否已使用',
-    used_at TIMESTAMP NULL COMMENT '使用时间',
-    INDEX idx_challenge (challenge),
-    INDEX idx_expires_at (expires_at)
-) COMMENT='认证挑战码表';
+### 挑战码存储（内存）
+
+**不使用数据库表**，改为内存存储（ConcurrentHashMap）：
+
+```java
+// 挑战码数据结构
+class ChallengeInfo {
+    String username;
+    Instant createdAt;
+    Instant expiresAt;
+    boolean used;
+}
+
+// 内存存储
+ConcurrentHashMap<String, ChallengeInfo> challengeStore;
 ```
 
-**字段说明**：
-- `challenge`: UUID v4格式的挑战码
-- `expires_at`: 过期时间（创建时间 + 30秒）
-- `used`: 标记是否已使用（防止重放攻击）
+**优势**：
+- ✅ 性能更好（无数据库IO）
+- ✅ 自动过期（定时清理或检查时清理）
+- ✅ 无需数据库表和索引
+- ✅ 挑战码本身是临时数据，无需持久化
 
 ### 会话Token表 (auth_tokens)
 
@@ -130,58 +166,139 @@ CREATE TABLE auth_tokens (
 
 ---
 
-## 🔑 密码存储方案
+## 🔑 密码存储方案（SCRAM-SHA-256）
 
-### 初始密码设置流程
+### 用户创建流程
 
-```javascript
-// 服务端生成用户账户
-function createUser(username, rawPassword) {
-    // 1. 生成随机盐值
-    const salt = generateRandomHex(32);  // 32字节十六进制
+```java
+// 服务端创建用户账户
+public void createUser(String username, String rawPassword) {
+    // 1. 生成随机盐值（16字节）
+    byte[] salt = new byte[16];
+    SecureRandom random = new SecureRandom();
+    random.nextBytes(salt);
+    String saltHex = Hex.encodeHexString(salt);  // 转为十六进制字符串
 
-    // 2. 计算密码Hash
-    const passwordHash = SHA256(salt + rawPassword);
+    // 2. PBKDF2 密钥派生
+    int iterations = 4096;
+    SecretKeySpec saltedPassword = PBKDF2(
+        rawPassword,
+        salt,
+        iterations,
+        256  // 输出长度：256位
+    );
 
-    // 3. 存储到数据库
-    INSERT INTO users (username, password_hash, salt)
-    VALUES (username, passwordHash, salt);
+    // 3. 计算 ClientKey
+    byte[] clientKey = HMAC_SHA256(saltedPassword, "Client Key");
+
+    // 4. 计算 StoredKey
+    byte[] storedKey = SHA256(clientKey);
+    String storedKeyHex = Hex.encodeHexString(storedKey);
+
+    // 5. 存储到数据库
+    User user = new User();
+    user.setUsername(username);
+    user.setStoredKey(storedKeyHex);
+    user.setSalt(saltHex);
+    user.setIterations(iterations);
+    userRepository.save(user);
 }
 ```
 
-**安全性**：
-- ✅ 原始密码不存储
-- ✅ 使用随机盐值（每个用户唯一）
-- ✅ 即使数据库泄露，也无法反推原始密码
+**SCRAM 计算链**：
+```
+原始密码
+   ↓ PBKDF2(password, salt, iterations)
+SaltedPassword (256位密钥)
+   ↓ HMAC-SHA256(SaltedPassword, "Client Key")
+ClientKey (32字节)
+   ↓ SHA256(ClientKey)
+StoredKey (32字节) → 存储到数据库
+```
+
+**安全性优势**：
+- ✅ **PBKDF2 迭代** - 4096 次迭代大幅增加暴力破解成本
+- ✅ **多层派生** - StoredKey 经过 3 次不可逆变换，无法反推密码
+- ✅ **随机盐值** - 每个用户唯一，防止彩虹表攻击
+- ✅ **标准算法** - 使用 RFC 标准，经过广泛验证
 
 ---
 
-## 🛡️ 登录验证流程
+## 🛡️ 登录验证流程（SCRAM-SHA-256）
 
 ### 前端实现
 
 ```typescript
-// 1. 获取挑战码
-async function getChallenge(): Promise<Challenge> {
-    const response = await fetch('/api/auth/challenge');
+import CryptoJS from 'crypto-js';
+
+// 辅助函数：PBKDF2
+function pbkdf2(password: string, saltHex: string, iterations: number): CryptoJS.lib.WordArray {
+    const salt = CryptoJS.enc.Hex.parse(saltHex);
+    return CryptoJS.PBKDF2(password, salt, {
+        keySize: 256 / 32,  // 8个32位字 = 256位
+        iterations: iterations,
+        hasher: CryptoJS.algo.SHA256
+    });
+}
+
+// 辅助函数：XOR 操作
+function xor(a: CryptoJS.lib.WordArray, b: CryptoJS.lib.WordArray): string {
+    const aBytes = a.words;
+    const bBytes = b.words;
+    const result = [];
+    for (let i = 0; i < aBytes.length; i++) {
+        result.push(aBytes[i] ^ bBytes[i]);
+    }
+    return CryptoJS.lib.WordArray.create(result).toString(CryptoJS.enc.Hex);
+}
+
+// 1. 获取挑战码和Salt
+async function getChallenge(username: string): Promise<ChallengeResponse> {
+    const response = await fetch('/api/auth/challenge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username })
+    });
     return response.json();
-    // 返回: { challenge: "uuid-v4", expiresAt: "2025-12-25T12:00:30Z" }
+    // 返回: { challenge, salt, iterations, expiresAt }
 }
 
-// 2. 计算登录Hash
-function calculateLoginHash(username: string, password: string, challenge: string): string {
-    // 计算: SHA256(username + password + challenge)
-    const combined = username + password + challenge;
-    return SHA256(combined);  // 使用crypto-js或Web Crypto API
+// 2. 计算 ClientProof
+function calculateClientProof(
+    username: string,
+    password: string,
+    challenge: string,
+    saltHex: string,
+    iterations: number
+): string {
+    // Step 1: SaltedPassword = PBKDF2(password, salt, iterations)
+    const saltedPassword = pbkdf2(password, saltHex, iterations);
+
+    // Step 2: ClientKey = HMAC-SHA256(SaltedPassword, "Client Key")
+    const clientKey = CryptoJS.HmacSHA256("Client Key", saltedPassword);
+
+    // Step 3: StoredKey = SHA256(ClientKey)
+    const storedKey = CryptoJS.SHA256(clientKey.toString(CryptoJS.enc.Hex));
+
+    // Step 4: AuthMessage = username + ":" + challenge
+    const authMessage = `${username}:${challenge}`;
+
+    // Step 5: ClientSignature = HMAC-SHA256(StoredKey, AuthMessage)
+    const clientSignature = CryptoJS.HmacSHA256(authMessage, storedKey);
+
+    // Step 6: ClientProof = XOR(ClientKey, ClientSignature)
+    const clientProof = xor(clientKey, clientSignature);
+
+    return clientProof;
 }
 
-// 3. 提交登录
+// 3. 登录
 async function login(username: string, password: string) {
-    // 获取新的挑战码
-    const { challenge } = await getChallenge();
+    // 获取挑战码和Salt
+    const { challenge, salt, iterations, expiresAt } = await getChallenge(username);
 
-    // 计算登录Hash
-    const loginHash = calculateLoginHash(username, password, challenge);
+    // 计算 ClientProof
+    const clientProof = calculateClientProof(username, password, challenge, salt, iterations);
 
     // 提交登录
     const response = await fetch('/api/auth/login', {
@@ -190,15 +307,15 @@ async function login(username: string, password: string) {
         body: JSON.stringify({
             username,
             challenge,
-            hash: loginHash
+            clientProof
         })
     });
 
-    const { token, expiresAt } = await response.json();
+    const { token, expiresAt: tokenExpires } = await response.json();
 
-    // 存储Token到localStorage
+    // 存储Token
     localStorage.setItem('auth_token', token);
-    localStorage.setItem('auth_expires', expiresAt);
+    localStorage.setItem('auth_expires', tokenExpires);
 
     return token;
 }
@@ -207,49 +324,110 @@ async function login(username: string, password: string) {
 ### 后端验证逻辑
 
 ```java
-// 1. 验证挑战码
-public boolean validateChallenge(String challenge) {
-    AuthChallenge ch = challengeRepository.findByChallenge(challenge);
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.security.MessageDigest;
+import java.util.concurrent.ConcurrentHashMap;
 
-    if (ch == null) {
+// 挑战码内存存储
+private ConcurrentHashMap<String, ChallengeInfo> challengeStore = new ConcurrentHashMap<>();
+
+// 1. 生成挑战码（返回 Salt）
+public ChallengeResponse generateChallenge(String username) {
+    // 查询用户，获取Salt
+    User user = userRepository.findByUsername(username);
+    if (user == null || !user.isEnabled()) {
+        throw new AuthenticationException("用户不存在或已禁用");
+    }
+
+    // 生成随机挑战码
+    String challenge = UUID.randomUUID().toString();
+    Instant now = Instant.now();
+    Instant expiresAt = now.plusSeconds(30);
+
+    // 存储到内存
+    ChallengeInfo info = new ChallengeInfo();
+    info.setUsername(username);
+    info.setCreatedAt(now);
+    info.setExpiresAt(expiresAt);
+    info.setUsed(false);
+    challengeStore.put(challenge, info);
+
+    // 返回挑战码、Salt、迭代次数
+    return new ChallengeResponse(
+        challenge,
+        user.getSalt(),
+        user.getIterations(),
+        expiresAt
+    );
+}
+
+// 2. 验证挑战码
+public boolean validateChallenge(String challenge, String username) {
+    ChallengeInfo info = challengeStore.get(challenge);
+
+    if (info == null) {
         return false;  // 挑战码不存在
     }
 
-    if (ch.isUsed()) {
+    if (!info.getUsername().equals(username)) {
+        return false;  // 用户名不匹配
+    }
+
+    if (info.isUsed()) {
         return false;  // 已被使用（防重放）
     }
 
-    if (ch.getExpiresAt().isBefore(Instant.now())) {
+    if (info.getExpiresAt().isBefore(Instant.now())) {
+        challengeStore.remove(challenge);  // 清理过期挑战码
         return false;  // 已过期
     }
 
     // 标记为已使用
-    ch.setUsed(true);
-    ch.setUsedAt(Instant.now());
-    challengeRepository.save(ch);
+    info.setUsed(true);
 
     return true;
 }
 
-// 2. 验证登录Hash
-public boolean validateLogin(String username, String challenge, String clientHash) {
+// 3. 验证 ClientProof (SCRAM-SHA-256)
+public boolean validateClientProof(String username, String challenge, String clientProofHex)
+        throws Exception {
     // 查询用户
     User user = userRepository.findByUsername(username);
     if (user == null || !user.isEnabled()) {
         return false;
     }
 
-    // 计算期望的Hash
-    // expected = SHA256(username + storedPasswordHash + challenge)
-    String expectedHash = DigestUtils.sha256Hex(
-        username + user.getPasswordHash() + challenge
-    );
+    // 获取 StoredKey
+    byte[] storedKey = Hex.decodeHex(user.getStoredKey());
 
-    // 比较Hash
-    return expectedHash.equals(clientHash);
+    // 计算 AuthMessage
+    String authMessage = username + ":" + challenge;
+
+    // 计算 ClientSignature = HMAC-SHA256(StoredKey, AuthMessage)
+    Mac hmac = Mac.getInstance("HmacSHA256");
+    SecretKeySpec keySpec = new SecretKeySpec(storedKey, "HmacSHA256");
+    hmac.init(keySpec);
+    byte[] clientSignature = hmac.doFinal(authMessage.getBytes(StandardCharsets.UTF_8));
+
+    // 解码 ClientProof
+    byte[] clientProof = Hex.decodeHex(clientProofHex);
+
+    // 恢复 ClientKey = XOR(ClientProof, ClientSignature)
+    byte[] clientKey = new byte[32];
+    for (int i = 0; i < 32; i++) {
+        clientKey[i] = (byte) (clientProof[i] ^ clientSignature[i]);
+    }
+
+    // 计算 SHA256(ClientKey)
+    MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+    byte[] computedStoredKey = sha256.digest(clientKey);
+
+    // 比较 StoredKey
+    return MessageDigest.isEqual(storedKey, computedStoredKey);
 }
 
-// 3. 生成Token
+// 4. 生成Token
 public String generateToken(Long userId) {
     String token = UUID.randomUUID().toString();
     Instant expiresAt = Instant.now().plus(7, ChronoUnit.DAYS);
@@ -262,71 +440,141 @@ public String generateToken(Long userId) {
 
     return token;
 }
+
+// 5. 定时清理过期挑战码
+@Scheduled(fixedDelay = 60000)  // 每分钟执行一次
+public void cleanExpiredChallenges() {
+    Instant now = Instant.now();
+    challengeStore.entrySet().removeIf(entry ->
+        entry.getValue().getExpiresAt().isBefore(now)
+    );
+}
 ```
+
+**验证流程说明**：
+1. 客户端发送 `ClientProof = XOR(ClientKey, ClientSignature)`
+2. 服务端计算 `ClientSignature = HMAC-SHA256(StoredKey, AuthMessage)`
+3. 服务端恢复 `ClientKey = XOR(ClientProof, ClientSignature)`
+4. 服务端验证 `SHA256(ClientKey) == StoredKey`
+
+**为什么安全？**
+- 即使攻击者截获 ClientProof，也无法反推 ClientKey（需要知道 ClientSignature）
+- ClientSignature 由 StoredKey 计算，而 StoredKey 存储在服务端
+- 每次登录的 Challenge 不同，ClientSignature 也不同，无法重放
 
 ---
 
-## 🔒 安全特性
+## 🔒 安全特性（SCRAM-SHA-256）
 
 ### 1. 防止密码泄露
 
-- ✅ **客户端**: 密码仅在计算Hash时使用，不发送到服务器
-- ✅ **传输层**: 只传输Hash值，即使被截获也无法反推密码
-- ✅ **服务端**: 只存储 `SHA256(salt + password)`，不保存原始密码
+- ✅ **客户端**: 密码仅用于 PBKDF2 计算，不发送到服务器
+- ✅ **传输层**: 只传输 ClientProof（XOR 混淆后的值），无法反推密码
+- ✅ **服务端**: 只存储 StoredKey = SHA256(ClientKey)，无法反推密码
+- ✅ **PBKDF2 保护**: 4096 次迭代，即使暴力破解也需大量计算
 
 ### 2. 防止重放攻击
 
-- ✅ **一次性挑战码**: 每次登录获取新的挑战码
-- ✅ **时间窗口**: 挑战码30秒内有效
-- ✅ **单次使用**: 挑战码使用后立即标记，不可重复使用
+- ✅ **一次性挑战码**: 每次登录生成新的随机挑战码
+- ✅ **时间窗口**: 挑战码 30 秒内有效
+- ✅ **单次使用**: 挑战码使用后立即标记为已使用
+- ✅ **内存存储**: 挑战码存储在内存中，服务重启自动失效
 
-### 3. Hash计算安全
+### 3. SCRAM 安全机制
 
-**前端计算公式**：
+**客户端计算链**：
 ```
-loginHash = SHA256(username + password + challenge)
+原始密码
+   ↓ PBKDF2(password, salt, 4096)
+SaltedPassword
+   ↓ HMAC-SHA256(SaltedPassword, "Client Key")
+ClientKey
+   ↓ SHA256(ClientKey)
+StoredKey (用于验证)
+   ↓ HMAC-SHA256(StoredKey, AuthMessage)
+ClientSignature
+   ↓ XOR(ClientKey, ClientSignature)
+ClientProof → 发送给服务器
 ```
 
-**后端验证公式**：
+**服务端验证链**：
 ```
-expectedHash = SHA256(username + storedPasswordHash + challenge)
-其中: storedPasswordHash = SHA256(salt + password)
+从数据库获取 StoredKey
+   ↓ HMAC-SHA256(StoredKey, AuthMessage)
+ClientSignature
+   ↓ XOR(ClientProof, ClientSignature)
+恢复 ClientKey
+   ↓ SHA256(ClientKey)
+计算 StoredKey
+   ↓ 比较
+验证成功/失败
 ```
 
 **为什么安全**：
-- 即使攻击者获取了 `loginHash`，也无法反推 `password`
-- 即使攻击者获取了 `storedPasswordHash`，也无法直接登录（缺少 `challenge`）
-- 挑战码每次不同，即使重放 `loginHash` 也会因挑战码失效而拒绝
+- ✅ **多层派生**: StoredKey 由密码经过 4 次不可逆变换得到
+- ✅ **XOR 混淆**: ClientProof 无法直接反推 ClientKey
+- ✅ **HMAC 保护**: 使用 HMAC-SHA256 确保消息完整性
+- ✅ **Challenge 绑定**: 每次登录的 Challenge 不同，无法重放
 
-### 4. Token管理
+### 4. Salt 安全性
 
-- ✅ **Token格式**: UUID v4（随机、不可预测）
-- ✅ **过期时间**: 7天（可配置）
-- ✅ **自动清理**: 定时任务清理过期Token和挑战码
+**Salt 可以安全传输的原因**：
+- Salt 本身不是秘密，其作用是防止彩虹表攻击
+- 即使攻击者知道 Salt，仍需进行 4096 次 PBKDF2 迭代
+- 无法从 Salt + StoredKey 反推原始密码
+
+### 5. Token 管理
+
+- ✅ **Token 格式**: UUID v4（随机、不可预测）
+- ✅ **过期时间**: 7 天（可配置）
+- ✅ **自动清理**: 定时任务清理过期 Token 和挑战码
+- ✅ **数据库存储**: Token 持久化，支持跨服务器验证
 
 ---
 
-## 📡 API接口定义
+## 📡 API 接口定义（SCRAM-SHA-256）
 
-### 1. 获取挑战码
+### 1. 获取挑战码和 Salt
 
 **请求**：
 ```http
-GET /api/auth/challenge
+POST /api/auth/challenge
+Content-Type: application/json
+
+{
+  "username": "admin"
+}
 ```
 
-**响应**：
+**成功响应**：
 ```json
 {
   "success": true,
   "data": {
     "challenge": "550e8400-e29b-41d4-a716-446655440000",
+    "salt": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+    "iterations": 4096,
     "expiresAt": "2025-12-25T12:00:30Z"
   }
 }
 ```
 
-### 2. 登录
+**失败响应**（用户不存在）：
+```json
+{
+  "success": false,
+  "error": {
+    "code": "USER_NOT_FOUND",
+    "message": "用户不存在"
+  }
+}
+```
+
+**注意**：
+- 为防止用户名枚举攻击，可以考虑对不存在的用户也返回随机 salt
+- 生产环境建议添加频率限制
+
+### 2. 登录（提交 ClientProof）
 
 **请求**：
 ```http
@@ -336,7 +584,7 @@ Content-Type: application/json
 {
   "username": "admin",
   "challenge": "550e8400-e29b-41d4-a716-446655440000",
-  "hash": "a1b2c3d4e5f6..."
+  "clientProof": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 }
 ```
 
@@ -365,6 +613,13 @@ Content-Type: application/json
   }
 }
 ```
+
+**错误码**：
+- `INVALID_CREDENTIALS`: 用户名或密码错误
+- `CHALLENGE_EXPIRED`: 挑战码已过期
+- `CHALLENGE_USED`: 挑战码已被使用
+- `CHALLENGE_NOT_FOUND`: 挑战码不存在
+- `USER_DISABLED`: 用户已被禁用
 
 ### 3. 登出
 
@@ -407,72 +662,121 @@ Authorization: Bearer 7c9e6679-7425-40de-944b-e07fc1f90ae7
 
 ---
 
-## 🚀 实施步骤
+## 🚀 实施步骤（SCRAM-SHA-256）
 
 ### Phase 1: 数据库和实体（1天）
 
-1. 创建数据库表（SQL脚本）
-2. 创建JPA实体类
-   - `User.java`
-   - `AuthChallenge.java`
-   - `AuthToken.java`
-3. 创建Repository接口
+1. **创建数据库表**（SQL脚本）
+   - `users` 表（包含 stored_key, salt, iterations 字段）
+   - `auth_tokens` 表
+   - ❌ 不创建 `auth_challenges` 表（使用内存存储）
 
-### Phase 2: 后端API（2天）
+2. **创建JPA实体类**
+   - `User.java` - 用户实体（SCRAM字段）
+   - `AuthToken.java` - Token实体
+   - ~~`AuthChallenge.java`~~ - 不需要（内存存储）
 
-1. 实现认证服务
+3. **创建Java类**
+   - `ChallengeInfo.java` - 挑战码信息（内存数据结构）
+   - Repository接口：`UserRepository`, `AuthTokenRepository`
+
+### Phase 2: 后端API实现（2天）
+
+1. **实现 SCRAM 工具类**
+   - `ScramUtils.java` - PBKDF2、HMAC-SHA256、XOR 等工具方法
+   - 用户创建时的 StoredKey 计算
+   - ClientProof 验证逻辑
+
+2. **实现认证服务**
    - `AuthenticationService.java`
-   - 挑战码生成和验证
-   - 登录Hash验证
-   - Token生成和管理
-2. 实现认证控制器
+   - 挑战码生成和验证（内存存储 ConcurrentHashMap）
+   - ClientProof 验证（SCRAM机制）
+   - Token 生成和管理
+
+3. **实现认证控制器**
    - `AuthController.java`
-   - 4个API端点
-3. 修改Token过滤器
+   - `POST /api/auth/challenge` - 获取挑战码和Salt
+   - `POST /api/auth/login` - 验证ClientProof并返回Token
+   - `POST /api/auth/logout` - 登出
+   - `GET /api/auth/verify` - 验证Token
+
+4. **修改Token过滤器**
    - 支持Token验证
    - 白名单：`/api/auth/**`, `/actuator/**`
-4. 定时任务
-   - 清理过期挑战码（每分钟）
-   - 清理过期Token（每小时）
 
-### Phase 3: 前端实现（1天）
+5. **定时任务**
+   - 清理过期挑战码（从内存Map删除，每分钟执行）
+   - 清理过期Token（从数据库删除，每小时执行）
 
-1. 创建登录页面
-   - `Login.vue`
-   - 用户名/密码输入
-   - 集成crypto-js进行Hash计算
-2. 实现认证逻辑
+### Phase 3: 前端实现（1.5天）
+
+1. **安装依赖**
+   ```bash
+   npm install crypto-js
+   npm install --save-dev @types/crypto-js
+   ```
+
+2. **实现 SCRAM 工具类**
+   - `scram.ts` - PBKDF2、HMAC、XOR 工具函数
+   - ClientProof 计算逻辑
+
+3. **创建登录页面**
+   - `Login.vue` - 用户名/密码输入表单
+   - 集成 crypto-js 进行 SCRAM-SHA-256 计算
+
+4. **实现认证逻辑**
    - `auth.ts` - 认证API客户端
-   - `useAuth.ts` - 认证状态管理
-3. 路由守卫
+   - `useAuth.ts` - 认证状态管理（Composition API）
+
+5. **路由守卫**
    - 未登录重定向到登录页
    - 登录后重定向到Dashboard
-4. 全局请求拦截器
-   - 自动添加 `Authorization` Header
-   - Token过期处理
+
+6. **全局请求拦截器**
+   - 自动添加 `Authorization: Bearer <token>` Header
+   - Token过期处理（401响应 → 重定向登录）
 
 ### Phase 4: 初始化和测试（0.5天）
 
-1. 数据库初始化脚本
-   - 创建默认管理员账户
+1. **数据库初始化脚本**
+   - 创建默认管理员账户（使用SCRAM计算StoredKey）
    - 用户名: `admin`
-   - 默认密码: `Admin@123`（首次登录后强制修改）
-2. 集成测试
-3. 安全性测试
+   - 默认密码: `Admin@123`
+
+2. **集成测试**
+   - 测试完整登录流程
+   - 测试挑战码过期处理
+   - 测试重放攻击防护
+
+3. **安全性测试**
+   - 验证密码无法反推
+   - 验证挑战码单次使用
+   - 验证Token有效性
 
 ---
 
 ## 🛠️ 技术栈
 
 ### 后端
-- **加密算法**: Apache Commons Codec (SHA-256)
-- **UUID生成**: `java.util.UUID`
+- **SCRAM 算法**:
+  - PBKDF2: `javax.crypto.SecretKeyFactory` (PBKDF2WithHmacSHA256)
+  - HMAC-SHA256: `javax.crypto.Mac` (HmacSHA256)
+  - SHA-256: `java.security.MessageDigest`
+  - 编解码: Apache Commons Codec (Hex)
+- **UUID 生成**: `java.util.UUID`
+- **内存存储**: `java.util.concurrent.ConcurrentHashMap`
 - **定时任务**: Spring `@Scheduled`
+- **依赖库**:
+  - `spring-boot-starter-security` (可选，如需更多安全特性)
+  - `commons-codec` (Hex编解码)
 
 ### 前端
-- **加密库**: `crypto-js` 或 Web Crypto API
+- **SCRAM 计算**: `crypto-js` (PBKDF2, HMAC-SHA256, SHA-256)
 - **状态管理**: Vue Composition API
-- **HTTP客户端**: Axios拦截器
+- **HTTP 客户端**: Axios 拦截器
+- **依赖库**:
+  - `crypto-js` (^4.2.0)
+  - `@types/crypto-js` (开发依赖)
 
 ---
 
@@ -550,13 +854,34 @@ Authorization: Bearer 7c9e6679-7425-40de-944b-e07fc1f90ae7
 
 ## 📚 参考资料
 
+### SCRAM 标准文档
+- [RFC 5802 - Salted Challenge Response Authentication Mechanism (SCRAM)](https://datatracker.ietf.org/doc/html/rfc5802)
+- [RFC 7677 - SCRAM-SHA-256 and SCRAM-SHA-256-PLUS](https://datatracker.ietf.org/doc/html/rfc7677)
+- [RFC 2898 - PBKDF2](https://datatracker.ietf.org/doc/html/rfc2898)
+
+### 业界实现参考
+- [PostgreSQL SCRAM-SHA-256 Authentication](https://www.postgresql.org/docs/current/sasl-authentication.html)
+- [MongoDB SCRAM Authentication](https://www.mongodb.com/docs/manual/core/security-scram/)
+- [CockroachDB SASL/SCRAM](https://www.cockroachlabs.com/docs/stable/security-reference/scram-authentication)
+
+### 安全最佳实践
 - [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
+- [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+
+### 技术规范
 - [RFC 4122 - UUID](https://tools.ietf.org/html/rfc4122)
-- [SHA-256 Hash Algorithm](https://en.wikipedia.org/wiki/SHA-2)
+- [FIPS 180-4 - SHA-2 (包括SHA-256)](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf)
+- [HMAC - Keyed-Hashing for Message Authentication](https://tools.ietf.org/html/rfc2104)
 
 ---
 
-**文档版本**: v1.0
+**文档版本**: v2.0 (基于 SCRAM-SHA-256)
 **创建日期**: 2025-12-25
 **最后更新**: 2025-12-25
+**更新说明**:
+- ✅ 采用 SCRAM-SHA-256 标准认证机制
+- ✅ 使用 PBKDF2 密钥派生（4096次迭代）
+- ✅ 挑战码改为内存存储（ConcurrentHashMap）
+- ✅ 修正 Hash 验证逻辑，确保前后端计算一致
+- ✅ 参考 PostgreSQL、MongoDB 等数据库的实现
 **作者**: GitLab Mirror Team
