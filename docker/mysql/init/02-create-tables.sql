@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS sync_project (
     error_message TEXT COMMENT '错误信息',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '首次发现时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    last_sync_at DATETIME NULL COMMENT 'Last sync timestamp',
     INDEX idx_sync_status (sync_status),
     INDEX idx_enabled (enabled),
     INDEX idx_created_at (created_at)
