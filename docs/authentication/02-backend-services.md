@@ -8,6 +8,17 @@
 
 ---
 
+## 参考文档
+
+- [认证系统设计文档](../authentication-design.md)
+  - [认证流程](../authentication-design.md#1-认证流程概述)
+  - [密码存储方案](../authentication-design.md#2-密码存储方案)
+  - [SCRAM-SHA-256算法细节](../authentication-design.md#21-scram-sha-256-算法)
+  - [防暴力破解保护](../authentication-design.md#4-防暴力破解保护)
+  - [审计日志](../authentication-design.md#6-审计日志)
+
+---
+
 ## ⚠️ 重要提醒：任务状态管理规范
 
 **【必须】在开始处理下面的每个子任务前及后需要修改其任务状态：**
@@ -65,6 +76,7 @@
 - SCRAM算法实现正确
 - 与RFC 7677标准向量对比通过
 - 性能测试：4096次迭代<100ms
+- 编写并通过单元测试验证所有加密方法
 
 **提交**: `feat(auth): add SCRAM-SHA-256 utility class`
 
@@ -115,6 +127,7 @@
 - 账户限流正确工作
 - 指数退避计算准确
 - 成功登录后计数重置
+- 编写并通过单元测试验证限流逻辑
 
 **提交**: `feat(auth): add brute-force protection service`
 
@@ -164,6 +177,7 @@
 - 所有登录事件正确记录
 - 查询功能正常
 - 清理功能正常
+- 编写并通过单元测试验证审计日志功能
 
 **提交**: `feat(auth): add login audit service with async logging`
 
@@ -226,6 +240,7 @@
 - 防暴力破解集成正确
 - 审计日志记录完整
 - 定时清理任务正常
+- 编写并通过单元测试验证认证服务核心逻辑
 
 **提交**: `feat(auth): add authentication service with SCRAM and brute-force protection`
 
@@ -278,6 +293,7 @@
 - 白名单路径放行
 - 过期Token被拒绝
 - last_used_at正确更新
+- 编写并通过单元测试验证Token过滤器
 
 **提交**: `refactor(auth): enhance token filter with user authentication support`
 

@@ -8,6 +8,14 @@
 
 ---
 
+## 参考文档
+
+- [认证系统设计文档](../authentication-design.md)
+  - [数据模型](../authentication-design.md#3-数据模型)
+  - [密码存储方案](../authentication-design.md#2-密码存储方案)
+
+---
+
 ## ⚠️ 重要提醒：任务状态管理规范
 
 **【必须】在开始处理下面的每个子任务前及后需要修改其任务状态：**
@@ -79,6 +87,7 @@
 - SQL脚本无语法错误
 - 可在开发环境成功执行
 - 所有表、索引、外键创建成功
+- 验证表结构
 
 **提交**: `feat(auth): add database migration for authentication tables`
 
@@ -129,6 +138,7 @@
 - 编译通过
 - 字段映射正确
 - Spring Boot启动无错误
+- 编写并通过单元测试验证实体映射
 
 **提交**: `feat(auth): add MyBatis-Plus entities for authentication`
 
@@ -175,6 +185,7 @@
 - 所有Mapper方法正确
 - 可执行基本CRUD操作
 - 自定义查询正常工作
+- 编写并通过单元测试验证所有Mapper方法
 
 **提交**: `feat(auth): add MyBatis-Plus mappers for authentication`
 
@@ -213,6 +224,7 @@
 - 首次启动自动创建admin用户
 - StoredKey计算正确
 - 可以使用默认密码登录
+- 编写并通过单元测试验证初始化逻辑
 
 **提交**: `feat(auth): add default admin user initialization`
 

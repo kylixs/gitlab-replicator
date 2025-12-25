@@ -8,6 +8,14 @@
 
 ---
 
+## 参考文档
+
+- [认证系统设计文档](../authentication-design.md)
+  - [API接口定义](../authentication-design.md#5-api-接口定义)
+  - [错误处理](../authentication-design.md#52-错误响应格式)
+
+---
+
 ## ⚠️ 重要提醒：任务状态管理规范
 
 **【必须】在开始处理下面的每个子任务前及后需要修改其任务状态：**
@@ -87,6 +95,7 @@
 - 所有DTO字段正确
 - 验证注解生效
 - JSON序列化正常
+- 编写并通过单元测试验证DTO字段和验证规则
 
 **提交**: `feat(auth): add authentication DTOs`
 
@@ -143,6 +152,7 @@
 - 请求验证生效
 - 异常处理正确
 - HTTP状态码正确
+- 编写并通过单元测试验证所有API端点
 
 **提交**: `feat(auth): add authentication REST API controller`
 
@@ -193,6 +203,7 @@
 - 响应格式统一
 - HTTP状态码正确
 - 日志记录完整
+- 编写并通过单元测试验证异常处理器
 
 **提交**: `feat(auth): add global exception handler`
 
@@ -230,6 +241,7 @@
 - Swagger UI可访问
 - API文档完整准确
 - 可通过Swagger UI测试API
+- 验证Swagger文档与实际API一致
 
 **提交**: `docs(auth): add Swagger API documentation`
 

@@ -8,6 +8,15 @@
 
 ---
 
+## 参考文档
+
+- [认证系统设计文档](../authentication-design.md)
+  - [认证流程](../authentication-design.md#1-认证流程概述)
+  - [登录验证流程](../authentication-design.md#22-登录验证流程)
+  - [前端计算流程](../authentication-design.md#22-登录验证流程)
+
+---
+
 ## ⚠️ 重要提醒：任务状态管理规范
 
 **【必须】在开始处理下面的每个子任务前及后需要修改其任务状态：**
@@ -48,6 +57,7 @@ npm install --save-dev @types/crypto-js
 **验收标准**:
 - 依赖安装成功
 - TypeScript无类型错误
+- 验证package.json中依赖版本正确
 
 **提交**: `build(web-ui): add crypto-js dependency for authentication`
 
@@ -91,7 +101,7 @@ npm install --save-dev @types/crypto-js
 **验收标准**:
 - SCRAM算法计算正确
 - 与后端验证一致
-- 单元测试通过
+- 编写并通过单元测试验证SCRAM工具类
 
 **提交**: `feat(web-ui): add SCRAM-SHA-256 client utility`
 
@@ -142,6 +152,7 @@ npm install --save-dev @types/crypto-js
 - 所有API方法正确
 - 错误处理完善
 - Token自动存储和清理
+- 编写并通过单元测试验证API客户端
 
 **提交**: `feat(web-ui): add authentication API client`
 
@@ -190,6 +201,7 @@ npm install --save-dev @types/crypto-js
 - 登录状态正确管理
 - 用户信息正确存储
 - 锁定倒计时正常工作
+- 编写并通过单元测试验证状态管理
 
 **提交**: `feat(web-ui): add authentication state management`
 
@@ -235,6 +247,7 @@ npm install --save-dev @types/crypto-js
 - 登录功能正常
 - 锁定提示正确显示
 - UI友好美观
+- 编写并通过组件测试验证登录页面
 
 **提交**: `feat(web-ui): add login page component`
 
@@ -293,6 +306,7 @@ router.beforeEach(async (to, from, next) => {
 - 未登录访问受保护页面自动跳转登录
 - 登录后自动跳转首页
 - 登出后回到登录页
+- 编写并通过单元测试验证路由守卫
 
 **提交**: `feat(web-ui): add authentication route guard`
 
@@ -348,6 +362,7 @@ client.interceptors.response.use(
 - Token自动附加到请求
 - 401自动登出
 - 429显示提示
+- 编写并通过单元测试验证拦截器逻辑
 
 **提交**: `feat(web-ui): add axios interceptors for authentication`
 
