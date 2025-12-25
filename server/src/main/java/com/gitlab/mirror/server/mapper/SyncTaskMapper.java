@@ -52,10 +52,12 @@ public interface SyncTaskMapper extends BaseMapper<SyncTask> {
      */
     @Select("SELECT t.* FROM sync_task t " +
             "INNER JOIN pull_sync_config c ON t.sync_project_id = c.sync_project_id " +
+            "INNER JOIN sync_project p ON t.sync_project_id = p.id " +
             "WHERE t.task_type = 'pull' " +
             "AND t.task_status = 'waiting' " +
             "AND t.next_run_at <= #{currentTime} " +
             "AND c.enabled = true " +
+            "AND p.enabled = true " +
             "AND t.consecutive_failures < #{maxFailures} " +
             "ORDER BY " +
             "CASE c.priority " +

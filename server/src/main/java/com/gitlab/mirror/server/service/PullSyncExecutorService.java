@@ -447,6 +447,16 @@ public class PullSyncExecutorService {
         task.setErrorMessage("");
 
         syncTaskMapper.updateById(task);
+
+        // Update SyncProject status to active on success
+        SyncProject project = syncProjectMapper.selectById(task.getSyncProjectId());
+        if (project != null && !SyncProject.SyncStatus.ACTIVE.equals(project.getSyncStatus())) {
+            project.setSyncStatus(SyncProject.SyncStatus.ACTIVE);
+            project.setErrorMessage(null);
+            project.setLastSyncAt(LocalDateTime.now());
+            syncProjectMapper.updateById(project);
+            log.info("Updated project status to active: {}", project.getProjectKey());
+        }
     }
 
 
@@ -492,6 +502,19 @@ public class PullSyncExecutorService {
         else if (task.getConsecutiveFailures() >= 5) {
             shouldDisable = true;
             disableReason = "Too many consecutive failures (≥5)";
+        }
+
+        // Update SyncProject status based on error type
+        if (project != null) {
+            if ("not_found".equals(errorType)) {
+                project.setSyncStatus(SyncProject.SyncStatus.SOURCE_NOT_FOUND);
+                log.info("Updated project status to source_not_found: {}", project.getProjectKey());
+            } else {
+                project.setSyncStatus(SyncProject.SyncStatus.FAILED);
+                log.info("Updated project status to failed: {}", project.getProjectKey());
+            }
+            project.setErrorMessage(e.getMessage());
+            syncProjectMapper.updateById(project);
         }
 
         if (shouldDisable && config != null) {
@@ -556,7 +579,8 @@ public class PullSyncExecutorService {
         message = message.toLowerCase();
         if (message.contains("authentication") || message.contains("unauthorized")) {
             return "auth_failed";
-        } else if (message.contains("not found") || message.contains("404")) {
+        } else if (message.contains("not found") || message.contains("404") ||
+                   message.contains("source project") || message.contains("source or target project info not found")) {
             return "not_found";
         } else if (message.contains("timeout")) {
             return "timeout";

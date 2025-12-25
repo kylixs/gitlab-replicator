@@ -201,4 +201,192 @@ test.describe('Projects Page', () => {
       }
     }
   })
+
+  test('should clear cache for selected projects', async ({ page }) => {
+    // Navigate to projects page
+    await page.goto('/projects')
+    await page.waitForTimeout(2000)
+
+    // Wait for table to load
+    await page.waitForSelector('.el-table', { timeout: 10000 })
+
+    // Select the first two projects using checkboxes
+    const checkboxes = page.locator('.el-table .el-checkbox__input')
+    const count = await checkboxes.count()
+    console.log(`Found ${count} checkboxes`)
+
+    // Click first 2 checkboxes (skip the header checkbox at index 0)
+    if (count > 2) {
+      await checkboxes.nth(1).click()
+      await checkboxes.nth(2).click()
+      await page.waitForTimeout(500)
+
+      // Verify batch bar appears
+      const batchBar = page.locator('.batch-bar')
+      await expect(batchBar).toBeVisible()
+
+      // Check selected count
+      const selectedInfo = page.locator('.batch-info')
+      const selectedText = await selectedInfo.textContent()
+      console.log('Selected projects:', selectedText)
+
+      // Listen for API calls
+      let clearCacheApiCalled = false
+      let clearCacheResponse: any = null
+
+      page.on('response', async response => {
+        const url = response.url()
+        if (url.includes('/api/sync/projects/batch-clear-cache')) {
+          clearCacheApiCalled = true
+          clearCacheResponse = {
+            status: response.status(),
+            body: await response.json().catch(() => null)
+          }
+          console.log('Clear cache API response:', clearCacheResponse)
+        }
+      })
+
+      // Click "Clear Cache" button
+      const clearCacheBtn = page.locator('.batch-actions').getByRole('button', { name: /Clear Cache/i })
+      await expect(clearCacheBtn).toBeVisible()
+      await clearCacheBtn.click()
+
+      // Wait for confirmation dialog
+      await page.waitForSelector('.el-message-box', { timeout: 3000 })
+
+      // Click OK button
+      const confirmBtn = page.locator('.el-message-box').getByRole('button', { name: /OK/i })
+      await confirmBtn.click()
+
+      // Wait for API call and response
+      await page.waitForTimeout(2000)
+
+      // Take screenshot
+      await page.screenshot({ path: 'tests/screenshots/clear-cache-result.png', fullPage: true })
+
+      // Verify API was called
+      console.log('Clear cache API called:', clearCacheApiCalled)
+      if (clearCacheResponse) {
+        console.log('Response status:', clearCacheResponse.status)
+        console.log('Response body:', JSON.stringify(clearCacheResponse.body, null, 2))
+
+        // Verify response structure
+        expect(clearCacheResponse.status).toBe(200)
+        expect(clearCacheResponse.body).toHaveProperty('success')
+        expect(clearCacheResponse.body).toHaveProperty('data')
+      }
+
+      // Check for success/warning message
+      const successMsg = page.locator('.el-message--success, .el-message--warning')
+      const hasMessage = await successMsg.count() > 0
+      if (hasMessage) {
+        const msgText = await successMsg.first().textContent()
+        console.log('Success/Warning message:', msgText)
+      }
+    } else {
+      console.log('Not enough projects to test batch clear cache')
+    }
+  })
+
+  test('should trigger immediate sync for a project', async ({ page }) => {
+    // Navigate to projects page
+    await page.goto('/projects')
+    await page.waitForTimeout(2000)
+
+    // Wait for table to load
+    await page.waitForSelector('.el-table', { timeout: 10000 })
+
+    // Select one project using checkbox
+    const checkboxes = page.locator('.el-table .el-checkbox__input')
+    const count = await checkboxes.count()
+    console.log(`Found ${count} checkboxes`)
+
+    if (count > 1) {
+      // Click first project checkbox (index 1, skip header at index 0)
+      await checkboxes.nth(1).click()
+      await page.waitForTimeout(500)
+
+      // Verify batch bar appears
+      const batchBar = page.locator('.batch-bar')
+      await expect(batchBar).toBeVisible()
+
+      // Listen for API calls
+      let batchSyncApiCalled = false
+      let batchSyncResponse: any = null
+
+      page.on('response', async response => {
+        const url = response.url()
+        if (url.includes('/api/sync/projects/batch-sync')) {
+          batchSyncApiCalled = true
+          batchSyncResponse = {
+            status: response.status(),
+            body: await response.json().catch(() => null)
+          }
+          console.log('Batch sync API response:', batchSyncResponse)
+        }
+      })
+
+      // Click "Sync" button
+      const syncBtn = page.locator('.batch-actions').getByRole('button', { name: /^Sync$/i })
+      await expect(syncBtn).toBeVisible()
+      await syncBtn.click()
+
+      // Wait for confirmation dialog
+      await page.waitForSelector('.el-message-box', { timeout: 3000 })
+
+      // Click OK button
+      const confirmBtn = page.locator('.el-message-box').getByRole('button', { name: /OK/i })
+      await confirmBtn.click()
+
+      // Wait for API call and response
+      await page.waitForTimeout(2000)
+
+      // Take screenshot
+      await page.screenshot({ path: 'tests/screenshots/batch-sync-result.png', fullPage: true })
+
+      // Verify API was called
+      console.log('Batch sync API called:', batchSyncApiCalled)
+      expect(batchSyncApiCalled).toBe(true)
+
+      if (batchSyncResponse) {
+        console.log('Response status:', batchSyncResponse.status)
+        console.log('Response body:', JSON.stringify(batchSyncResponse.body, null, 2))
+
+        // Verify response structure
+        expect(batchSyncResponse.status).toBe(200)
+        expect(batchSyncResponse.body).toHaveProperty('success')
+        expect(batchSyncResponse.body).toHaveProperty('data')
+
+        if (batchSyncResponse.body.success) {
+          expect(batchSyncResponse.body.data.success).toBeGreaterThan(0)
+          console.log('✅ Sync task successfully triggered for', batchSyncResponse.body.data.success, 'project(s)')
+        } else {
+          console.log('❌ Sync task failed:', batchSyncResponse.body.message)
+        }
+      }
+
+      // Check for success message
+      const successMsg = page.locator('.el-message--success')
+      const hasMessage = await successMsg.count() > 0
+      if (hasMessage) {
+        const msgText = await successMsg.first().textContent()
+        console.log('Success message:', msgText)
+      }
+
+      // Wait for scheduler to pick up the task (scheduler runs every 10 seconds)
+      console.log('Waiting 15 seconds for scheduler to pick up and execute the task...')
+      await page.waitForTimeout(15000)
+
+      // Reload page to check if sync status has been updated
+      await page.reload()
+      await page.waitForTimeout(2000)
+
+      // Take screenshot after waiting
+      await page.screenshot({ path: 'tests/screenshots/batch-sync-after-wait.png', fullPage: true })
+
+      console.log('✅ Test completed - Check server logs to verify sync execution')
+    } else {
+      console.log('Not enough projects to test batch sync')
+    }
+  })
 })

@@ -92,5 +92,6 @@ public class SyncProject {
         public static final String ACTIVE = "active";
         public static final String FAILED = "failed";
         public static final String DELETED = "deleted";
+        public static final String SOURCE_NOT_FOUND = "source_not_found";
     }
 }
