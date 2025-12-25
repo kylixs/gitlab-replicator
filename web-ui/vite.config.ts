@@ -24,5 +24,12 @@ export default defineConfig({
   build: {
     outDir: '../server/src/main/resources/static',
     emptyOutDir: true
+  },
+  test: {
+    environment: 'happy-dom',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html']
+    }
   }
 })

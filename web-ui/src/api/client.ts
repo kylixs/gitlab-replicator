@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { ElMessage } from 'element-plus'
 
 const client = axios.create({
   baseURL: '/api',
@@ -8,9 +9,14 @@ const client = axios.create({
   }
 })
 
-// Request interceptor
+// Request interceptor - Add authentication token
 client.interceptors.request.use(
   (config) => {
+    // Get token from localStorage
+    const token = localStorage.getItem('auth_token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
     return config
   },
   (error) => {
@@ -18,7 +24,7 @@ client.interceptors.request.use(
   }
 )
 
-// Response interceptor
+// Response interceptor - Handle errors and token expiration
 client.interceptors.response.use(
   (response) => {
     const data = response.data
@@ -28,6 +34,39 @@ client.interceptors.response.use(
     return data
   },
   (error) => {
+    // Handle 401 Unauthorized - Token expired or invalid
+    if (error.response?.status === 401) {
+      // Only show message if not on login page
+      if (!window.location.pathname.includes('/login')) {
+        ElMessage.error('Session expired. Please login again.')
+
+        // Clear token
+        localStorage.removeItem('auth_token')
+
+        // Redirect to login (only if we have access to router)
+        // The router guard will handle the actual redirect
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login'
+        }
+      }
+    }
+    // Handle 429 Too Many Requests - Rate limiting
+    else if (error.response?.status === 429) {
+      const retryAfter = error.response.data?.error?.retryAfter
+      const message = retryAfter
+        ? `Too many requests. Please try again in ${retryAfter} seconds.`
+        : 'Too many requests. Please try again later.'
+      ElMessage.error(message)
+    }
+    // Handle 423 Locked - Account locked
+    else if (error.response?.status === 423) {
+      const retryAfter = error.response.data?.error?.retryAfter
+      const message = retryAfter
+        ? `Account locked. Please try again in ${retryAfter} seconds.`
+        : 'Account locked due to too many failed attempts.'
+      ElMessage.error(message)
+    }
+
     return Promise.reject(error)
   }
 )
