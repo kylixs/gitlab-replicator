@@ -840,10 +840,22 @@ Authorization: Bearer 7c9e6679-7425-40de-944b-e07fc1f90ae7
    - `POST /api/auth/logout` - 登出
    - `GET /api/auth/verify` - 验证Token
 
-6. **修改Token过滤器**
-   - 支持Token验证
-   - 白名单：`/api/auth/**`, `/actuator/**`
+6. **修改Token过滤器（兼容性改造）**
+   - `TokenAuthenticationFilter.java` - 现有过滤器改造
+   - **兼容两种Token认证方式**：
+     - 旧方式：API Key（配置文件中的固定key）
+     - 新方式：用户登录Token（数据库中的auth_tokens表）
+   - 白名单路径：`/api/auth/**`, `/actuator/**`, `/swagger/**`, `/api/status`
    - 提取客户端IP（考虑代理头 X-Forwarded-For）
+   - Token验证逻辑：
+     1. 检查白名单路径 → 放行
+     2. 提取 Bearer Token
+     3. 先尝试验证为API Key（向后兼容）
+     4. 如果不是API Key，则查询 auth_tokens 表验证
+     5. 检查Token是否过期
+     6. 更新 last_used_at 字段
+   - 添加 `AuthTokenRepository` 依赖
+   - 设置 `SecurityContext`（可选，为后续扩展做准备）
 
 7. **定时任务**
    - 清理过期挑战码（从内存Map删除，每分钟执行）
