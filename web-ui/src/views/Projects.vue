@@ -62,7 +62,7 @@
         <el-table-column label="Status" width="120">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.syncStatus)">
-              {{ row.syncStatus }}
+              {{ formatStatus(row.syncStatus) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -345,6 +345,24 @@ const getDelayType = (delaySeconds: number) => {
 
 const formatSyncMethod = (method: string) => {
   return method === 'push_mirror' ? 'Push Mirror' : 'Pull Sync'
+}
+
+const formatStatus = (status: string) => {
+  if (!status) return status
+  const statusLower = status.toLowerCase()
+  const statusMap: Record<string, string> = {
+    'discovered': 'Discovered',
+    'initializing': 'Initializing',
+    'active': 'Active',
+    'syncing': 'Syncing',
+    'error': 'Error',
+    'missing': 'Missing',
+    'disabled': 'Disabled',
+    'deleted': 'Deleted',
+    'paused': 'Paused',
+    'pending': 'Pending'
+  }
+  return statusMap[statusLower] || status
 }
 
 const formatTime = (time: string) => {

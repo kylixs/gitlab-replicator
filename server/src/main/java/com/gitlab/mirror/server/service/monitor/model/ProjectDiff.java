@@ -96,8 +96,8 @@ public class ProjectDiff {
         INCONSISTENT,
 
         /**
-         * Source Missing: Source project not found or deleted
+         * Missing: Source project not found or deleted
          */
-        SOURCE_MISSING
+        MISSING
     }
 }

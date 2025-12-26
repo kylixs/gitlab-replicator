@@ -570,8 +570,8 @@ public class PullSyncExecutorService {
         // Update SyncProject status based on error type
         if (project != null) {
             if ("not_found".equals(errorType)) {
-                project.setSyncStatus(SyncProject.SyncStatus.SOURCE_MISSING);
-                log.info("Updated project status to source_missing: {}", project.getProjectKey());
+                project.setSyncStatus(SyncProject.SyncStatus.MISSING);
+                log.info("Updated project status to missing: {}", project.getProjectKey());
             } else if (shouldBlock) {
                 project.setSyncStatus(SyncProject.SyncStatus.FAILED);
                 log.info("Updated project status to failed: {}", project.getProjectKey());
@@ -667,7 +667,7 @@ public class PullSyncExecutorService {
      */
     private boolean isSyncable(String syncStatus) {
         // Syncable states: active, syncing, pending (for backward compatibility)
-        // Not syncable: source_missing, deleted, failed
+        // Not syncable: missing, deleted, failed
         return SyncProject.SyncStatus.ACTIVE.equals(syncStatus) ||
                SyncProject.SyncStatus.SYNCING.equals(syncStatus) ||
                SyncProject.SyncStatus.PENDING.equals(syncStatus) ||

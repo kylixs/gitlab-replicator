@@ -24,7 +24,7 @@ public class ProjectStateMachine {
         public static final String INITIALIZING = "initializing";   // 初始化中（创建目标项目）
         public static final String ACTIVE = "active";               // 正常运行
         public static final String ERROR = "error";                 // 错误，需人工介入
-        public static final String SOURCE_MISSING = "source_missing"; // 源项目不存在
+        public static final String MISSING = "missing";             // 源项目不存在
         public static final String DISABLED = "disabled";           // 用户禁用
         public static final String DELETED = "deleted";             // 已删除（逻辑删除）
     }
@@ -50,7 +50,7 @@ public class ProjectStateMachine {
      */
     public void toActive(SyncProject project, String fromState) {
         String validStates = String.join(",", Status.INITIALIZING, Status.ERROR,
-                                         Status.SOURCE_MISSING, Status.DISABLED);
+                                         Status.MISSING, Status.DISABLED);
 
         if (!validStates.contains(project.getSyncStatus())) {
             log.warn("Invalid transition to ACTIVE from {}", project.getSyncStatus());
@@ -80,7 +80,7 @@ public class ProjectStateMachine {
 
     /**
      * Handle sync failure
-     * Determines if project should transition to ERROR or SOURCE_MISSING
+     * Determines if project should transition to ERROR or MISSING
      */
     public void onSyncFailure(SyncProject project, SyncTask task, String errorType, String errorMessage) {
         // Check if source project is missing
@@ -113,13 +113,13 @@ public class ProjectStateMachine {
     }
 
     /**
-     * Transition to SOURCE_MISSING
+     * Transition to MISSING
      * Called when source project is not found
      */
     private void toSourceMissing(SyncProject project, String errorMessage) {
-        project.setSyncStatus(Status.SOURCE_MISSING);
+        project.setSyncStatus(Status.MISSING);
         project.setErrorMessage(errorMessage);
-        log.warn("Project {} -> SOURCE_MISSING: {}", project.getProjectKey(), errorMessage);
+        log.warn("Project {} -> MISSING: {}", project.getProjectKey(), errorMessage);
     }
 
     /**
@@ -155,6 +155,6 @@ public class ProjectStateMachine {
      */
     public boolean isError(SyncProject project) {
         return Status.ERROR.equals(project.getSyncStatus()) ||
-               Status.SOURCE_MISSING.equals(project.getSyncStatus());
+               Status.MISSING.equals(project.getSyncStatus());
     }
 }

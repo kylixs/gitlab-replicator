@@ -573,7 +573,7 @@ const getDiffStatusType = (status: string) => {
     'DIVERGED': 'danger',
     'INCONSISTENT': 'danger',
     'PENDING': 'info',
-    'SOURCE_MISSING': 'danger'
+    'MISSING': 'danger'
   }
   return typeMap[status] || 'info'
 }
@@ -586,7 +586,7 @@ const getDiffStatusLabel = (status: string) => {
     'DIVERGED': 'Diverged',
     'INCONSISTENT': 'Inconsistent',
     'PENDING': 'Pending',
-    'SOURCE_MISSING': 'Source Missing'
+    'MISSING': 'Missing'
   }
   return labelMap[status] || status
 }
@@ -599,7 +599,7 @@ const getDiffStatusIcon = (status: string) => {
     'DIVERGED': CircleCloseFilled,
     'INCONSISTENT': CircleCloseFilled,
     'PENDING': QuestionFilled,
-    'SOURCE_MISSING': CircleCloseFilled
+    'MISSING': CircleCloseFilled
   }
   return iconMap[status] || QuestionFilled
 }

@@ -83,7 +83,7 @@ public class DiffCalculator {
         }
 
         // Check if source project is missing based on sync_project status
-        boolean isSourceMissing = SyncProject.SyncStatus.SOURCE_MISSING.equals(syncProject.getSyncStatus());
+        boolean isSourceMissing = SyncProject.SyncStatus.MISSING.equals(syncProject.getSyncStatus());
 
         // Get source and target info
         SourceProjectInfo sourceInfo = sourceProjectInfoMapper.selectOne(
@@ -266,7 +266,7 @@ public class DiffCalculator {
 
     /**
      * Determine sync status based on diff details
-     * Priority: SOURCE_MISSING > PENDING > DIVERGED > AHEAD > INCONSISTENT > OUTDATED > SYNCED
+     * Priority: MISSING > PENDING > DIVERGED > AHEAD > INCONSISTENT > OUTDATED > SYNCED
      */
     private ProjectDiff.SyncStatus determineSyncStatus(
             ProjectSnapshot source,
@@ -275,7 +275,7 @@ public class DiffCalculator {
 
         // Source missing (shouldn't happen in normal flow)
         if (source == null) {
-            return ProjectDiff.SyncStatus.SOURCE_MISSING;
+            return ProjectDiff.SyncStatus.MISSING;
         }
 
         // Target missing - newly discovered project, not yet synced

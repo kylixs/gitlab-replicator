@@ -34,7 +34,7 @@ const getTagType = (status?: string) => {
       return 'warning'
     case 'diverged':
       return 'danger'
-    case 'source_missing':
+    case 'missing':
     case 'pending':
       return 'info'
     default:
@@ -47,7 +47,7 @@ const getTagEffect = (status?: string) => {
   const statusLower = status.toLowerCase()
 
   // Use 'dark' effect for critical states
-  if (statusLower === 'diverged' || statusLower === 'source_missing') {
+  if (statusLower === 'diverged' || statusLower === 'missing') {
     return 'dark'
   }
 
@@ -67,7 +67,7 @@ const getIcon = (status?: string) => {
       return Promotion
     case 'diverged':
       return Warning
-    case 'source_missing':
+    case 'missing':
       return Remove
     case 'pending':
       return QuestionFilled
@@ -89,7 +89,7 @@ const getStatusText = (status?: string) => {
       return 'Ahead'
     case 'diverged':
       return 'Diverged'
-    case 'source_missing':
+    case 'missing':
       return 'Missing'
     case 'pending':
       return 'Pending'

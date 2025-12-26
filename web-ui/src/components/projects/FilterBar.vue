@@ -29,7 +29,7 @@
           <el-option label="Active" value="active" />
           <el-option label="Syncing" value="syncing" />
           <el-option label="Error" value="error" />
-          <el-option label="Source Missing" value="source_missing" />
+          <el-option label="Missing" value="missing" />
           <el-option label="Disabled" value="disabled" />
           <el-option label="Deleted" value="deleted" />
           <!-- Legacy status for compatibility -->
