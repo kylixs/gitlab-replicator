@@ -164,10 +164,10 @@
               {{ formatStatus(selectedProject.syncStatus) }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item v-if="selectedProject.lastSyncSummary" label="Sync Summary">
+          <el-descriptions-item v-if="selectedProject.lastSyncSummary && selectedProject.lastSyncSummary.trim()" label="Sync Summary">
             <div style="white-space: pre-wrap; word-break: break-word;">{{ selectedProject.lastSyncSummary }}</div>
           </el-descriptions-item>
-          <el-descriptions-item v-if="selectedProject.lastSyncErrorMessage" label="Error Message">
+          <el-descriptions-item v-if="selectedProject.lastSyncErrorMessage && selectedProject.lastSyncErrorMessage.trim()" label="Error Message">
             <div style="white-space: pre-wrap; word-break: break-word; color: #f56c6c;">{{ selectedProject.lastSyncErrorMessage }}</div>
           </el-descriptions-item>
         </el-descriptions>

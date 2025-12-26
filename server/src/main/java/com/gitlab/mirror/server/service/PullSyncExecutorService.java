@@ -798,11 +798,12 @@ public class PullSyncExecutorService {
         syncResult.setDurationSeconds(task.getDurationSeconds());
         syncResult.setSummary(message);
 
-        // Set error_message only for failures, clear it for success/skipped
+        // Set error_message only for failures, use empty string for success/skipped
+        // Empty string triggers MyBatis-Plus to update the field (null values are skipped)
         if (SyncResult.Status.FAILED.equals(status)) {
             syncResult.setErrorMessage(task.getErrorMessage());
         } else {
-            syncResult.setErrorMessage(null);
+            syncResult.setErrorMessage("");  // Empty string to clear error message
         }
 
         if (syncResult.getId() == null) {
