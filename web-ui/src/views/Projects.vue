@@ -29,6 +29,10 @@
             <el-icon><Delete /></el-icon>
             Delete
           </el-button>
+          <el-button size="small" type="warning" @click="handleBatchClearCache">
+            <el-icon><Delete /></el-icon>
+            Clear Cache
+          </el-button>
           <el-button size="small" @click="handleClearSelection">Clear</el-button>
         </div>
       </div>
@@ -294,6 +298,29 @@ const handleBatchDelete = async () => {
   } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('Failed to delete projects')
+    }
+  }
+}
+
+const handleBatchClearCache = async () => {
+  try {
+    await ElMessageBox.confirm(
+      `Are you sure to clear Git cache for ${selectedIds.value.length} projects?`,
+      'Confirm Clear Cache',
+      { type: 'warning' }
+    )
+    const response = await projectsApi.batchClearCache(selectedIds.value)
+    if (response.data.success > 0) {
+      ElMessage.success(`Cleared cache for ${response.data.success} projects`)
+    }
+    if (response.data.failed > 0) {
+      ElMessage.warning(`Failed to clear cache for ${response.data.failed} projects`)
+    }
+    handleClearSelection()
+    loadProjects()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error('Failed to clear cache')
     }
   }
 }

@@ -110,4 +110,20 @@ public class SyncTaskService {
 
         log.debug("Updated next run time: id={}, nextRunAt={}", taskId, nextRunAt);
     }
+
+    /**
+     * Update sync task
+     *
+     * @param task Task to update
+     */
+    @Transactional
+    public void updateTask(SyncTask task) {
+        if (task == null || task.getId() == null) {
+            throw new IllegalArgumentException("Task or task ID cannot be null");
+        }
+
+        syncTaskMapper.updateById(task);
+        log.debug("Updated task: id={}, status={}, nextRunAt={}",
+                 task.getId(), task.getTaskStatus(), task.getNextRunAt());
+    }
 }

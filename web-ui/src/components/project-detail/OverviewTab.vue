@@ -180,6 +180,29 @@
         </el-descriptions-item>
       </el-descriptions>
     </el-card>
+
+    <!-- Cache Information -->
+    <el-card v-if="overview.cache" shadow="hover" class="cache-info">
+      <template #header>
+        <div class="card-header">
+          <span>Git Cache Information</span>
+          <el-tag :type="overview.cache.exists ? 'success' : 'info'" size="small">
+            {{ overview.cache.exists ? 'Exists' : 'Not Found' }}
+          </el-tag>
+        </div>
+      </template>
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="Cache Path" :span="2">
+          <code>{{ overview.cache.path || '-' }}</code>
+        </el-descriptions-item>
+        <el-descriptions-item label="Cache Size">
+          {{ overview.cache.sizeFormatted || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="Last Modified">
+          {{ formatTime(overview.cache.lastModified) }}
+        </el-descriptions-item>
+      </el-descriptions>
+    </el-card>
   </div>
 </template>
 

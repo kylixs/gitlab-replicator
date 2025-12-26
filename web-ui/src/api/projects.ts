@@ -40,6 +40,10 @@ export const projectsApi = {
     return client.post('/sync/projects/batch-delete', { projectIds })
   },
 
+  batchClearCache: (projectIds: number[]) => {
+    return client.post('/sync/projects/batch-clear-cache', { projectIds })
+  },
+
   getBranchComparison: (params: { syncProjectId?: number; projectKey?: string }) => {
     return client.get<any, { data: BranchComparison }>('/sync/branches', { params })
   }

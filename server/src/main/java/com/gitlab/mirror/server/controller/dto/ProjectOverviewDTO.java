@@ -48,6 +48,11 @@ public class ProjectOverviewDTO {
     private LocalDateTime nextSyncTime;
 
     /**
+     * Cache information
+     */
+    private CacheInfo cache;
+
+    /**
      * Diff info
      */
     @Data
@@ -87,5 +92,36 @@ public class ProjectOverviewDTO {
          * Formatted delay string
          */
         private String formatted;
+    }
+
+    /**
+     * Cache info
+     */
+    @Data
+    public static class CacheInfo {
+        /**
+         * Local repository path
+         */
+        private String path;
+
+        /**
+         * Cache directory size in bytes
+         */
+        private Long sizeBytes;
+
+        /**
+         * Formatted size string (e.g., "1.5 MB")
+         */
+        private String sizeFormatted;
+
+        /**
+         * Last modified time of the cache directory
+         */
+        private LocalDateTime lastModified;
+
+        /**
+         * Whether cache exists
+         */
+        private Boolean exists;
     }
 }

@@ -44,6 +44,27 @@ public class BranchComparison {
     private boolean isDefault;
 
     /**
+     * Is this a protected branch?
+     */
+    private boolean isProtected;
+
+    /**
+     * Source commit timestamp
+     */
+    private java.time.LocalDateTime sourceCommittedAt;
+
+    /**
+     * Target commit timestamp
+     */
+    private java.time.LocalDateTime targetCommittedAt;
+
+    /**
+     * Commit time difference in seconds (target - source)
+     * Positive value means target is newer, negative means source is newer
+     */
+    private Long commitTimeDiffSeconds;
+
+    /**
      * Branch Sync Status
      */
     public enum BranchSyncStatus {
@@ -53,9 +74,19 @@ public class BranchComparison {
         SYNCED,
 
         /**
-         * Outdated: Branch exists in both but commit SHA doesn't match
+         * Outdated: Branch exists in both, target is behind source
          */
         OUTDATED,
+
+        /**
+         * Ahead: Branch exists in both, target is ahead of source
+         */
+        AHEAD,
+
+        /**
+         * Diverged: Branch exists in both, source and target have diverged
+         */
+        DIVERGED,
 
         /**
          * Missing in target: Branch exists in source but not in target

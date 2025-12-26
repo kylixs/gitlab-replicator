@@ -3,17 +3,23 @@ package com.gitlab.mirror.server.service;
 import com.gitlab.mirror.server.controller.dto.ProjectListDTO;
 import com.gitlab.mirror.server.controller.dto.ProjectOverviewDTO;
 import com.gitlab.mirror.server.entity.ProjectBranchSnapshot;
+import com.gitlab.mirror.server.entity.PullSyncConfig;
 import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncProject;
 import com.gitlab.mirror.server.entity.TargetProjectInfo;
+import com.gitlab.mirror.server.mapper.PullSyncConfigMapper;
 import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
 import com.gitlab.mirror.server.mapper.TargetProjectInfoMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -32,14 +38,17 @@ public class ProjectListService {
     private final BranchSnapshotService branchSnapshotService;
     private final SourceProjectInfoMapper sourceProjectInfoMapper;
     private final TargetProjectInfoMapper targetProjectInfoMapper;
+    private final PullSyncConfigMapper pullSyncConfigMapper;
 
     public ProjectListService(
             BranchSnapshotService branchSnapshotService,
             SourceProjectInfoMapper sourceProjectInfoMapper,
-            TargetProjectInfoMapper targetProjectInfoMapper) {
+            TargetProjectInfoMapper targetProjectInfoMapper,
+            PullSyncConfigMapper pullSyncConfigMapper) {
         this.branchSnapshotService = branchSnapshotService;
         this.sourceProjectInfoMapper = sourceProjectInfoMapper;
         this.targetProjectInfoMapper = targetProjectInfoMapper;
+        this.pullSyncConfigMapper = pullSyncConfigMapper;
     }
 
     /**
@@ -211,6 +220,93 @@ public class ProjectListService {
             overview.setNextSyncTime(project.getLastSyncAt().plusMinutes(5));
         }
 
+        // Build cache info
+        ProjectOverviewDTO.CacheInfo cacheInfo = buildCacheInfo(project.getId());
+        overview.setCache(cacheInfo);
+
         return overview;
+    }
+
+    /**
+     * Build cache information for a project
+     */
+    private ProjectOverviewDTO.CacheInfo buildCacheInfo(Long projectId) {
+        ProjectOverviewDTO.CacheInfo cacheInfo = new ProjectOverviewDTO.CacheInfo();
+
+        try {
+            // Get pull sync config to find local repo path
+            QueryWrapper<PullSyncConfig> query = new QueryWrapper<>();
+            query.eq("sync_project_id", projectId);
+            PullSyncConfig pullConfig = pullSyncConfigMapper.selectOne(query);
+
+            if (pullConfig == null || pullConfig.getLocalRepoPath() == null) {
+                cacheInfo.setExists(false);
+                return cacheInfo;
+            }
+
+            cacheInfo.setPath(pullConfig.getLocalRepoPath());
+
+            File repoDir = new File(pullConfig.getLocalRepoPath());
+            if (!repoDir.exists()) {
+                cacheInfo.setExists(false);
+                return cacheInfo;
+            }
+
+            cacheInfo.setExists(true);
+
+            // Calculate directory size
+            long size = calculateDirectorySize(repoDir);
+            cacheInfo.setSizeBytes(size);
+            cacheInfo.setSizeFormatted(formatSize(size));
+
+            // Get last modified time
+            BasicFileAttributes attrs = Files.readAttributes(repoDir.toPath(), BasicFileAttributes.class);
+            LocalDateTime lastModified = LocalDateTime.ofInstant(
+                attrs.lastModifiedTime().toInstant(),
+                ZoneId.systemDefault()
+            );
+            cacheInfo.setLastModified(lastModified);
+
+        } catch (Exception e) {
+            log.warn("Failed to get cache info for project {}: {}", projectId, e.getMessage());
+            cacheInfo.setExists(false);
+        }
+
+        return cacheInfo;
+    }
+
+    /**
+     * Calculate total size of a directory
+     */
+    private long calculateDirectorySize(File directory) {
+        long size = 0;
+
+        if (directory.isFile()) {
+            return directory.length();
+        }
+
+        File[] files = directory.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                size += calculateDirectorySize(file);
+            }
+        }
+
+        return size;
+    }
+
+    /**
+     * Format file size to human readable string
+     */
+    private String formatSize(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        } else if (bytes < 1024 * 1024) {
+            return String.format("%.2f KB", bytes / 1024.0);
+        } else if (bytes < 1024 * 1024 * 1024) {
+            return String.format("%.2f MB", bytes / (1024.0 * 1024));
+        } else {
+            return String.format("%.2f GB", bytes / (1024.0 * 1024 * 1024));
+        }
     }
 }

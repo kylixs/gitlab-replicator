@@ -83,6 +83,13 @@ export interface ProjectOverview {
     formatted: string
   }
   nextSyncTime: string
+  cache?: {
+    path?: string
+    sizeBytes?: number
+    sizeFormatted?: string
+    lastModified?: string
+    exists?: boolean
+  }
 }
 
 // Branch Comparison

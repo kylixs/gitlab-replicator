@@ -3,13 +3,17 @@ package com.gitlab.mirror.server.controller;
 import com.gitlab.mirror.server.controller.dto.ProjectListDTO;
 import com.gitlab.mirror.server.controller.dto.ProjectOverviewDTO;
 import com.gitlab.mirror.server.entity.ProjectBranchSnapshot;
+import com.gitlab.mirror.server.entity.PullSyncConfig;
 import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncProject;
+import com.gitlab.mirror.server.entity.SyncTask;
+import com.gitlab.mirror.server.mapper.PullSyncConfigMapper;
 import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
 import com.gitlab.mirror.server.mapper.SyncProjectMapper;
 import com.gitlab.mirror.server.service.BranchSnapshotService;
 import com.gitlab.mirror.server.service.ProjectListService;
 import com.gitlab.mirror.server.service.PullSyncExecutorService;
+import com.gitlab.mirror.server.service.SyncTaskService;
 import com.gitlab.mirror.server.service.monitor.DiffCalculator;
 import com.gitlab.mirror.server.service.monitor.LocalCacheManager;
 import com.gitlab.mirror.server.service.monitor.UnifiedProjectMonitor;
@@ -22,6 +26,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -46,6 +54,8 @@ public class SyncController {
     private final ProjectListService projectListService;
     private final SourceProjectInfoMapper sourceProjectInfoMapper;
     private final PullSyncExecutorService pullSyncExecutorService;
+    private final PullSyncConfigMapper pullSyncConfigMapper;
+    private final SyncTaskService syncTaskService;
 
     public SyncController(
             UnifiedProjectMonitor unifiedProjectMonitor,
@@ -55,7 +65,9 @@ public class SyncController {
             BranchSnapshotService branchSnapshotService,
             ProjectListService projectListService,
             SourceProjectInfoMapper sourceProjectInfoMapper,
-            PullSyncExecutorService pullSyncExecutorService) {
+            PullSyncExecutorService pullSyncExecutorService,
+            PullSyncConfigMapper pullSyncConfigMapper,
+            SyncTaskService syncTaskService) {
         this.unifiedProjectMonitor = unifiedProjectMonitor;
         this.syncProjectMapper = syncProjectMapper;
         this.diffCalculator = diffCalculator;
@@ -64,6 +76,8 @@ public class SyncController {
         this.projectListService = projectListService;
         this.sourceProjectInfoMapper = sourceProjectInfoMapper;
         this.pullSyncExecutorService = pullSyncExecutorService;
+        this.pullSyncConfigMapper = pullSyncConfigMapper;
+        this.syncTaskService = syncTaskService;
     }
 
     /**
@@ -608,19 +622,40 @@ public class SyncController {
             List<String> failedList = new ArrayList<>();
 
             for (Long projectId : request.getProjectIds()) {
+                String projectKey = null;
                 try {
                     SyncProject project = syncProjectMapper.selectById(projectId);
                     if (project == null) {
                         failedList.add("Project ID " + projectId + " not found");
                         continue;
                     }
+                    projectKey = project.getProjectKey();
 
-                    // Mark project as pending sync (actual sync will be triggered by scheduler)
-                    project.setSyncStatus("pending");
-                    syncProjectMapper.updateById(project);
+                    // Get or create sync task
+                    SyncTask task = syncTaskService.getTaskBySyncProjectId(projectId);
+                    if (task == null) {
+                        // Initialize task if it doesn't exist
+                        String taskType = "pull_sync".equals(project.getSyncMethod()) ? "pull" : "push";
+                        task = syncTaskService.initializeTask(projectId, taskType);
+                    }
+
+                    // Trigger immediate sync by setting next_run_at to now and status to waiting
+                    task.setNextRunAt(java.time.Instant.now());
+                    task.setConsecutiveFailures(0); // Reset failure count to allow immediate sync
+                    if ("running".equals(task.getTaskStatus())) {
+                        // If task is already running, just update next run time
+                        log.info("Task for project {} is already running, will run again after completion", projectKey);
+                    } else {
+                        task.setTaskStatus("waiting");
+                    }
+                    syncTaskService.updateTask(task);
+
                     successList.add(project.getProjectKey());
+                    log.info("Triggered immediate sync for project: {}", projectKey);
                 } catch (Exception e) {
-                    failedList.add("Project ID " + projectId + ": " + e.getMessage());
+                    String key = projectKey != null ? projectKey : "ID " + projectId;
+                    failedList.add(key + ": " + e.getMessage());
+                    log.error("Failed to trigger sync for project {}", key, e);
                 }
             }
 
@@ -767,6 +802,92 @@ public class SyncController {
         } catch (Exception e) {
             log.error("Batch delete failed", e);
             return ResponseEntity.ok(ApiResponse.error("Batch operation failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Batch clear Git cache
+     * <p>
+     * Clears local Git repository cache for selected projects.
+     * This is useful when the local cache is corrupted or needs to be refreshed.
+     *
+     * POST /api/sync/projects/batch-clear-cache
+     */
+    @PostMapping("/projects/batch-clear-cache")
+    public ResponseEntity<ApiResponse<BatchOperationResult>> batchClearCache(
+            @RequestBody BatchOperationRequest request) {
+        log.info("Batch clear Git cache - projectIds: {}", request.getProjectIds());
+
+        try {
+            BatchOperationResult result = new BatchOperationResult();
+            List<String> successList = new ArrayList<>();
+            List<String> failedList = new ArrayList<>();
+
+            for (Long projectId : request.getProjectIds()) {
+                String projectKey = null;
+                try {
+                    SyncProject project = syncProjectMapper.selectById(projectId);
+                    if (project == null) {
+                        failedList.add("Project ID " + projectId + " not found");
+                        continue;
+                    }
+                    projectKey = project.getProjectKey();
+
+                    // Get Pull Sync config to find local repo path
+                    PullSyncConfig pullConfig = pullSyncConfigMapper.selectOne(
+                            new QueryWrapper<PullSyncConfig>().eq("sync_project_id", projectId)
+                    );
+
+                    if (pullConfig == null || pullConfig.getLocalRepoPath() == null) {
+                        failedList.add(projectKey + ": No local repository path configured");
+                        log.warn("No local repo path for project: {}", projectKey);
+                        continue;
+                    }
+
+                    // Delete Git repository directory
+                    File repoDir = new File(pullConfig.getLocalRepoPath());
+                    if (repoDir.exists()) {
+                        deleteDirectory(repoDir);
+                        log.info("Cleared Git cache for project: {}, path: {}", projectKey, pullConfig.getLocalRepoPath());
+                    } else {
+                        log.info("Git cache directory does not exist for project: {}, path: {}", projectKey, pullConfig.getLocalRepoPath());
+                    }
+                    // Always mark as success - cache directory not existing is a valid state
+                    successList.add(projectKey);
+                } catch (Exception e) {
+                    String key = projectKey != null ? projectKey : "ID " + projectId;
+                    failedList.add(key + ": " + e.getMessage());
+                    log.error("Failed to clear Git cache for project {}", key, e);
+                }
+            }
+
+            result.setTotal(request.getProjectIds().size());
+            result.setSuccess(successList.size());
+            result.setFailed(failedList.size());
+            result.setSuccessList(successList);
+            result.setFailedList(failedList);
+
+            return ResponseEntity.ok(ApiResponse.success(result));
+        } catch (Exception e) {
+            log.error("Batch clear cache failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Batch operation failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Recursively delete directory and all its contents
+     */
+    private void deleteDirectory(File directory) throws IOException {
+        if (directory.isDirectory()) {
+            File[] files = directory.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    deleteDirectory(file);
+                }
+            }
+        }
+        if (!directory.delete()) {
+            throw new IOException("Failed to delete: " + directory.getAbsolutePath());
         }
     }
 

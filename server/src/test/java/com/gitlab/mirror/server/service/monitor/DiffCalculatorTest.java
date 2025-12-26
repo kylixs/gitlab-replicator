@@ -159,7 +159,7 @@ class DiffCalculatorTest {
 
         // Verify
         assertThat(result).isNotNull();
-        assertThat(result.getStatus()).isEqualTo(ProjectDiff.SyncStatus.FAILED);
+        assertThat(result.getStatus()).isEqualTo(ProjectDiff.SyncStatus.PENDING);
         assertThat(result.getTarget()).isNull();
     }
 

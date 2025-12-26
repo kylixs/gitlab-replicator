@@ -66,9 +66,19 @@ public class ProjectDiff {
         SYNCED,
 
         /**
-         * Outdated: SHA doesn't match or delay > 30 minutes
+         * Outdated: SHA doesn't match or delay > 30 minutes (target is behind source)
          */
         OUTDATED,
+
+        /**
+         * Ahead: Target is ahead of source (target has newer commits)
+         */
+        AHEAD,
+
+        /**
+         * Diverged: Source and target have diverged (both have independent commits)
+         */
+        DIVERGED,
 
         /**
          * Pending: Target project not yet created (newly discovered project)
@@ -83,6 +93,11 @@ public class ProjectDiff {
         /**
          * Inconsistent: Branch count or size diff too large
          */
-        INCONSISTENT
+        INCONSISTENT,
+
+        /**
+         * Source Missing: Source project not found or deleted
+         */
+        SOURCE_MISSING
     }
 }
