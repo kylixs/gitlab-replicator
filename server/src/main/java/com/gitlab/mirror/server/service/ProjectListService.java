@@ -243,20 +243,32 @@ public class ProjectListService {
         ProjectOverviewDTO.DiffInfo diff = new ProjectOverviewDTO.DiffInfo();
         try {
             ProjectDiff projectDiff = diffCalculator.calculateDiff(project.getId(), true);
-            if (projectDiff != null && projectDiff.getDiff() != null) {
-                DiffDetails details = projectDiff.getDiff();
-                DiffDetails.BranchComparisonSummary summary = details.getBranchSummary();
-
-                if (summary != null) {
-                    diff.setBranchNew(summary.getMissingInTargetCount());
-                    diff.setBranchDeleted(summary.getExtraInTargetCount());
-                    diff.setBranchOutdated(summary.getOutdatedCount());
-                    diff.setBranchAhead(summary.getAheadCount());
-                    diff.setBranchDiverged(summary.getDivergedCount());
-                }
-
-                diff.setCommitDiff(details.getCommitBehind() != null ? details.getCommitBehind() : 0);
+            if (projectDiff != null) {
+                // Always set diffStatus first
                 diff.setDiffStatus(projectDiff.getStatus() != null ? projectDiff.getStatus().name() : "UNKNOWN");
+
+                // Set diff details if available
+                if (projectDiff.getDiff() != null) {
+                    DiffDetails details = projectDiff.getDiff();
+                    DiffDetails.BranchComparisonSummary summary = details.getBranchSummary();
+
+                    if (summary != null) {
+                        diff.setBranchNew(summary.getMissingInTargetCount());
+                        diff.setBranchDeleted(summary.getExtraInTargetCount());
+                        diff.setBranchOutdated(summary.getOutdatedCount());
+                        diff.setBranchAhead(summary.getAheadCount());
+                        diff.setBranchDiverged(summary.getDivergedCount());
+                    } else {
+                        // No branch summary (e.g., source missing) - set defaults
+                        diff.setBranchNew(0);
+                        diff.setBranchDeleted(0);
+                        diff.setBranchOutdated(0);
+                        diff.setBranchAhead(0);
+                        diff.setBranchDiverged(0);
+                    }
+
+                    diff.setCommitDiff(details.getCommitBehind() != null ? details.getCommitBehind() : 0);
+                }
             }
         } catch (Exception e) {
             log.warn("Failed to calculate diff using DiffCalculator for project {}: {}", project.getId(), e.getMessage());
