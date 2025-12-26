@@ -349,22 +349,22 @@ public class DiffCalculator {
             List<com.gitlab.mirror.server.entity.ProjectBranchSnapshot> targetSnapshots,
             String defaultBranch) {
 
-        // Build maps for quick lookup
-        Map<String, String> sourceMap = sourceSnapshots.stream()
+        // Build maps with full snapshot info for quick lookup
+        Map<String, com.gitlab.mirror.server.entity.ProjectBranchSnapshot> sourceMap = sourceSnapshots.stream()
             .collect(Collectors.toMap(
                 com.gitlab.mirror.server.entity.ProjectBranchSnapshot::getBranchName,
-                snapshot -> snapshot.getCommitSha() != null ? snapshot.getCommitSha() : "",
+                snapshot -> snapshot,
                 (a, b) -> a
             ));
 
-        Map<String, String> targetMap = targetSnapshots.stream()
+        Map<String, com.gitlab.mirror.server.entity.ProjectBranchSnapshot> targetMap = targetSnapshots.stream()
             .collect(Collectors.toMap(
                 com.gitlab.mirror.server.entity.ProjectBranchSnapshot::getBranchName,
-                snapshot -> snapshot.getCommitSha() != null ? snapshot.getCommitSha() : "",
+                snapshot -> snapshot,
                 (a, b) -> a
             ));
 
-        return compareBranchMaps(sourceMap, targetMap, defaultBranch);
+        return compareBranchSnapshots(sourceMap, targetMap, defaultBranch);
     }
 
     /**
@@ -394,7 +394,106 @@ public class DiffCalculator {
     }
 
     /**
-     * Compare branch maps (common logic)
+     * Compare branch snapshots with time-based status detection
+     */
+    private List<BranchComparison> compareBranchSnapshots(
+            Map<String, com.gitlab.mirror.server.entity.ProjectBranchSnapshot> sourceMap,
+            Map<String, com.gitlab.mirror.server.entity.ProjectBranchSnapshot> targetMap,
+            String defaultBranch) {
+
+        // Get all unique branch names
+        Set<String> allBranchNames = new HashSet<>();
+        allBranchNames.addAll(sourceMap.keySet());
+        allBranchNames.addAll(targetMap.keySet());
+
+        // Compare each branch
+        List<BranchComparison> comparisons = new ArrayList<>();
+        for (String branchName : allBranchNames) {
+            var sourceSnapshot = sourceMap.get(branchName);
+            var targetSnapshot = targetMap.get(branchName);
+
+            BranchComparison.BranchSyncStatus status;
+            String sourceSha = sourceSnapshot != null ? sourceSnapshot.getCommitSha() : null;
+            String targetSha = targetSnapshot != null ? targetSnapshot.getCommitSha() : null;
+            LocalDateTime sourceTime = sourceSnapshot != null ? sourceSnapshot.getCommittedAt() : null;
+            LocalDateTime targetTime = targetSnapshot != null ? targetSnapshot.getCommittedAt() : null;
+            Long timeDiffSeconds = null;
+
+            if (sourceSha != null && targetSha != null) {
+                // Branch exists in both
+                if (sourceSha.equals(targetSha)) {
+                    status = BranchComparison.BranchSyncStatus.SYNCED;
+                } else {
+                    // Different SHAs - determine direction based on commit time
+                    status = determineBranchStatus(sourceTime, targetTime);
+                    if (sourceTime != null && targetTime != null) {
+                        timeDiffSeconds = java.time.Duration.between(sourceTime, targetTime).getSeconds();
+                    }
+                }
+            } else if (sourceSha != null) {
+                // Only in source
+                status = BranchComparison.BranchSyncStatus.MISSING_IN_TARGET;
+            } else {
+                // Only in target (orphaned branch)
+                status = BranchComparison.BranchSyncStatus.EXTRA_IN_TARGET;
+            }
+
+            BranchComparison comparison = BranchComparison.builder()
+                .branchName(branchName)
+                .sourceCommitSha(sourceSha)
+                .targetCommitSha(targetSha)
+                .sourceCommittedAt(sourceTime)
+                .targetCommittedAt(targetTime)
+                .commitTimeDiffSeconds(timeDiffSeconds)
+                .status(status)
+                .isDefault(branchName.equals(defaultBranch))
+                .isProtected(sourceSnapshot != null && Boolean.TRUE.equals(sourceSnapshot.getIsProtected()))
+                .build();
+
+            comparisons.add(comparison);
+        }
+
+        // Sort: default branch first, then by name
+        comparisons.sort((a, b) -> {
+            if (a.isDefault() && !b.isDefault()) return -1;
+            if (!a.isDefault() && b.isDefault()) return 1;
+            return a.getBranchName().compareTo(b.getBranchName());
+        });
+
+        return comparisons;
+    }
+
+    /**
+     * Determine branch sync status based on commit times
+     */
+    private BranchComparison.BranchSyncStatus determineBranchStatus(
+            LocalDateTime sourceTime, LocalDateTime targetTime) {
+
+        if (sourceTime == null || targetTime == null) {
+            // If we can't determine time, default to OUTDATED
+            return BranchComparison.BranchSyncStatus.OUTDATED;
+        }
+
+        long diffSeconds = java.time.Duration.between(sourceTime, targetTime).getSeconds();
+        long absSeconds = Math.abs(diffSeconds);
+
+        // Divergence detection: if commits are very close in time (< 1 hour) but different SHA
+        // This is a heuristic - true divergence requires checking git history
+        if (absSeconds < 3600) {
+            return BranchComparison.BranchSyncStatus.DIVERGED;
+        }
+
+        // Target is newer (ahead)
+        if (diffSeconds > 0) {
+            return BranchComparison.BranchSyncStatus.AHEAD;
+        }
+
+        // Source is newer (outdated)
+        return BranchComparison.BranchSyncStatus.OUTDATED;
+    }
+
+    /**
+     * Compare branch maps (common logic) - for API-based comparison
      */
     private List<BranchComparison> compareBranchMaps(
             Map<String, String> sourceMap,
