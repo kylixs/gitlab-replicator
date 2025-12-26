@@ -82,6 +82,9 @@ public class DiffCalculator {
             return null;
         }
 
+        // Check if source project is missing based on sync_project status
+        boolean isSourceMissing = SyncProject.SyncStatus.SOURCE_MISSING.equals(syncProject.getSyncStatus());
+
         // Get source and target info
         SourceProjectInfo sourceInfo = sourceProjectInfoMapper.selectOne(
                 new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<SourceProjectInfo>()
@@ -96,9 +99,11 @@ public class DiffCalculator {
         log.debug("查询 TargetProjectInfo - syncProjectId: {}, result: {}", syncProjectId, targetInfo != null ? ("找到 ID=" + targetInfo.getId()) : "未找到");
 
         // Build snapshots
-        ProjectSnapshot sourceSnapshot = buildSourceSnapshot(sourceInfo);
+        // If source is marked as missing, treat sourceSnapshot as null regardless of sourceInfo existence
+        ProjectSnapshot sourceSnapshot = isSourceMissing ? null : buildSourceSnapshot(sourceInfo);
         ProjectSnapshot targetSnapshot = buildTargetSnapshot(targetInfo);
-        log.debug("构建 Snapshot - source: {}, target: {}", sourceSnapshot != null, targetSnapshot != null);
+        log.debug("构建 Snapshot - source: {} (sourceMissing: {}), target: {}",
+            sourceSnapshot != null, isSourceMissing, targetSnapshot != null);
 
         // Calculate diff details
         DiffDetails diffDetails = calculateDiffDetails(syncProjectId, sourceSnapshot, targetSnapshot,
