@@ -79,9 +79,19 @@ public class DiffDetails {
         private int syncedCount;
 
         /**
-         * Number of branches that are outdated (exist in both but SHA differs)
+         * Number of branches that are outdated (target is behind source)
          */
         private int outdatedCount;
+
+        /**
+         * Number of branches that are ahead (target is ahead of source)
+         */
+        private int aheadCount;
+
+        /**
+         * Number of branches that have diverged (both have independent commits)
+         */
+        private int divergedCount;
 
         /**
          * Number of branches missing in target

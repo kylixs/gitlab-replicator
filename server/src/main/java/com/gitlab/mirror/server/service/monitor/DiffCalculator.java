@@ -261,15 +261,16 @@ public class DiffCalculator {
 
     /**
      * Determine sync status based on diff details
+     * Priority: SOURCE_MISSING > PENDING > DIVERGED > AHEAD > INCONSISTENT > OUTDATED > SYNCED
      */
     private ProjectDiff.SyncStatus determineSyncStatus(
             ProjectSnapshot source,
             ProjectSnapshot target,
             DiffDetails diff) {
 
-        // Source missing (shouldn't happen)
+        // Source missing (shouldn't happen in normal flow)
         if (source == null) {
-            return ProjectDiff.SyncStatus.FAILED;
+            return ProjectDiff.SyncStatus.SOURCE_MISSING;
         }
 
         // Target missing - newly discovered project, not yet synced
@@ -277,7 +278,23 @@ public class DiffCalculator {
             return ProjectDiff.SyncStatus.PENDING;
         }
 
-        // Check for inconsistencies first (highest priority)
+        // Check branch comparison summary for DIVERGED and AHEAD status
+        DiffDetails.BranchComparisonSummary summary = diff.getBranchSummary();
+        if (summary != null) {
+            // DIVERGED has highest priority - any diverged branch means project is diverged
+            if (summary.getDivergedCount() > 0) {
+                log.debug("Project has {} diverged branches", summary.getDivergedCount());
+                return ProjectDiff.SyncStatus.DIVERGED;
+            }
+
+            // AHEAD - if any branch is ahead (and none diverged)
+            if (summary.getAheadCount() > 0) {
+                log.debug("Project has {} ahead branches", summary.getAheadCount());
+                return ProjectDiff.SyncStatus.AHEAD;
+            }
+        }
+
+        // Check for inconsistencies (high priority)
         Integer branchDiff = diff.getBranchDiff();
         Double sizeDiffPercent = diff.getSizeDiffPercent();
 
@@ -557,13 +574,15 @@ public class DiffCalculator {
             return DiffDetails.BranchComparisonSummary.builder()
                 .syncedCount(0)
                 .outdatedCount(0)
+                .aheadCount(0)
+                .divergedCount(0)
                 .missingInTargetCount(0)
                 .extraInTargetCount(0)
                 .totalBranchCount(0)
                 .build();
         }
 
-        int synced = 0, outdated = 0, missing = 0, extra = 0;
+        int synced = 0, outdated = 0, ahead = 0, diverged = 0, missing = 0, extra = 0;
         for (BranchComparison comparison : branchComparisons) {
             switch (comparison.getStatus()) {
                 case SYNCED:
@@ -571,6 +590,12 @@ public class DiffCalculator {
                     break;
                 case OUTDATED:
                     outdated++;
+                    break;
+                case AHEAD:
+                    ahead++;
+                    break;
+                case DIVERGED:
+                    diverged++;
                     break;
                 case MISSING_IN_TARGET:
                     missing++;
@@ -584,6 +609,8 @@ public class DiffCalculator {
         return DiffDetails.BranchComparisonSummary.builder()
             .syncedCount(synced)
             .outdatedCount(outdated)
+            .aheadCount(ahead)
+            .divergedCount(diverged)
             .missingInTargetCount(missing)
             .extraInTargetCount(extra)
             .totalBranchCount(branchComparisons.size())
