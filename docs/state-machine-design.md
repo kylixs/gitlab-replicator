@@ -21,9 +21,8 @@
 | **已发现** | `discovered` | 项目刚被发现，等待初始化 | ❌ |
 | **初始化中** | `initializing` | 正在创建目标项目和配置 | ✅ |
 | **活跃** | `active` | 项目正常运行，可以执行同步 | ✅ |
-| **同步中** | `syncing` | 正在执行同步任务 | ✅ |
 | **告警** | `warning` | 有可重试的失败（0 < 失败次数 < 5） | ✅ |
-| **错误** | `error` | 遇到严重错误，需人工介入 | ❌ |
+| **失败** | `failed` | 非可重试错误或连续失败≥5次 | ❌ |
 | **源项目缺失** | `missing` | 源项目不存在或无法访问 | ❌ |
 | **已禁用** | `disabled` | 用户手动禁用 | ❌ |
 | **已删除** | `deleted` | 逻辑删除（保留历史） | ❌ |
@@ -35,23 +34,21 @@ stateDiagram-v2
     [*] --> discovered: 项目发现
     discovered --> initializing: 开始初始化
     initializing --> active: 首次同步成功
-    initializing --> error: 初始化失败
+    initializing --> failed: 初始化失败
 
-    active --> syncing: 开始同步
-    syncing --> active: 同步成功
-    syncing --> warning: 同步失败(可重试, 0<失败<5)
-    syncing --> error: 连续失败≥5次
-    syncing --> missing: 源项目不存在
-
-    warning --> syncing: 重试同步
-    warning --> active: 同步成功
-    warning --> error: 连续失败≥5次
-    warning --> disabled: 用户禁用
-
+    active --> active: 同步成功(保持)
+    active --> warning: 同步失败(可重试, 0<失败<5)
+    active --> failed: 连续失败≥5次或非可重试错误
+    active --> missing: 源项目不存在
     active --> disabled: 用户禁用
 
-    error --> active: 用户重新启用
-    error --> disabled: 用户禁用
+    warning --> active: 同步成功
+    warning --> warning: 同步失败(保持, 失败<5)
+    warning --> failed: 连续失败≥5次
+    warning --> disabled: 用户禁用
+
+    failed --> active: 用户重新启用
+    failed --> disabled: 用户禁用
 
     missing --> active: 源项目恢复
     missing --> disabled: 用户禁用
@@ -60,7 +57,7 @@ stateDiagram-v2
 
     active --> deleted: 用户删除
     warning --> deleted: 用户删除
-    error --> deleted: 用户删除
+    failed --> deleted: 用户删除
     missing --> deleted: 用户删除
     disabled --> deleted: 用户删除
 ```
@@ -71,33 +68,45 @@ stateDiagram-v2
 |---------|---------|--------|---------|
 | `discovered` | 开始创建目标项目 | `initializing` | 自动 |
 | `initializing` | 首次同步成功 | `active` | 自动 |
-| `initializing` | 初始化失败（连续失败≥3次） | `error` | 自动 |
-| `active` | 开始同步任务 | `syncing` | 自动 |
+| `initializing` | 初始化失败（连续失败≥3次） | `failed` | 自动 |
+| `active` | 同步成功 | `active` | 自动（保持） |
+| `active` | 同步失败（可重试，0 < 失败 < 5） | `warning` | 自动 |
+| `active` | 连续失败≥5次或非可重试错误 | `failed` | 自动 |
+| `active` | 源项目不存在 | `missing` | 自动 |
 | `active` | 用户禁用 | `disabled` | 手动 |
-| `syncing` | 同步成功 | `active` | 自动 |
-| `syncing` | 同步失败（可重试，0 < 失败 < 5） | `warning` | 自动 |
-| `syncing` | 连续失败≥5次 | `error` | 自动 |
-| `syncing` | 源项目不存在 | `missing` | 自动 |
-| `warning` | 开始重试同步 | `syncing` | 自动 |
 | `warning` | 同步成功 | `active` | 自动 |
-| `warning` | 连续失败≥5次 | `error` | 自动 |
+| `warning` | 同步失败（失败 < 5） | `warning` | 自动（保持） |
+| `warning` | 连续失败≥5次 | `failed` | 自动 |
 | `warning` | 用户禁用 | `disabled` | 手动 |
-| `error` | 用户点击"重新启用" | `active` | 手动 |
+| `failed` | 用户点击"重新启用" | `active` | 手动 |
+| `failed` | 用户禁用 | `disabled` | 手动 |
 | `missing` | 源项目恢复 | `active` | 自动 |
 | `missing` | 用户禁用 | `disabled` | 手动 |
 | `disabled` | 用户点击"启用" | `active` | 手动 |
 | `*` | 用户删除项目 | `deleted` | 手动 |
 
-**注意**：
-- `syncing` 状态表示任务正在执行中，由服务启动监听器在重启时自动重置为 `active`
-- `warning` 状态表示有可重试的失败，项目仍可继续同步
-- `missing` 状态表示源项目不存在或无法访问，需等待源项目恢复
+**重要说明**：
+
+1. **项目状态与同步执行分离**
+   - 项目状态不再随同步任务的执行而改变（已移除 `syncing` 状态）
+   - 同步任务的执行状态由 `sync_task.task_status` 字段管理（waiting/running/blocked）
+   - 项目状态仅反映项目的生命周期阶段和健康状况
+
+2. **状态含义**
+   - `active`: 项目健康，可正常同步
+   - `warning`: 有可重试的失败（0 < 失败次数 < 5），项目仍可继续同步
+   - `failed`: 非可重试错误或连续失败≥5次，需人工介入
+   - `missing`: 源项目不存在或无法访问，等待源项目恢复
+
+3. **服务重启处理**
+   - 任务状态：重置 `running` 任务为 `waiting`
+   - 项目状态：不做改变（已移除syncing重置逻辑）
 
 ### 1.4 关键字段
 
 | 字段 | 类型 | 说明 |
 |-----|------|------|
-| `sync_status` | VARCHAR(50) | 项目状态：discovered/initializing/active/syncing/warning/error/missing/disabled/deleted |
+| `sync_status` | VARCHAR(50) | 项目状态：discovered/initializing/active/warning/failed/missing/disabled/deleted |
 | `enabled` | BOOLEAN | 是否启用（用户控制） |
 | `error_message` | TEXT | 错误消息 |
 | `last_sync_at` | DATETIME | 最后成功同步时间 |
