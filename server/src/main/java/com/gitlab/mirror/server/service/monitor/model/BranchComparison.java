@@ -59,6 +59,26 @@ public class BranchComparison {
     private java.time.LocalDateTime targetCommittedAt;
 
     /**
+     * Source commit author
+     */
+    private String sourceCommitAuthor;
+
+    /**
+     * Target commit author
+     */
+    private String targetCommitAuthor;
+
+    /**
+     * Source commit message (title)
+     */
+    private String sourceCommitMessage;
+
+    /**
+     * Target commit message (title)
+     */
+    private String targetCommitMessage;
+
+    /**
      * Commit time difference in seconds (target - source)
      * Positive value means target is newer, negative means source is newer
      */

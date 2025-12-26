@@ -47,8 +47,14 @@
             <!-- Auto Refresh Settings -->
             <el-popover placement="bottom" :width="300" trigger="click">
               <template #reference>
-                <el-button circle :icon="isAutoRefreshEnabled ? 'Refresh' : 'RefreshLeft'">
-                  <el-icon><Refresh /></el-icon>
+                <el-button
+                  circle
+                  :type="isAutoRefreshEnabled ? 'primary' : ''"
+                  :class="{ 'refresh-active': isAutoRefreshEnabled }"
+                >
+                  <el-icon :class="{ 'is-loading': isAutoRefreshEnabled }">
+                    <Refresh />
+                  </el-icon>
                 </el-button>
               </template>
               <div class="refresh-settings">

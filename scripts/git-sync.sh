@@ -29,17 +29,20 @@ shift
 
 case "$COMMAND" in
     "clone-mirror")
-        # Clone repository with --mirror
+        # DEPRECATED: Clone repository with --mirror
+        # This command is kept for backward compatibility but not recommended
+        # Use sync-first instead, which uses --bare and avoids mirror configuration conflicts
         # Usage: git-sync.sh clone-mirror <source_url> <local_path>
         SOURCE_URL="$1"
         LOCAL_PATH="$2"
 
+        log "WARNING: clone-mirror is deprecated. Use sync-first instead."
         log "Cloning mirror repository to $(basename "$LOCAL_PATH")"
 
         # Create parent directory
         mkdir -p "$(dirname "$LOCAL_PATH")"
 
-        # Clone with mirror
+        # Clone with mirror (deprecated, use --bare in sync-first instead)
         git clone --mirror "$SOURCE_URL" "$LOCAL_PATH"
 
         log "Clone completed successfully"
@@ -86,11 +89,15 @@ case "$COMMAND" in
 
         log "Pushing to target: $(mask_url "$TARGET_URL")"
 
+        # 禁用 mirror 模式
+        git config remote.origin.mirror false
+
         # Set push URL
         git remote set-url --push origin "$TARGET_URL"
 
         # Push all branches and tags to target
-        # Note: We use --all and --tags instead of --mirror to avoid pushing hidden refs (like pipeline refs)
+        # We use --all and --tags to push normal Git refs (branches and tags)
+        # This avoids pushing GitLab internal refs (refs/merge-requests/*, refs/pipelines/*)
         # which would be rejected by the target GitLab instance
         git push --all origin --force
         git push --tags origin --force
@@ -114,16 +121,28 @@ case "$COMMAND" in
         # Create parent directory
         mkdir -p "$(dirname "$LOCAL_PATH")"
 
-        # Clone from source
+        # Clone from source using --bare (not --mirror)
+        # --bare creates a bare repository with all branches and tags
+        # Unlike --mirror, it does NOT:
+        #   - Set remote.origin.mirror = true (which causes conflicts with --all/--tags)
+        #   - Clone GitLab internal refs (refs/merge-requests/*, refs/pipelines/*)
+        # This is cleaner and avoids configuration conflicts
         log "Cloning from source: $(mask_url "$SOURCE_URL")"
-        git clone --mirror "$SOURCE_URL" "$LOCAL_PATH"
+        git clone --bare "$SOURCE_URL" "$LOCAL_PATH"
 
         cd "$LOCAL_PATH"
 
-        # Set push URL and push to target
-        log "Pushing to target: $(mask_url "$TARGET_URL")"
+        # Configure to fetch all tags (bare clone already fetches all branches)
+        git config --add remote.origin.fetch '+refs/tags/*:refs/tags/*'
+
+        # Set push URL
         git remote set-url --push origin "$TARGET_URL"
-        git push --mirror
+
+        # Push to target using --all and --tags
+        # This pushes all branches and tags, which is exactly what we need for GitLab sync
+        log "Pushing to target: $(mask_url "$TARGET_URL")"
+        git push --all origin --force
+        git push --tags origin --force
 
         # Get final SHA
         FINAL_SHA=$(git rev-parse HEAD)
