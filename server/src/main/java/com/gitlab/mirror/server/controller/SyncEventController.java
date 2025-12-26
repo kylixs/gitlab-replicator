@@ -86,12 +86,22 @@ public class SyncEventController {
                 queryWrapper.le("event_time", endDate.atTime(LocalTime.MAX));
             }
 
-            // Search in error_message or branch_name
+            // Search by project key
             if (search != null && !search.isEmpty()) {
-                queryWrapper.and(wrapper -> wrapper
-                        .like("error_message", search)
-                        .or()
-                        .like("branch_name", search));
+                // Find projects matching the search term
+                QueryWrapper<SyncProject> searchQuery = new QueryWrapper<>();
+                searchQuery.like("project_key", search);
+                List<SyncProject> matchingProjects = syncProjectMapper.selectList(searchQuery);
+
+                if (!matchingProjects.isEmpty()) {
+                    List<Long> matchingProjectIds = matchingProjects.stream()
+                            .map(SyncProject::getId)
+                            .collect(Collectors.toList());
+                    queryWrapper.in("sync_project_id", matchingProjectIds);
+                } else {
+                    // No matching projects, return empty result
+                    queryWrapper.eq("id", -1); // Force no results
+                }
             }
 
             // Order by event_time desc
