@@ -51,6 +51,7 @@ export interface ProjectListItem {
   updatedAt: string
   groupPath?: string
   diff: {
+    diffStatus?: string
     branchNew: number
     branchDeleted: number
     branchOutdated: number
@@ -99,6 +100,8 @@ export interface ProjectOverview {
     taskStatus: string
     nextRunAt: string
     lastRunAt: string
+    startedAt?: string
+    completedAt?: string
     lastSyncStatus: string
     durationSeconds: number
     consecutiveFailures: number
@@ -169,6 +172,39 @@ export interface EventDetails {
     durationSeconds: number
   }
   details: Record<string, any>
+}
+
+// Sync Results
+export interface SyncResult {
+  id: number
+  syncProjectId: number
+  projectKey: string
+  syncStatus: string
+  startedAt: string
+  completedAt?: string
+  durationSeconds?: number
+  summary?: string
+}
+
+export interface SyncResultDetail extends SyncResult {
+  totalBranches: number
+  recentBranches: SyncResultBranchInfo[]
+  syncMethod?: string
+  hasChanges?: boolean
+  changesCount?: number
+  lastSyncAt?: string
+  sourceCommitSha?: string
+  errorMessage?: string
+}
+
+export interface SyncResultBranchInfo {
+  branchName: string
+  commitSha: string
+  commitMessage: string
+  commitAuthor: string
+  committedAt: string
+  isDefault: boolean
+  isProtected: boolean
 }
 
 // Configuration

@@ -454,7 +454,7 @@ const props = defineProps<Props>()
 const emit = defineEmits(['refresh'])
 
 import { ref } from 'vue'
-import { eventsApi, type EventDetailEnhanced } from '@/api/events'
+import { eventsApi } from '@/api/events'
 import type { SyncResultDetail, EventListItem } from '@/types'
 
 const detailDialogVisible = ref(false)
@@ -481,12 +481,14 @@ const handleViewTaskDetail = async () => {
       size: 1
     })
 
-    if (response.success && response.data && response.data.items.length > 0) {
+    if (response.data && response.data.items.length > 0) {
       const latestResult = response.data.items[0]
-      // Load detail
-      const detailResponse = await syncApi.getSyncResultDetail(latestResult.id)
-      if (detailResponse.success && detailResponse.data) {
-        resultDetail.value = detailResponse.data
+      if (latestResult) {
+        // Load detail
+        const detailResponse = await syncApi.getSyncResultDetail(latestResult.id)
+        if (detailResponse.data) {
+          resultDetail.value = detailResponse.data
+        }
       }
     } else {
       ElMessage.info('No sync results found for this project')
@@ -516,10 +518,10 @@ const handleViewTaskLogs = async () => {
       size: 1
     })
 
-    if (response.success && response.data && response.data.items.length > 0) {
+    if (response.data && response.data.items.length > 0) {
       const latestResult = response.data.items[0]
-      const startDate = latestResult.startedAt ? new Date(latestResult.startedAt).toISOString().split('T')[0] : undefined
-      const endDate = latestResult.completedAt ? new Date(latestResult.completedAt).toISOString().split('T')[0] : undefined
+      const startDate = latestResult?.startedAt ? new Date(latestResult.startedAt).toISOString().split('T')[0] : undefined
+      const endDate = latestResult?.completedAt ? new Date(latestResult.completedAt).toISOString().split('T')[0] : undefined
 
       const eventsResponse = await eventsApi.getEvents({
         search: props.overview.project.projectKey,
@@ -529,10 +531,10 @@ const handleViewTaskLogs = async () => {
         size: 50
       })
 
-      if (eventsResponse.success && eventsResponse.data) {
+      if (eventsResponse.data) {
         // Filter by exact time range
-        const startTime = latestResult.startedAt ? new Date(latestResult.startedAt).getTime() : 0
-        const endTime = latestResult.completedAt ? new Date(latestResult.completedAt).getTime() : Date.now()
+        const startTime = latestResult?.startedAt ? new Date(latestResult.startedAt).getTime() : 0
+        const endTime = latestResult?.completedAt ? new Date(latestResult.completedAt).getTime() : Date.now()
 
         syncLogs.value = (eventsResponse.data.items || []).filter((log: EventListItem) => {
           const logTime = new Date(log.createdAt).getTime()
@@ -544,8 +546,8 @@ const handleViewTaskLogs = async () => {
       logsDialogVisible.value = false
     }
   } catch (error) {
+    console.error('Failed to load sync logs:', error)
     ElMessage.error('Failed to load sync logs')
-    console.error('Load sync logs failed:', error)
   } finally {
     logsLoading.value = false
   }
@@ -624,6 +626,35 @@ const formatSize = (bytes: number | null | undefined) => {
   return `${size.toFixed(2)} ${units[unitIndex]}`
 }
 
+const formatDuration = (seconds: number | null | undefined) => {
+  if (!seconds || seconds === 0) return '-'
+  if (seconds < 60) return `${seconds}s`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+  const hours = Math.floor(seconds / 3600)
+  const mins = Math.floor((seconds % 3600) / 60)
+  const secs = seconds % 60
+  return `${hours}h ${mins}m ${secs}s`
+}
+
+const getLogType = (status: string) => {
+  const typeMap: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
+    'success': 'success',
+    'info': 'info',
+    'warning': 'warning',
+    'error': 'danger',
+    'failed': 'danger'
+  }
+  return typeMap[status?.toLowerCase()] || 'info'
+}
+
+const formatEventType = (type: string) => {
+  return type.replace(/_/g, ' ').toUpperCase()
+}
+
+const getStatusTagType = (status: string) => {
+  return getStatusType(status)
+}
+
 const getTaskStatusType = (status: string) => {
   const typeMap: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
     'waiting': 'info',
@@ -640,15 +671,6 @@ const formatTaskStatus = (status: string) => {
     'running': 'Running'
   }
   return statusMap[status.toLowerCase()] || status
-}
-
-const getSyncSummaryType = (summary: string) => {
-  if (summary.includes('✓') || summary.includes('成功') || summary.includes('跳过')) {
-    return 'success'
-  } else if (summary.includes('✗') || summary.includes('失败')) {
-    return 'error'
-  }
-  return 'info'
 }
 </script>
 

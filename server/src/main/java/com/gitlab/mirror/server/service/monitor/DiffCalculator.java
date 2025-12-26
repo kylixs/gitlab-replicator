@@ -298,7 +298,7 @@ public class DiffCalculator {
                 return ProjectDiff.SyncStatus.AHEAD;
             }
 
-            // SYNCED - if all branches are synced (synced count equals total)
+            // SYNCED - if all branches are synced (synced count equals total AND total > 0)
             if (summary.getSyncedCount() > 0 &&
                 summary.getSyncedCount() == summary.getTotalBranchCount() &&
                 summary.getOutdatedCount() == 0 &&
@@ -312,6 +312,12 @@ public class DiffCalculator {
                 log.debug("Project is outdated: {} outdated, {} missing",
                     summary.getOutdatedCount(), summary.getMissingInTargetCount());
                 return ProjectDiff.SyncStatus.OUTDATED;
+            }
+
+            // Empty project (0 branches total) - treat as PENDING (not yet synced)
+            if (summary.getTotalBranchCount() == 0) {
+                log.debug("Project has 0 branches, treating as PENDING");
+                return ProjectDiff.SyncStatus.PENDING;
             }
         }
 

@@ -1,5 +1,11 @@
 <template>
   <div class="diff-badge">
+    <!-- Diff Status Badge -->
+    <div v-if="diff.diffStatus" class="diff-item">
+      <DiffStatusBadge :diff-status="diff.diffStatus" />
+    </div>
+
+    <!-- Branch Diff Details -->
     <div class="diff-item">
       <span class="diff-label">Branches:</span>
       <span v-if="diff.branchNew > 0" class="diff-value new">+{{ diff.branchNew }}</span>
@@ -7,6 +13,8 @@
       <span v-if="diff.branchOutdated > 0" class="diff-value outdated">~{{ diff.branchOutdated }}</span>
       <span v-if="!hasBranchDiff" class="diff-value synced">Synced</span>
     </div>
+
+    <!-- Commit Diff (only if significant) -->
     <div v-if="diff.commitDiff > 0" class="diff-item">
       <span class="diff-label">Commits:</span>
       <span class="diff-value new">+{{ diff.commitDiff }}</span>
@@ -16,8 +24,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import DiffStatusBadge from '@/components/common/DiffStatusBadge.vue'
 
 interface DiffInfo {
+  diffStatus?: string
   branchNew: number
   branchDeleted: number
   branchOutdated: number
