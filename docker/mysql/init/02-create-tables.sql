@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS sync_task (
     error_type VARCHAR(50) COMMENT '错误类型',
     error_message TEXT COMMENT '错误信息',
     consecutive_failures INT DEFAULT 0 COMMENT '连续失败次数',
+    force_sync TINYINT(1) DEFAULT 0 COMMENT '强制同步标志-跳过变更检测',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     FOREIGN KEY (sync_project_id) REFERENCES sync_project(id) ON DELETE CASCADE,

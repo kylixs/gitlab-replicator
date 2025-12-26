@@ -266,8 +266,8 @@ public class PullSyncExecutorService {
         boolean hasChanges = checkForBranchChanges(project.getId(),
             sourceInfo.getGitlabProjectId(), targetInfo.getGitlabProjectId());
 
-        // 6. If no changes, skip sync but still update snapshots to ensure accuracy
-        if (!hasChanges) {
+        // 6. If no changes and not forced, skip sync but still update snapshots to ensure accuracy
+        if (!hasChanges && !Boolean.TRUE.equals(task.getForceSync())) {
             log.info("No branch changes detected for project: {}, skipping sync", project.getProjectKey());
             String currentHeadSha = task.getSourceCommitSha();
             updateTaskAfterSuccess(task, false, currentHeadSha, currentHeadSha);
@@ -294,7 +294,12 @@ public class PullSyncExecutorService {
             return;
         }
 
-        log.info("Branch changes detected for project: {}, proceeding with sync", project.getProjectKey());
+        // Log reason for sync
+        if (Boolean.TRUE.equals(task.getForceSync())) {
+            log.info("Force sync enabled for project: {}, bypassing change detection", project.getProjectKey());
+        } else {
+            log.info("Branch changes detected for project: {}, proceeding with sync", project.getProjectKey());
+        }
 
         // 7. Execute git sync-incremental (remote update + push)
         String lastSyncedSha = task.getSourceCommitSha();
@@ -437,6 +442,7 @@ public class PullSyncExecutorService {
         task.setLastSyncStatus("success");
         task.setLastRunAt(completedAt);
         task.setConsecutiveFailures(0);  // Reset failure count
+        task.setForceSync(false);  // Clear force sync flag after execution
 
         // Calculate next run time based on priority
         task.setNextRunAt(calculateNextRunTime(task));

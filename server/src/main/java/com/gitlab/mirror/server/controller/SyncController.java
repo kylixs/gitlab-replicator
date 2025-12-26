@@ -670,6 +670,7 @@ public class SyncController {
                     // Trigger immediate sync by setting next_run_at to now and status to waiting
                     task.setNextRunAt(java.time.Instant.now());
                     task.setConsecutiveFailures(0); // Reset failure count to allow immediate sync
+                    task.setForceSync(true); // Force sync to bypass change detection
                     if ("running".equals(task.getTaskStatus())) {
                         // If task is already running, just update next run time
                         log.info("Task for project {} is already running, will run again after completion", projectKey);

@@ -122,6 +122,12 @@ public class SyncTask {
     private Integer consecutiveFailures;
 
     /**
+     * Force sync flag - bypass change detection for manual sync
+     */
+    @TableField("force_sync")
+    private Boolean forceSync;
+
+    /**
      * Created time (auto-fill on insert)
      */
     @TableField(value = "created_at", fill = FieldFill.INSERT)
