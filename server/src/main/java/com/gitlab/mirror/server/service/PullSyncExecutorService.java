@@ -32,6 +32,7 @@ public class PullSyncExecutorService {
 
     private final GitCommandExecutor gitCommandExecutor;
     private final GitLabApiClient sourceGitLabApiClient;
+    private final GitLabApiClient targetGitLabApiClient;
     private final TargetProjectManagementService targetProjectManagementService;
     private final DiskManagementService diskManagementService;
     private final SyncTaskMapper syncTaskMapper;
@@ -48,6 +49,7 @@ public class PullSyncExecutorService {
     public PullSyncExecutorService(
             GitCommandExecutor gitCommandExecutor,
             @Qualifier("sourceGitLabApiClient") GitLabApiClient sourceGitLabApiClient,
+            @Qualifier("targetGitLabApiClient") GitLabApiClient targetGitLabApiClient,
             TargetProjectManagementService targetProjectManagementService,
             DiskManagementService diskManagementService,
             SyncTaskMapper syncTaskMapper,
@@ -62,6 +64,7 @@ public class PullSyncExecutorService {
             BranchSnapshotService branchSnapshotService) {
         this.gitCommandExecutor = gitCommandExecutor;
         this.sourceGitLabApiClient = sourceGitLabApiClient;
+        this.targetGitLabApiClient = targetGitLabApiClient;
         this.targetProjectManagementService = targetProjectManagementService;
         this.diskManagementService = diskManagementService;
         this.syncTaskMapper = syncTaskMapper;
@@ -1008,31 +1011,36 @@ public class PullSyncExecutorService {
             log.debug("Checking for branch changes, syncProjectId={}, sourceProjectId={}, targetProjectId={}",
                 syncProjectId, sourceProjectId, targetProjectId);
 
-            // Get source and target branch snapshots from database (updated by scan)
-            java.util.List<ProjectBranchSnapshot> sourceSnapshot =
-                branchSnapshotService.getBranchSnapshots(syncProjectId, "source");
-            java.util.List<ProjectBranchSnapshot> targetSnapshot =
-                branchSnapshotService.getBranchSnapshots(syncProjectId, "target");
+            // IMPORTANT: Fetch fresh branch data from GitLab API, not stale database snapshots
+            // Database snapshots are only updated AFTER sync, creating a chicken-egg problem:
+            // - New commit created → snapshot still old → no changes detected → no sync → snapshot never updated
+            // Solution: Always fetch live data from GitLab API for change detection
+            java.util.List<RepositoryBranch> sourceBranches = sourceGitLabApiClient.getBranches(sourceProjectId);
+            java.util.List<RepositoryBranch> targetBranches = targetGitLabApiClient.getBranches(targetProjectId);
 
-            if (sourceSnapshot == null || sourceSnapshot.isEmpty()) {
-                log.info("No source branch snapshot found, will proceed with sync");
+            if (sourceBranches == null || sourceBranches.isEmpty()) {
+                log.info("No source branches found via API, will proceed with sync");
                 return true;
             }
 
-            if (targetSnapshot == null || targetSnapshot.isEmpty()) {
-                log.info("No target branch snapshot found, will proceed with sync");
+            if (targetBranches == null || targetBranches.isEmpty()) {
+                log.info("No target branches found via API, will proceed with sync");
                 return true;
             }
 
             // Build maps for comparison
             java.util.Map<String, String> sourceBranchMap = new java.util.HashMap<>();
-            for (ProjectBranchSnapshot snapshot : sourceSnapshot) {
-                sourceBranchMap.put(snapshot.getBranchName(), snapshot.getCommitSha());
+            for (RepositoryBranch branch : sourceBranches) {
+                if (branch.getCommit() != null && branch.getCommit().getId() != null) {
+                    sourceBranchMap.put(branch.getName(), branch.getCommit().getId());
+                }
             }
 
             java.util.Map<String, String> targetBranchMap = new java.util.HashMap<>();
-            for (ProjectBranchSnapshot snapshot : targetSnapshot) {
-                targetBranchMap.put(snapshot.getBranchName(), snapshot.getCommitSha());
+            for (RepositoryBranch branch : targetBranches) {
+                if (branch.getCommit() != null && branch.getCommit().getId() != null) {
+                    targetBranchMap.put(branch.getName(), branch.getCommit().getId());
+                }
             }
 
             // Check for new or updated branches in source
