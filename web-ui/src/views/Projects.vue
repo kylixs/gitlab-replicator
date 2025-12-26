@@ -59,7 +59,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Status" width="120">
+        <el-table-column label="Status" width="100">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.syncStatus)">
               {{ formatStatus(row.syncStatus) }}
@@ -85,13 +85,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Diff" width="240">
+        <el-table-column label="Diff" width="100">
           <template #default="{ row }">
             <DiffBadge :diff="row.diff" />
           </template>
         </el-table-column>
 
-        <el-table-column label="Delay" width="100" sortable="custom" prop="delaySeconds">
+        <el-table-column label="Delay" width="90" sortable="custom" prop="delaySeconds">
           <template #default="{ row }">
             <el-tag :type="getDelayType(row.delaySeconds)" size="small">
               {{ formatDelayReadable(row.delaySeconds) }}
@@ -99,21 +99,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="syncMethod" label="Sync Method" width="130">
-          <template #default="{ row }">
-            <el-tag type="info" size="small">
-              {{ formatSyncMethod(row.syncMethod) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-
-        <el-table-column prop="lastSyncAt" label="Last Sync" width="180" sortable="custom">
+        <el-table-column prop="lastSyncAt" label="Last Sync At" width="160" sortable="custom">
           <template #default="{ row }">
             {{ formatTime(row.lastSyncAt) }}
           </template>
         </el-table-column>
 
-        <el-table-column prop="updatedAt" label="Updated" width="180" sortable="custom">
+        <el-table-column prop="updatedAt" label="Updated" width="160" sortable="custom">
           <template #default="{ row }">
             {{ formatTime(row.updatedAt) }}
           </template>
