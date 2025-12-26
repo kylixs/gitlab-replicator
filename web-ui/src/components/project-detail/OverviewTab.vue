@@ -210,6 +210,47 @@
       </el-descriptions>
     </el-card>
 
+    <!-- Sync Task Information -->
+    <el-card v-if="overview.task" shadow="hover" class="task-info">
+      <template #header>
+        <div class="card-header">
+          <span>Sync Task Information</span>
+          <el-tag :type="getTaskStatusType(overview.task.taskStatus)" size="small">
+            {{ overview.task.taskStatus }}
+          </el-tag>
+        </div>
+      </template>
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="Task Type">
+          <el-tag type="info">{{ overview.task.taskType }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="Last Sync Status">
+          <el-tag v-if="overview.task.lastSyncStatus" :type="overview.task.lastSyncStatus === 'success' ? 'success' : 'danger'">
+            {{ overview.task.lastSyncStatus }}
+          </el-tag>
+          <span v-else>-</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="Last Run At">
+          {{ formatInstant(overview.task.lastRunAt) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="Next Run At">
+          {{ formatInstant(overview.task.nextRunAt) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="Duration (seconds)">
+          {{ overview.task.durationSeconds || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="Consecutive Failures">
+          <el-tag v-if="overview.task.consecutiveFailures > 0" type="danger">
+            {{ overview.task.consecutiveFailures }}
+          </el-tag>
+          <span v-else>0</span>
+        </el-descriptions-item>
+        <el-descriptions-item v-if="overview.task.errorMessage" label="Error Message" :span="2">
+          <el-text type="danger">{{ overview.task.errorMessage }}</el-text>
+        </el-descriptions-item>
+      </el-descriptions>
+    </el-card>
+
     <!-- Cache Information -->
     <el-card v-if="overview.cache" shadow="hover" class="cache-info">
       <template #header>
@@ -299,6 +340,20 @@ const getDiffStatusIcon = (status: string) => {
 const formatTime = (time: string | null | undefined) => {
   if (!time) return '-'
   return new Date(time).toLocaleString()
+}
+
+const formatInstant = (instant: string | null | undefined) => {
+  if (!instant) return '-'
+  return new Date(instant).toLocaleString()
+}
+
+const getTaskStatusType = (status: string) => {
+  const typeMap: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
+    'waiting': 'info',
+    'pending': 'warning',
+    'running': 'success'
+  }
+  return typeMap[status.toLowerCase()] || 'info'
 }
 </script>
 

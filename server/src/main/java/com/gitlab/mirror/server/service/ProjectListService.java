@@ -6,6 +6,7 @@ import com.gitlab.mirror.server.entity.ProjectBranchSnapshot;
 import com.gitlab.mirror.server.entity.PullSyncConfig;
 import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncProject;
+import com.gitlab.mirror.server.entity.SyncTask;
 import com.gitlab.mirror.server.entity.TargetProjectInfo;
 import com.gitlab.mirror.server.mapper.PullSyncConfigMapper;
 import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
@@ -43,18 +44,21 @@ public class ProjectListService {
     private final TargetProjectInfoMapper targetProjectInfoMapper;
     private final PullSyncConfigMapper pullSyncConfigMapper;
     private final DiffCalculator diffCalculator;
+    private final SyncTaskService syncTaskService;
 
     public ProjectListService(
             BranchSnapshotService branchSnapshotService,
             SourceProjectInfoMapper sourceProjectInfoMapper,
             TargetProjectInfoMapper targetProjectInfoMapper,
             PullSyncConfigMapper pullSyncConfigMapper,
-            DiffCalculator diffCalculator) {
+            DiffCalculator diffCalculator,
+            SyncTaskService syncTaskService) {
         this.branchSnapshotService = branchSnapshotService;
         this.sourceProjectInfoMapper = sourceProjectInfoMapper;
         this.targetProjectInfoMapper = targetProjectInfoMapper;
         this.pullSyncConfigMapper = pullSyncConfigMapper;
         this.diffCalculator = diffCalculator;
+        this.syncTaskService = syncTaskService;
     }
 
     /**
@@ -251,6 +255,10 @@ public class ProjectListService {
         ProjectOverviewDTO.CacheInfo cacheInfo = buildCacheInfo(project.getId());
         overview.setCache(cacheInfo);
 
+        // Build task info
+        ProjectOverviewDTO.TaskInfo taskInfo = buildTaskInfo(project.getId());
+        overview.setTask(taskInfo);
+
         return overview;
     }
 
@@ -335,5 +343,32 @@ public class ProjectListService {
         } else {
             return String.format("%.2f GB", bytes / (1024.0 * 1024 * 1024));
         }
+    }
+
+    /**
+     * Build task information for a project
+     */
+    private ProjectOverviewDTO.TaskInfo buildTaskInfo(Long projectId) {
+        ProjectOverviewDTO.TaskInfo taskInfo = new ProjectOverviewDTO.TaskInfo();
+
+        try {
+            SyncTask task = syncTaskService.getTaskBySyncProjectId(projectId);
+
+            if (task != null) {
+                taskInfo.setId(task.getId());
+                taskInfo.setTaskType(task.getTaskType());
+                taskInfo.setTaskStatus(task.getTaskStatus());
+                taskInfo.setNextRunAt(task.getNextRunAt());
+                taskInfo.setLastRunAt(task.getLastRunAt());
+                taskInfo.setLastSyncStatus(task.getLastSyncStatus());
+                taskInfo.setDurationSeconds(task.getDurationSeconds());
+                taskInfo.setConsecutiveFailures(task.getConsecutiveFailures());
+                taskInfo.setErrorMessage(task.getErrorMessage());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get task info for project {}: {}", projectId, e.getMessage());
+        }
+
+        return taskInfo;
     }
 }

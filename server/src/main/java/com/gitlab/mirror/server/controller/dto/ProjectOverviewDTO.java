@@ -53,6 +53,11 @@ public class ProjectOverviewDTO {
     private CacheInfo cache;
 
     /**
+     * Sync task information
+     */
+    private TaskInfo task;
+
+    /**
      * Diff info
      */
     @Data
@@ -138,5 +143,56 @@ public class ProjectOverviewDTO {
          * Whether cache exists
          */
         private Boolean exists;
+    }
+
+    /**
+     * Task info
+     */
+    @Data
+    public static class TaskInfo {
+        /**
+         * Task ID
+         */
+        private Long id;
+
+        /**
+         * Task type: push/pull
+         */
+        private String taskType;
+
+        /**
+         * Task status: waiting/pending/running
+         */
+        private String taskStatus;
+
+        /**
+         * Next run time
+         */
+        private java.time.Instant nextRunAt;
+
+        /**
+         * Last run time
+         */
+        private java.time.Instant lastRunAt;
+
+        /**
+         * Last sync status: success/failed
+         */
+        private String lastSyncStatus;
+
+        /**
+         * Duration of last execution (seconds)
+         */
+        private Integer durationSeconds;
+
+        /**
+         * Consecutive failures count
+         */
+        private Integer consecutiveFailures;
+
+        /**
+         * Error message
+         */
+        private String errorMessage;
     }
 }

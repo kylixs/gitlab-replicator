@@ -93,6 +93,17 @@ export interface ProjectOverview {
     lastModified?: string
     exists?: boolean
   }
+  task?: {
+    id: number
+    taskType: string
+    taskStatus: string
+    nextRunAt: string
+    lastRunAt: string
+    lastSyncStatus: string
+    durationSeconds: number
+    consecutiveFailures: number
+    errorMessage?: string
+  }
 }
 
 // Branch Comparison
