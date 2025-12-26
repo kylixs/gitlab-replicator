@@ -39,6 +39,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/results',
+      name: 'Results',
+      component: () => import('@/views/SyncResults.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/configuration',
       name: 'Configuration',
       component: () => import('@/views/Configuration.vue'),

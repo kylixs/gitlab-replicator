@@ -246,7 +246,17 @@ public class PullSyncExecutorService {
             return;
         }
 
-        // 3. Get source project info
+        // 3. Validate local repository exists and is valid
+        if (!gitCommandExecutor.isValidRepository(localRepoPath)) {
+            log.warn("Local repository is invalid or missing at: {}, falling back to first sync", localRepoPath);
+            // Clear local repo path and trigger first sync
+            config.setLocalRepoPath(null);
+            pullSyncConfigMapper.updateById(config);
+            executeFirstSync(task, project, config);
+            return;
+        }
+
+        // 4. Get source project info
         SourceProjectInfo sourceInfo = sourceProjectInfoMapper.selectOne(
             new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<SourceProjectInfo>()
                 .eq("sync_project_id", project.getId())

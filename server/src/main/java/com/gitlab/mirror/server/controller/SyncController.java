@@ -2,7 +2,9 @@ package com.gitlab.mirror.server.controller;
 
 import com.gitlab.mirror.server.controller.dto.ProjectListDTO;
 import com.gitlab.mirror.server.controller.dto.ProjectOverviewDTO;
+import com.gitlab.mirror.server.controller.dto.SyncResultListDTO;
 import com.gitlab.mirror.server.entity.ProjectBranchSnapshot;
+import com.gitlab.mirror.server.entity.SyncResult;
 import com.gitlab.mirror.server.entity.PullSyncConfig;
 import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncProject;
@@ -56,6 +58,7 @@ public class SyncController {
     private final PullSyncExecutorService pullSyncExecutorService;
     private final PullSyncConfigMapper pullSyncConfigMapper;
     private final SyncTaskService syncTaskService;
+    private final com.gitlab.mirror.server.mapper.SyncResultMapper syncResultMapper;
 
     public SyncController(
             UnifiedProjectMonitor unifiedProjectMonitor,
@@ -67,7 +70,8 @@ public class SyncController {
             SourceProjectInfoMapper sourceProjectInfoMapper,
             PullSyncExecutorService pullSyncExecutorService,
             PullSyncConfigMapper pullSyncConfigMapper,
-            SyncTaskService syncTaskService) {
+            SyncTaskService syncTaskService,
+            com.gitlab.mirror.server.mapper.SyncResultMapper syncResultMapper) {
         this.unifiedProjectMonitor = unifiedProjectMonitor;
         this.syncProjectMapper = syncProjectMapper;
         this.diffCalculator = diffCalculator;
@@ -78,6 +82,7 @@ public class SyncController {
         this.pullSyncExecutorService = pullSyncExecutorService;
         this.pullSyncConfigMapper = pullSyncConfigMapper;
         this.syncTaskService = syncTaskService;
+        this.syncResultMapper = syncResultMapper;
     }
 
     /**
@@ -635,6 +640,92 @@ public class SyncController {
     }
 
     /**
+     * Get sync results list with filtering
+     *
+     * GET /api/sync/results?syncStatus=success&search=ai&page=1&size=20
+     */
+    @GetMapping("/results")
+    public ResponseEntity<ApiResponse<PageResult<SyncResultListDTO>>> getSyncResults(
+            @RequestParam(required = false) String syncStatus,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer size) {
+        log.info("Query sync results - syncStatus: {}, search: {}, page: {}, size: {}",
+                syncStatus, search, page, size);
+
+        try {
+            // Build query wrapper
+            QueryWrapper<SyncResult> queryWrapper = new QueryWrapper<>();
+
+            // Filter by sync status
+            if (syncStatus != null && !syncStatus.isEmpty()) {
+                queryWrapper.eq("sync_status", syncStatus);
+            }
+
+            // Order by last_sync_at DESC (most recent first)
+            queryWrapper.orderByDesc("last_sync_at");
+
+            // Execute pagination query
+            Page<SyncResult> pageQuery = new Page<>(page, size);
+            Page<SyncResult> result = syncResultMapper.selectPage(pageQuery, queryWrapper);
+
+            // Convert to DTOs
+            List<SyncResultListDTO> dtos = result.getRecords().stream()
+                    .map(this::convertToSyncResultListDTO)
+                    .collect(Collectors.toList());
+
+            // Apply search filter (post-processing for projectKey)
+            if (search != null && !search.isEmpty()) {
+                String searchLower = search.toLowerCase();
+                dtos = dtos.stream()
+                        .filter(dto -> dto.getProjectKey() != null &&
+                                      dto.getProjectKey().toLowerCase().contains(searchLower))
+                        .collect(Collectors.toList());
+            }
+
+            PageResult<SyncResultListDTO> pageResult = new PageResult<>();
+            pageResult.setItems(dtos);
+            pageResult.setTotal(result.getTotal());
+            pageResult.setPage(page);
+            pageResult.setSize(size);
+
+            return ResponseEntity.ok(ApiResponse.success(pageResult));
+        } catch (Exception e) {
+            log.error("Query sync results failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Convert SyncResult to SyncResultListDTO
+     */
+    private SyncResultListDTO convertToSyncResultListDTO(SyncResult syncResult) {
+        SyncResultListDTO dto = new SyncResultListDTO();
+        dto.setId(syncResult.getId());
+        dto.setSyncProjectId(syncResult.getSyncProjectId());
+        dto.setLastSyncAt(syncResult.getLastSyncAt());
+        dto.setStartedAt(syncResult.getStartedAt());
+        dto.setCompletedAt(syncResult.getCompletedAt());
+        dto.setSyncStatus(syncResult.getSyncStatus());
+        dto.setHasChanges(syncResult.getHasChanges());
+        dto.setChangesCount(syncResult.getChangesCount());
+        dto.setSourceCommitSha(syncResult.getSourceCommitSha());
+        dto.setTargetCommitSha(syncResult.getTargetCommitSha());
+        dto.setDurationSeconds(syncResult.getDurationSeconds());
+        dto.setErrorMessage(syncResult.getErrorMessage());
+        dto.setSummary(syncResult.getSummary());
+
+        // Get project key and sync method from sync_project
+        SyncProject project = syncProjectMapper.selectById(syncResult.getSyncProjectId());
+        if (project != null) {
+            dto.setProjectKey(project.getProjectKey());
+            dto.setSyncMethod(project.getSyncMethod());
+        }
+
+        return dto;
+    }
+
+    /**
      * Batch trigger sync for multiple projects
      *
      * POST /api/sync/projects/batch-sync
@@ -659,6 +750,9 @@ public class SyncController {
                     }
                     projectKey = project.getProjectKey();
 
+                    // Clear error state and re-enable sync if needed
+                    clearErrorStateAndReEnable(project, projectId);
+
                     // Get or create sync task
                     SyncTask task = syncTaskService.getTaskBySyncProjectId(projectId);
                     if (task == null) {
@@ -671,6 +765,8 @@ public class SyncController {
                     task.setNextRunAt(java.time.Instant.now());
                     task.setConsecutiveFailures(0); // Reset failure count to allow immediate sync
                     task.setForceSync(true); // Force sync to bypass change detection
+                    task.setErrorType(""); // Clear error type
+                    task.setErrorMessage(""); // Clear error message
                     if ("running".equals(task.getTaskStatus())) {
                         // If task is already running, just update next run time
                         log.info("Task for project {} is already running, will run again after completion", projectKey);
@@ -698,6 +794,69 @@ public class SyncController {
         } catch (Exception e) {
             log.error("Batch trigger sync failed", e);
             return ResponseEntity.ok(ApiResponse.error("Batch operation failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Clear error state and re-enable sync
+     * <p>
+     * This method is called when manually triggering sync to recover from error states:
+     * 1. Re-enable pull_sync_config if it was auto-disabled
+     * 2. Clear local_repo_path if there was a Git-related error (will trigger first sync)
+     * 3. Clear sync_project error message and set status to pending
+     *
+     * @param project   Sync project
+     * @param projectId Project ID
+     */
+    private void clearErrorStateAndReEnable(SyncProject project, Long projectId) {
+        try {
+            // For pull sync projects
+            if ("pull_sync".equals(project.getSyncMethod())) {
+                PullSyncConfig pullConfig = pullSyncConfigMapper.selectOne(
+                        new QueryWrapper<PullSyncConfig>().eq("sync_project_id", projectId)
+                );
+
+                if (pullConfig != null) {
+                    boolean needsUpdate = false;
+
+                    // Re-enable if disabled
+                    if (!pullConfig.getEnabled()) {
+                        pullConfig.setEnabled(true);
+                        needsUpdate = true;
+                        log.info("Re-enabling pull sync config for project: {}", project.getProjectKey());
+                    }
+
+                    // Clear local repo path if there was a Git command error
+                    // This forces a fresh first sync instead of incremental sync
+                    if (pullConfig.getLocalRepoPath() != null &&
+                        project.getErrorMessage() != null &&
+                        (project.getErrorMessage().contains("fatal:") ||
+                         project.getErrorMessage().contains("git ") ||
+                         project.getErrorMessage().contains("--mirror"))) {
+                        log.info("Clearing local repo path for project {} due to Git error, will trigger first sync",
+                                project.getProjectKey());
+                        pullConfig.setLocalRepoPath(null);
+                        needsUpdate = true;
+                    }
+
+                    if (needsUpdate) {
+                        pullSyncConfigMapper.updateById(pullConfig);
+                    }
+                }
+            }
+
+            // Clear project error state
+            if (project.getErrorMessage() != null || !"active".equals(project.getSyncStatus())) {
+                project.setErrorMessage(null);
+                project.setSyncStatus(SyncProject.SyncStatus.PENDING);
+                syncProjectMapper.updateById(project);
+                log.info("Cleared error state for project: {}", project.getProjectKey());
+            }
+
+        } catch (Exception e) {
+            log.warn("Failed to clear error state for project {}: {}",
+                    project.getProjectKey(), e.getMessage());
+            // Don't throw exception - continue with sync trigger
         }
     }
 

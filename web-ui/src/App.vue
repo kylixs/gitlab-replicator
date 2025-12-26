@@ -27,6 +27,10 @@
           <el-icon><List /></el-icon>
           <span>Sync Events</span>
         </el-menu-item>
+        <el-menu-item index="/results">
+          <el-icon><Document /></el-icon>
+          <span>Sync Results</span>
+        </el-menu-item>
         <el-menu-item index="/configuration">
           <el-icon><Setting /></el-icon>
           <span>Configuration</span>
@@ -120,6 +124,7 @@ const pageTitle = computed(() => {
     'Projects': 'Projects',
     'ProjectDetail': 'Project Detail',
     'Events': 'Sync Events',
+    'Results': 'Sync Results',
     'Configuration': 'Configuration'
   }
   return titles[routeName] || 'GitLab Mirror'
