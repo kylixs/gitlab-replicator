@@ -76,7 +76,10 @@ export interface ProjectOverview {
     branchNew: number
     branchDeleted: number
     branchOutdated: number
+    branchAhead: number
+    branchDiverged: number
     commitDiff: number
+    diffStatus: string
   }
   delay: {
     seconds: number

@@ -58,6 +58,19 @@
       </el-col>
     </el-row>
 
+    <!-- Diff Status Badge -->
+    <el-card v-if="overview.diff?.diffStatus" shadow="hover" class="diff-status-card">
+      <div class="diff-status-container">
+        <div class="diff-status-label">Overall Diff Status</div>
+        <el-tag :type="getDiffStatusType(overview.diff.diffStatus)" size="large" class="diff-status-badge">
+          <el-icon class="status-icon">
+            <component :is="getDiffStatusIcon(overview.diff.diffStatus)" />
+          </el-icon>
+          {{ getDiffStatusLabel(overview.diff.diffStatus) }}
+        </el-tag>
+      </div>
+    </el-card>
+
     <!-- Diff Statistics -->
     <el-row :gutter="16" class="diff-stats">
       <el-col :xs="24" :sm="12" :md="6">
@@ -81,6 +94,22 @@
           <div class="diff-item">
             <div class="diff-label">Outdated Branches</div>
             <div class="diff-value outdated">~{{ overview.diff?.branchOutdated || 0 }}</div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :md="6">
+        <el-card shadow="hover" class="diff-card">
+          <div class="diff-item">
+            <div class="diff-label">Ahead Branches</div>
+            <div class="diff-value ahead">↑{{ overview.diff?.branchAhead || 0 }}</div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :md="6">
+        <el-card shadow="hover" class="diff-card">
+          <div class="diff-item">
+            <div class="diff-label">Diverged Branches</div>
+            <div class="diff-value diverged">⚡{{ overview.diff?.branchDiverged || 0 }}</div>
           </div>
         </el-card>
       </el-col>
@@ -207,6 +236,7 @@
 </template>
 
 <script setup lang="ts">
+import { SuccessFilled, WarningFilled, CircleCloseFilled, QuestionFilled } from '@element-plus/icons-vue'
 import type { ProjectOverview } from '@/types'
 
 interface Props {
@@ -225,6 +255,45 @@ const getStatusType = (status: string) => {
     'pending': 'warning'
   }
   return typeMap[status.toLowerCase()] || 'info'
+}
+
+const getDiffStatusType = (status: string) => {
+  const typeMap: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
+    'SYNCED': 'success',
+    'OUTDATED': 'warning',
+    'AHEAD': 'warning',
+    'DIVERGED': 'danger',
+    'INCONSISTENT': 'danger',
+    'PENDING': 'info',
+    'SOURCE_MISSING': 'danger'
+  }
+  return typeMap[status] || 'info'
+}
+
+const getDiffStatusLabel = (status: string) => {
+  const labelMap: Record<string, string> = {
+    'SYNCED': 'Synced',
+    'OUTDATED': 'Outdated',
+    'AHEAD': 'Ahead',
+    'DIVERGED': 'Diverged',
+    'INCONSISTENT': 'Inconsistent',
+    'PENDING': 'Pending',
+    'SOURCE_MISSING': 'Source Missing'
+  }
+  return labelMap[status] || status
+}
+
+const getDiffStatusIcon = (status: string) => {
+  const iconMap: Record<string, any> = {
+    'SYNCED': SuccessFilled,
+    'OUTDATED': WarningFilled,
+    'AHEAD': WarningFilled,
+    'DIVERGED': CircleCloseFilled,
+    'INCONSISTENT': CircleCloseFilled,
+    'PENDING': QuestionFilled,
+    'SOURCE_MISSING': CircleCloseFilled
+  }
+  return iconMap[status] || QuestionFilled
 }
 
 const formatTime = (time: string | null | undefined) => {
@@ -326,6 +395,41 @@ const formatTime = (time: string | null | undefined) => {
 
 .diff-value.outdated {
   color: #faad14;
+}
+
+.diff-value.ahead {
+  color: #fa8c16;
+}
+
+.diff-value.diverged {
+  color: #f5222d;
+}
+
+.diff-status-card {
+  margin-bottom: 16px;
+}
+
+.diff-status-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.diff-status-label {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.diff-status-badge {
+  font-size: 16px;
+  padding: 8px 16px;
+}
+
+.status-icon {
+  margin-right: 4px;
 }
 
 .card-header {
