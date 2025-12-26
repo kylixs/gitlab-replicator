@@ -63,6 +63,7 @@ import OverviewTab from '@/components/project-detail/OverviewTab.vue'
 import BranchesTab from '@/components/project-detail/BranchesTab.vue'
 import EventsTab from '@/components/project-detail/EventsTab.vue'
 import { projectsApi } from '@/api/projects'
+import { useAutoRefreshTimer } from '@/composables/useAutoRefresh'
 import type { ProjectOverview } from '@/types'
 
 const route = useRoute()
@@ -73,8 +74,6 @@ const syncing = ref(false)
 const activeTab = ref('overview')
 const overview = ref<ProjectOverview | null>(null)
 const projectKey = ref('')
-
-let refreshTimer: number | null = null
 
 const loadOverview = async () => {
   loading.value = true
@@ -131,26 +130,16 @@ const getStatusType = (status: string) => {
   return typeMap[status.toLowerCase()] || 'info'
 }
 
-const startAutoRefresh = () => {
-  refreshTimer = window.setInterval(() => {
-    loadOverview()
-  }, 30000)
-}
-
-const stopAutoRefresh = () => {
-  if (refreshTimer) {
-    clearInterval(refreshTimer)
-    refreshTimer = null
-  }
-}
+// Use auto-refresh timer
+const { startTimer, stopTimer } = useAutoRefreshTimer(loadOverview)
 
 onMounted(() => {
   loadOverview()
-  startAutoRefresh()
+  startTimer()
 })
 
 onUnmounted(() => {
-  stopAutoRefresh()
+  stopTimer()
 })
 </script>
 

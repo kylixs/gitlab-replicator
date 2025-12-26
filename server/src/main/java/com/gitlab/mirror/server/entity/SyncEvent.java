@@ -94,6 +94,18 @@ public class SyncEvent {
     private LocalDateTime eventTime;
 
     /**
+     * Sync start time
+     */
+    @TableField("started_at")
+    private LocalDateTime startedAt;
+
+    /**
+     * Sync completion time
+     */
+    @TableField("completed_at")
+    private LocalDateTime completedAt;
+
+    /**
      * Event type constants
      */
     public static class EventType {

@@ -36,6 +36,18 @@ public class SyncResult {
     private LocalDateTime lastSyncAt;
 
     /**
+     * Last sync start time
+     */
+    @TableField("started_at")
+    private LocalDateTime startedAt;
+
+    /**
+     * Last sync completion time
+     */
+    @TableField("completed_at")
+    private LocalDateTime completedAt;
+
+    /**
      * Sync status: success/failed/skipped
      */
     @TableField("sync_status")

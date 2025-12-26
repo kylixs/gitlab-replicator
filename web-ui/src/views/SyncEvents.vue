@@ -137,6 +137,7 @@ import { ElMessage } from 'element-plus'
 import EventStats from '@/components/events/EventStats.vue'
 import EventFilter from '@/components/events/EventFilter.vue'
 import { eventsApi } from '@/api/events'
+import { useAutoRefreshTimer } from '@/composables/useAutoRefresh'
 import type { EventListItem, EventStats as EventStatsType, EventDetails } from '@/types'
 import { Refresh, Warning, Document } from '@element-plus/icons-vue'
 
@@ -162,8 +163,6 @@ const pagination = reactive({
   size: 20,
   total: 0
 })
-
-let refreshTimer: number | null = null
 
 const loadEvents = async () => {
   loading.value = true
@@ -257,19 +256,14 @@ const formatDuration = (ms: number) => {
   return `${minutes}m ${remainingSeconds}s`
 }
 
-const startAutoRefresh = () => {
-  refreshTimer = window.setInterval(() => {
-    loadStats()
-    loadEvents()
-  }, 30000)
+// Refresh both stats and events
+const refreshData = () => {
+  loadStats()
+  loadEvents()
 }
 
-const stopAutoRefresh = () => {
-  if (refreshTimer) {
-    clearInterval(refreshTimer)
-    refreshTimer = null
-  }
-}
+// Use auto-refresh timer
+const { startTimer, stopTimer } = useAutoRefreshTimer(refreshData)
 
 const handleExport = () => {
   try {
@@ -322,11 +316,11 @@ const handleExport = () => {
 onMounted(() => {
   loadStats()
   loadEvents()
-  startAutoRefresh()
+  startTimer()
 })
 
 onUnmounted(() => {
-  stopAutoRefresh()
+  stopTimer()
 })
 </script>
 

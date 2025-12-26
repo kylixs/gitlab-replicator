@@ -149,6 +149,9 @@
             <el-descriptions-item label="Last Activity">
               {{ formatTime(overview.source?.lastActivityAt) }}
             </el-descriptions-item>
+            <el-descriptions-item label="Repository Size">
+              {{ formatSize(overview.source?.repositorySize) }}
+            </el-descriptions-item>
             <el-descriptions-item label="Commit Count">
               {{ overview.source?.commitCount || '-' }}
             </el-descriptions-item>
@@ -178,6 +181,9 @@
             </el-descriptions-item>
             <el-descriptions-item label="Last Activity">
               {{ formatTime(overview.target?.lastActivityAt) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Repository Size">
+              {{ formatSize(overview.target?.repositorySize) }}
             </el-descriptions-item>
             <el-descriptions-item label="Commit Count">
               {{ overview.target?.commitCount || '-' }}
@@ -373,6 +379,18 @@ const formatTime = (time: string | null | undefined) => {
 const formatInstant = (instant: string | null | undefined) => {
   if (!instant) return '-'
   return new Date(instant).toLocaleString()
+}
+
+const formatSize = (bytes: number | null | undefined) => {
+  if (!bytes || bytes === 0) return '-'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let size = bytes
+  let unitIndex = 0
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex++
+  }
+  return `${size.toFixed(2)} ${units[unitIndex]}`
 }
 
 const getTaskStatusType = (status: string) => {

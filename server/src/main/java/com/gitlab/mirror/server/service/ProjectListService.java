@@ -8,6 +8,7 @@ import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncProject;
 import com.gitlab.mirror.server.entity.SyncTask;
 import com.gitlab.mirror.server.entity.TargetProjectInfo;
+import com.gitlab.mirror.server.mapper.ProjectBranchSnapshotMapper;
 import com.gitlab.mirror.server.mapper.PullSyncConfigMapper;
 import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
 import com.gitlab.mirror.server.mapper.TargetProjectInfoMapper;
@@ -43,6 +44,7 @@ public class ProjectListService {
     private final SourceProjectInfoMapper sourceProjectInfoMapper;
     private final TargetProjectInfoMapper targetProjectInfoMapper;
     private final PullSyncConfigMapper pullSyncConfigMapper;
+    private final ProjectBranchSnapshotMapper projectBranchSnapshotMapper;
     private final DiffCalculator diffCalculator;
     private final SyncTaskService syncTaskService;
     private final com.gitlab.mirror.server.mapper.SyncEventMapper syncEventMapper;
@@ -52,6 +54,7 @@ public class ProjectListService {
             SourceProjectInfoMapper sourceProjectInfoMapper,
             TargetProjectInfoMapper targetProjectInfoMapper,
             PullSyncConfigMapper pullSyncConfigMapper,
+            ProjectBranchSnapshotMapper projectBranchSnapshotMapper,
             DiffCalculator diffCalculator,
             SyncTaskService syncTaskService,
             com.gitlab.mirror.server.mapper.SyncEventMapper syncEventMapper) {
@@ -59,6 +62,7 @@ public class ProjectListService {
         this.sourceProjectInfoMapper = sourceProjectInfoMapper;
         this.targetProjectInfoMapper = targetProjectInfoMapper;
         this.pullSyncConfigMapper = pullSyncConfigMapper;
+        this.projectBranchSnapshotMapper = projectBranchSnapshotMapper;
         this.diffCalculator = diffCalculator;
         this.syncTaskService = syncTaskService;
         this.syncEventMapper = syncEventMapper;
@@ -149,21 +153,44 @@ public class ProjectListService {
 
     /**
      * Calculate delay for project (in seconds)
+     * <p>
+     * Calculate based on branch update times (committed_at) instead of project activity time
+     * to focus on content differences
      */
     private Long calculateDelay(Long syncProjectId) {
         try {
-            QueryWrapper<SourceProjectInfo> sourceQuery = new QueryWrapper<>();
-            sourceQuery.eq("sync_project_id", syncProjectId);
-            SourceProjectInfo sourceInfo = sourceProjectInfoMapper.selectOne(sourceQuery);
+            // Get latest commit time from source branches
+            LocalDateTime sourceLatestCommit = projectBranchSnapshotMapper.selectList(
+                    new QueryWrapper<ProjectBranchSnapshot>()
+                            .eq("sync_project_id", syncProjectId)
+                            .eq("project_type", "source")
+                            .orderByDesc("committed_at")
+                            .last("LIMIT 1")
+            ).stream()
+                    .findFirst()
+                    .map(ProjectBranchSnapshot::getCommittedAt)
+                    .orElse(null);
 
-            QueryWrapper<TargetProjectInfo> targetQuery = new QueryWrapper<>();
-            targetQuery.eq("sync_project_id", syncProjectId);
-            TargetProjectInfo targetInfo = targetProjectInfoMapper.selectOne(targetQuery);
+            // Get latest commit time from target branches
+            LocalDateTime targetLatestCommit = projectBranchSnapshotMapper.selectList(
+                    new QueryWrapper<ProjectBranchSnapshot>()
+                            .eq("sync_project_id", syncProjectId)
+                            .eq("project_type", "target")
+                            .orderByDesc("committed_at")
+                            .last("LIMIT 1")
+            ).stream()
+                    .findFirst()
+                    .map(ProjectBranchSnapshot::getCommittedAt)
+                    .orElse(null);
 
-            if (sourceInfo != null && targetInfo != null &&
-                    sourceInfo.getLastActivityAt() != null && targetInfo.getLastActivityAt() != null) {
-                Duration duration = Duration.between(targetInfo.getLastActivityAt(), sourceInfo.getLastActivityAt());
-                return duration.getSeconds();
+            // Calculate delay based on branch commit times
+            if (sourceLatestCommit != null && targetLatestCommit != null) {
+                Duration duration = Duration.between(targetLatestCommit, sourceLatestCommit);
+                return Math.max(0, duration.getSeconds()); // Ensure non-negative
+            } else if (sourceLatestCommit != null) {
+                // Target has no commits yet, calculate delay from source latest commit
+                Duration duration = Duration.between(sourceLatestCommit, LocalDateTime.now());
+                return Math.max(0, duration.getSeconds());
             }
         } catch (Exception e) {
             log.warn("Failed to calculate delay for project {}: {}", syncProjectId, e.getMessage());

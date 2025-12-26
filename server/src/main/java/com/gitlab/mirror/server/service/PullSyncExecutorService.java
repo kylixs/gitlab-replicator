@@ -126,9 +126,10 @@ public class PullSyncExecutorService {
             return;
         }
 
-        // Record sync started event
-        recordSyncEvent(project, SyncEvent.EventType.SYNC_STARTED, SyncEvent.Status.RUNNING,
-            String.format("Starting sync for project: %s", project.getProjectKey()));
+        // Record sync start time in task
+        task.setStartedAt(java.time.Instant.now());
+        syncTaskMapper.updateById(task);
+        log.info("Sync started for project: {} at {}", project.getProjectKey(), task.getStartedAt());
 
         // Determine if first sync or incremental
         boolean isFirstSync = config.getLocalRepoPath() == null ||
@@ -530,13 +531,9 @@ public class PullSyncExecutorService {
         if (shouldDisable && config != null) {
             config.setEnabled(false);
             pullSyncConfigMapper.updateById(config);
-            log.warn("Auto-disabled pull sync for project: {}, reason: {}",
-                project != null ? project.getProjectKey() : task.getSyncProjectId(), disableReason);
-
-            if (project != null) {
-                recordSyncEvent(project, "auto_disabled", "warning",
-                    String.format("%s, Failures: %d", disableReason, task.getConsecutiveFailures()));
-            }
+            log.warn("Auto-disabled pull sync for project: {}, reason: {}, failures: {}",
+                project != null ? project.getProjectKey() : task.getSyncProjectId(),
+                disableReason, task.getConsecutiveFailures());
         }
 
         // Calculate retry time with exponential backoff
@@ -658,17 +655,6 @@ public class PullSyncExecutorService {
      * @param status     Status
      * @param eventData  Event data
      */
-    private void recordSyncEvent(SyncProject project, String eventType, String status, String eventData) {
-        SyncEvent event = new SyncEvent();
-        event.setSyncProjectId(project.getId());
-        event.setEventType(eventType);
-        event.setEventSource("pull_sync_executor");
-        event.setStatus(status);
-        event.setEventData(java.util.Map.of("message", eventData));
-        event.setEventTime(LocalDateTime.now());
-        syncEventMapper.insert(event);
-    }
-
     /**
      * Record or update sync result
      * <p>
@@ -681,6 +667,14 @@ public class PullSyncExecutorService {
      * @param message Result message
      */
     private void recordSyncResult(SyncProject project, SyncTask task, String status, String message) {
+        // Calculate completion time and duration
+        java.time.Instant completedAt = java.time.Instant.now();
+        if (task.getStartedAt() != null) {
+            long duration = java.time.Duration.between(task.getStartedAt(), completedAt).getSeconds();
+            task.setDurationSeconds((int) duration);
+        }
+        task.setCompletedAt(completedAt);
+
         // Always update sync_result table
         SyncResult syncResult = syncResultMapper.selectBySyncProjectId(project.getId());
         if (syncResult == null) {
@@ -689,6 +683,9 @@ public class PullSyncExecutorService {
         }
 
         syncResult.setLastSyncAt(LocalDateTime.now());
+        syncResult.setStartedAt(task.getStartedAt() != null ?
+            LocalDateTime.ofInstant(task.getStartedAt(), java.time.ZoneId.systemDefault()) : null);
+        syncResult.setCompletedAt(LocalDateTime.ofInstant(completedAt, java.time.ZoneId.systemDefault()));
         syncResult.setSyncStatus(status);
         syncResult.setHasChanges(task.getHasChanges());
         syncResult.setChangesCount(task.getChangesCount());
@@ -696,6 +693,13 @@ public class PullSyncExecutorService {
         syncResult.setTargetCommitSha(task.getTargetCommitSha());
         syncResult.setDurationSeconds(task.getDurationSeconds());
         syncResult.setSummary(message);
+
+        // Set error_message only for failures, clear it for success/skipped
+        if (SyncResult.Status.FAILED.equals(status)) {
+            syncResult.setErrorMessage(task.getErrorMessage());
+        } else {
+            syncResult.setErrorMessage(null);
+        }
 
         if (syncResult.getId() == null) {
             syncResultMapper.insert(syncResult);
@@ -715,13 +719,25 @@ public class PullSyncExecutorService {
             event.setStatus(isFailure ? SyncEvent.Status.FAILED : SyncEvent.Status.SUCCESS);
             event.setCommitSha(task.getSourceCommitSha());
             event.setDurationSeconds(task.getDurationSeconds());
+            event.setEventTime(LocalDateTime.now());
+
+            // Set start/end times
+            event.setStartedAt(task.getStartedAt() != null ?
+                LocalDateTime.ofInstant(task.getStartedAt(), java.time.ZoneId.systemDefault()) : null);
+            event.setCompletedAt(LocalDateTime.ofInstant(completedAt, java.time.ZoneId.systemDefault()));
+
             event.setEventData(java.util.Map.of(
                 "message", message,
                 "hasChanges", hasChanges,
                 "sourceSha", task.getSourceCommitSha() != null ? task.getSourceCommitSha() : "",
                 "targetSha", task.getTargetCommitSha() != null ? task.getTargetCommitSha() : ""
             ));
-            event.setEventTime(LocalDateTime.now());
+
+            // Set error message for failed events
+            if (isFailure) {
+                event.setErrorMessage(task.getErrorMessage());
+            }
+
             syncEventMapper.insert(event);
             log.info("Recorded sync event for project {} - status: {}, hasChanges: {}",
                 project.getProjectKey(), status, hasChanges);

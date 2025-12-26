@@ -104,6 +104,7 @@ import DelayedTable from '@/components/dashboard/DelayedTable.vue'
 import ActivityTimeline from '@/components/dashboard/ActivityTimeline.vue'
 import { dashboardApi } from '@/api/dashboard'
 import { syncApi } from '@/api/sync'
+import { useAutoRefreshTimer } from '@/composables/useAutoRefresh'
 import type {
   DashboardStats,
   StatusDistribution,
@@ -118,8 +119,6 @@ const delayedProjects = ref<DelayedProject[] | null>(null)
 const recentEvents = ref<RecentEvent[] | null>(null)
 const scanningIncremental = ref(false)
 const scanningFull = ref(false)
-
-let refreshTimer: number | null = null
 
 const loadData = async () => {
   try {
@@ -232,27 +231,16 @@ const handleFullScan = async () => {
   }
 }
 
-const startAutoRefresh = () => {
-  // Refresh every 30 seconds
-  refreshTimer = window.setInterval(() => {
-    loadData()
-  }, 30000)
-}
-
-const stopAutoRefresh = () => {
-  if (refreshTimer) {
-    clearInterval(refreshTimer)
-    refreshTimer = null
-  }
-}
+// Use auto-refresh timer
+const { startTimer, stopTimer } = useAutoRefreshTimer(loadData)
 
 onMounted(() => {
   loadData()
-  startAutoRefresh()
+  startTimer()
 })
 
 onUnmounted(() => {
-  stopAutoRefresh()
+  stopTimer()
 })
 </script>
 

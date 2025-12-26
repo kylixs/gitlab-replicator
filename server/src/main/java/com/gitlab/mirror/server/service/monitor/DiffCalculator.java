@@ -292,9 +292,25 @@ public class DiffCalculator {
                 log.debug("Project has {} ahead branches", summary.getAheadCount());
                 return ProjectDiff.SyncStatus.AHEAD;
             }
+
+            // SYNCED - if all branches are synced (synced count equals total)
+            if (summary.getSyncedCount() > 0 &&
+                summary.getSyncedCount() == summary.getTotalBranchCount() &&
+                summary.getOutdatedCount() == 0 &&
+                summary.getMissingInTargetCount() == 0) {
+                log.debug("Project is synced: all {} branches are up-to-date", summary.getSyncedCount());
+                return ProjectDiff.SyncStatus.SYNCED;
+            }
+
+            // OUTDATED - if any branches are outdated or missing
+            if (summary.getOutdatedCount() > 0 || summary.getMissingInTargetCount() > 0) {
+                log.debug("Project is outdated: {} outdated, {} missing",
+                    summary.getOutdatedCount(), summary.getMissingInTargetCount());
+                return ProjectDiff.SyncStatus.OUTDATED;
+            }
         }
 
-        // Check for inconsistencies (high priority)
+        // Check for inconsistencies (if no detailed branch info available)
         Integer branchDiff = diff.getBranchDiff();
         Double sizeDiffPercent = diff.getSizeDiffPercent();
 
