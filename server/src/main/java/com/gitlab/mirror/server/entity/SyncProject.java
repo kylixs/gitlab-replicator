@@ -91,7 +91,8 @@ public class SyncProject {
         public static final String MIRROR_CONFIGURED = "mirror_configured";
         public static final String ACTIVE = "active";
         public static final String SYNCING = "syncing";
-        public static final String FAILED = "failed";
+        public static final String WARNING = "warning";  // Has retryable failures (0 < failures < 5)
+        public static final String FAILED = "failed";    // Non-retryable or too many failures (≥5)
         public static final String DELETED = "deleted";
         public static final String MISSING = "missing";
 

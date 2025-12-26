@@ -327,11 +327,14 @@ const handleBatchClearCache = async () => {
 
 const getStatusType = (status: string) => {
   const typeMap: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
+    'active': 'success',
     'synced': 'success',
     'syncing': 'info',
+    'warning': 'warning',
     'outdated': 'warning',
     'paused': 'info',
     'failed': 'danger',
+    'missing': 'danger',
     'pending': 'warning'
   }
   return typeMap[status.toLowerCase()] || 'info'
@@ -355,7 +358,9 @@ const formatStatus = (status: string) => {
     'initializing': 'Initializing',
     'active': 'Active',
     'syncing': 'Syncing',
+    'warning': 'Warning',
     'error': 'Error',
+    'failed': 'Failed',
     'missing': 'Missing',
     'disabled': 'Disabled',
     'deleted': 'Deleted',

@@ -516,14 +516,24 @@ public class PullSyncExecutorService {
 
         syncTaskMapper.updateById(task);
 
-        // Update SyncProject status to active on success
+        // Reset SyncProject status to active on success
         SyncProject project = syncProjectMapper.selectById(task.getSyncProjectId());
-        if (project != null && !SyncProject.SyncStatus.ACTIVE.equals(project.getSyncStatus())) {
-            project.setSyncStatus(SyncProject.SyncStatus.ACTIVE);
-            project.setErrorMessage(null);
-            project.setLastSyncAt(LocalDateTime.now());
-            syncProjectMapper.updateById(project);
-            log.info("Updated project status to active: {}", project.getProjectKey());
+        if (project != null) {
+            String previousStatus = project.getSyncStatus();
+            // Always reset to active on success (from syncing, warning, or error states)
+            if (!SyncProject.SyncStatus.ACTIVE.equals(previousStatus)) {
+                project.setSyncStatus(SyncProject.SyncStatus.ACTIVE);
+                project.setErrorMessage(null);
+                project.setLastSyncAt(LocalDateTime.now());
+                syncProjectMapper.updateById(project);
+                log.info("Reset project status to active after success: {} (was: {})",
+                    project.getProjectKey(), previousStatus);
+            } else {
+                // Even if already active, update last sync time and clear error
+                project.setErrorMessage(null);
+                project.setLastSyncAt(LocalDateTime.now());
+                syncProjectMapper.updateById(project);
+            }
         }
     }
 
@@ -567,16 +577,36 @@ public class PullSyncExecutorService {
             blockReason = "Too many consecutive failures (≥5)";
         }
 
-        // Update SyncProject status based on error type
+        // Update SyncProject status based on error type and failure count
         if (project != null) {
+            String previousStatus = project.getSyncStatus();
+
             if ("not_found".equals(errorType)) {
+                // Source project missing
                 project.setSyncStatus(SyncProject.SyncStatus.MISSING);
-                log.info("Updated project status to missing: {}", project.getProjectKey());
+                log.info("Updated project status to missing: {} (was: {})",
+                    project.getProjectKey(), previousStatus);
             } else if (shouldBlock) {
+                // Non-retryable error or too many failures (≥5)
                 project.setSyncStatus(SyncProject.SyncStatus.FAILED);
-                log.info("Updated project status to failed: {}", project.getProjectKey());
+                log.info("Updated project status to failed: {} (was: {}, failures: {})",
+                    project.getProjectKey(), previousStatus, task.getConsecutiveFailures());
+            } else {
+                // Retryable error with failures < 5
+                // Reset syncing to warning (has failures) or active (if was active)
+                if (SyncProject.SyncStatus.SYNCING.equals(previousStatus)) {
+                    // Always set to WARNING when there are failures
+                    project.setSyncStatus(SyncProject.SyncStatus.WARNING);
+                    log.info("Set project status to warning after sync failure: {} (failures: {})",
+                        project.getProjectKey(), task.getConsecutiveFailures());
+                } else if (SyncProject.SyncStatus.ACTIVE.equals(previousStatus)) {
+                    // First failure on an active project
+                    project.setSyncStatus(SyncProject.SyncStatus.WARNING);
+                    log.info("Set project status to warning: {} (was active, failures: {})",
+                        project.getProjectKey(), task.getConsecutiveFailures());
+                }
+                // If already WARNING, keep it as WARNING
             }
-            // For retryable errors with < 5 failures, keep project active
             project.setErrorMessage(e.getMessage());
             syncProjectMapper.updateById(project);
         }
@@ -666,10 +696,11 @@ public class PullSyncExecutorService {
      * @return true if syncable
      */
     private boolean isSyncable(String syncStatus) {
-        // Syncable states: active, syncing, pending (for backward compatibility)
+        // Syncable states: active, syncing, warning, pending (for backward compatibility)
         // Not syncable: missing, deleted, failed
         return SyncProject.SyncStatus.ACTIVE.equals(syncStatus) ||
                SyncProject.SyncStatus.SYNCING.equals(syncStatus) ||
+               SyncProject.SyncStatus.WARNING.equals(syncStatus) ||
                SyncProject.SyncStatus.PENDING.equals(syncStatus) ||
                SyncProject.SyncStatus.TARGET_CREATED.equals(syncStatus) ||
                SyncProject.SyncStatus.MIRROR_CONFIGURED.equals(syncStatus);

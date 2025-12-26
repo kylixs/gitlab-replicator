@@ -28,6 +28,7 @@
           <el-option label="Initializing" value="initializing" />
           <el-option label="Active" value="active" />
           <el-option label="Syncing" value="syncing" />
+          <el-option label="Warning" value="warning" />
           <el-option label="Error" value="error" />
           <el-option label="Missing" value="missing" />
           <el-option label="Disabled" value="disabled" />
