@@ -513,30 +513,56 @@ public class DiffCalculator {
 
     /**
      * Determine branch sync status based on commit times
+     *
+     * Logic:
+     * - OUTDATED: source is newer than target (target is behind) - normal case after new commits
+     * - AHEAD: target is newer than source (should not happen in normal sync flow)
+     * - DIVERGED: only when we cannot determine the relationship reliably
+     *
+     * Note: True divergence detection requires checking git history (common ancestor),
+     * which is expensive. For now, we use a conservative approach:
+     * - If source is clearly newer (time diff > 1 min): OUTDATED
+     * - If target is clearly newer (time diff > 1 min): AHEAD (unusual, might indicate push failure)
+     * - Otherwise: treat as OUTDATED (safer assumption for sync systems)
      */
     private BranchComparison.BranchSyncStatus determineBranchStatus(
             LocalDateTime sourceTime, LocalDateTime targetTime) {
 
         if (sourceTime == null || targetTime == null) {
-            // If we can't determine time, default to OUTDATED
+            // If we can't determine time, default to OUTDATED (needs sync)
             return BranchComparison.BranchSyncStatus.OUTDATED;
         }
 
+        // diffSeconds = targetTime - sourceTime
+        // Positive: target is newer
+        // Negative: source is newer
         long diffSeconds = java.time.Duration.between(sourceTime, targetTime).getSeconds();
         long absSeconds = Math.abs(diffSeconds);
 
-        // Divergence detection: if commits are very close in time (< 1 hour) but different SHA
-        // This is a heuristic - true divergence requires checking git history
-        if (absSeconds < 3600) {
-            return BranchComparison.BranchSyncStatus.DIVERGED;
+        // Clear time difference threshold: 60 seconds
+        // This avoids false DIVERGED status due to clock skew or close commit times
+        final long CLEAR_DIFF_THRESHOLD = 60;
+
+        // Source is clearly newer than target (target is behind)
+        // This is the normal case after new commits - target needs update
+        if (diffSeconds < -CLEAR_DIFF_THRESHOLD) {
+            return BranchComparison.BranchSyncStatus.OUTDATED;
         }
 
-        // Target is newer (ahead)
-        if (diffSeconds > 0) {
+        // Target is clearly newer than source (target is ahead)
+        // This is unusual - might indicate:
+        // 1. Push mirror failed and was manually fixed
+        // 2. Someone committed directly to target (not recommended)
+        if (diffSeconds > CLEAR_DIFF_THRESHOLD) {
             return BranchComparison.BranchSyncStatus.AHEAD;
         }
 
-        // Source is newer (outdated)
+        // Small time difference (< 60 seconds) with different SHA
+        // This could be:
+        // 1. Normal sync lag
+        // 2. Clock skew between source/target GitLab
+        // 3. Concurrent commits
+        // Conservative approach: treat as OUTDATED (needs sync) rather than DIVERGED
         return BranchComparison.BranchSyncStatus.OUTDATED;
     }
 
