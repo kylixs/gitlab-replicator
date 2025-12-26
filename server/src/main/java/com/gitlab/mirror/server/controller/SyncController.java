@@ -555,20 +555,48 @@ public class SyncController {
     public static class BranchInfo {
         private String branchName;
         private String status; // synced, outdated, missing_in_target, extra_in_target
+        private String syncStatus; // Alias for status for frontend compatibility
         private Boolean isDefault;
         private Boolean isProtected;
 
         // Source branch info
         private String sourceCommitSha;
+        private String sourceCommitId; // Alias for sourceCommitSha
+        private String sourceCommitShort; // Short version of commit SHA (first 8 chars)
         private String sourceCommitMessage;
         private String sourceCommitAuthor;
         private LocalDateTime sourceCommittedAt;
+        private String sourceLastCommitAt; // Alias for sourceCommittedAt
 
         // Target branch info
         private String targetCommitSha;
+        private String targetCommitId; // Alias for targetCommitSha
+        private String targetCommitShort; // Short version of commit SHA (first 8 chars)
         private String targetCommitMessage;
         private String targetCommitAuthor;
         private LocalDateTime targetCommittedAt;
+        private String targetLastCommitAt; // Alias for targetCommittedAt
+
+        public void setSourceCommitSha(String sourceCommitSha) {
+            this.sourceCommitSha = sourceCommitSha;
+            this.sourceCommitId = sourceCommitSha;
+            if (sourceCommitSha != null && sourceCommitSha.length() >= 8) {
+                this.sourceCommitShort = sourceCommitSha.substring(0, 8);
+            }
+        }
+
+        public void setTargetCommitSha(String targetCommitSha) {
+            this.targetCommitSha = targetCommitSha;
+            this.targetCommitId = targetCommitSha;
+            if (targetCommitSha != null && targetCommitSha.length() >= 8) {
+                this.targetCommitShort = targetCommitSha.substring(0, 8);
+            }
+        }
+
+        public void setStatus(String status) {
+            this.status = status;
+            this.syncStatus = status;
+        }
     }
 
     /**
