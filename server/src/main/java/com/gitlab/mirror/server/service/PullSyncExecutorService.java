@@ -258,8 +258,7 @@ public class PullSyncExecutorService {
             log.warn("Failed to update branch snapshots after sync: {}", e.getMessage());
         }
 
-        // 9. Record sync finished event
-        recordSyncFinishedEvent(project, task, finalSha, "First sync completed");
+        // Note: Sync event will be recorded in updateTaskAfterSuccess() via recordSyncResult()
 
         log.info("First sync completed successfully for project: {}", project.getProjectKey());
     }
@@ -386,9 +385,7 @@ public class PullSyncExecutorService {
             log.warn("Failed to update branch snapshots after sync: {}", e.getMessage());
         }
 
-        // 10. Record sync finished event
-        recordSyncFinishedEvent(project, task, finalSha,
-            String.format("Incremental sync completed, SHA: %s → %s", lastSyncedSha, finalSha));
+        // Note: Sync event will be recorded in updateTaskAfterSuccess() via recordSyncResult()
 
         log.info("Incremental sync completed successfully for project: {}", project.getProjectKey());
     }
@@ -929,15 +926,6 @@ public class PullSyncExecutorService {
         event.setEventTime(LocalDateTime.now());
         syncEventMapper.insert(event);
         log.info("Recorded task blocked event for project {}: {}", project.getProjectKey(), reason);
-    }
-
-    /**
-     * Record sync finished event with detailed information
-     * @deprecated Use recordSyncResult instead
-     */
-    @Deprecated
-    private void recordSyncFinishedEvent(SyncProject project, SyncTask task, String commitSha, String message) {
-        recordSyncResult(project, task, SyncResult.Status.SUCCESS, message);
     }
 
     /**
