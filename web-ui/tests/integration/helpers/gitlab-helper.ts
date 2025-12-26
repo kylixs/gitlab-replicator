@@ -246,6 +246,29 @@ export class GitLabHelper {
       throw new Error(`Failed to delete branch: ${response.statusText}`)
     }
   }
+
+  /**
+   * Wait for branch to have specific commit (polls until found or timeout)
+   */
+  async waitForCommit(
+    projectId: number,
+    branchName: string,
+    expectedCommitId: string,
+    timeoutMs: number = 30000,
+    checkIntervalMs: number = 1000
+  ): Promise<GitLabBranch> {
+    const startTime = Date.now()
+
+    while (Date.now() - startTime < timeoutMs) {
+      const branch = await this.getBranch(projectId, branchName)
+      if (branch && branch.commit.id === expectedCommitId) {
+        return branch
+      }
+      await new Promise(resolve => setTimeout(resolve, checkIntervalMs))
+    }
+
+    throw new Error(`Timeout waiting for commit ${expectedCommitId} after ${timeoutMs}ms`)
+  }
 }
 
 export const sourceGitLab = new GitLabHelper(true)

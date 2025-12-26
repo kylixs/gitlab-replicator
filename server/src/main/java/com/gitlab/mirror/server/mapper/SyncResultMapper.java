@@ -15,8 +15,8 @@ import org.apache.ibatis.annotations.Select;
 public interface SyncResultMapper extends BaseMapper<SyncResult> {
 
     /**
-     * Query sync result by sync project ID
+     * Query sync result by sync project ID (most recent)
      */
-    @Select("SELECT * FROM sync_result WHERE sync_project_id = #{syncProjectId}")
+    @Select("SELECT * FROM sync_result WHERE sync_project_id = #{syncProjectId} ORDER BY started_at DESC LIMIT 1")
     SyncResult selectBySyncProjectId(@Param("syncProjectId") Long syncProjectId);
 }

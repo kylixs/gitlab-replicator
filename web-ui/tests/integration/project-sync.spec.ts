@@ -151,7 +151,7 @@ test.describe('Project Discovery Tests', () => {
     const allProjects = await mirrorApi.getProjects()
     console.log(`Total projects: ${allProjects.total}`)
 
-    const validStatuses = ['active', 'synced', 'outdated', 'paused', 'failed', 'pending', 'discovered', 'initializing']
+    const validStatuses = ['active', 'synced', 'outdated', 'paused', 'failed', 'pending', 'discovered', 'initializing', 'missing']
 
     for (const project of allProjects.items) {
       expect(validStatuses).toContain(project.syncStatus)

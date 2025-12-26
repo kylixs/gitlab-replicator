@@ -5,7 +5,7 @@
  */
 
 const MIRROR_API_URL = process.env.MIRROR_API_URL || 'http://localhost:9999/api'
-const MIRROR_API_KEY = process.env.MIRROR_API_KEY || 'test-api-key'
+const MIRROR_API_KEY = process.env.MIRROR_API_KEY || 'dev-api-key-12345'
 
 export interface SyncProject {
   id: number
@@ -114,7 +114,8 @@ export class MirrorApiHelper {
     })
 
     if (!response.ok) {
-      throw new Error(`Failed to get projects: ${response.statusText}`)
+      const errorText = await response.text()
+      throw new Error(`Failed to get projects (${response.status} ${response.statusText}): ${errorText}`)
     }
 
     const result = await response.json()
