@@ -3,6 +3,7 @@ package com.gitlab.mirror.server.controller;
 import com.gitlab.mirror.server.controller.dto.ProjectListDTO;
 import com.gitlab.mirror.server.controller.dto.ProjectOverviewDTO;
 import com.gitlab.mirror.server.controller.dto.SyncResultListDTO;
+import com.gitlab.mirror.server.controller.dto.SyncResultDetailDTO;
 import com.gitlab.mirror.server.entity.ProjectBranchSnapshot;
 import com.gitlab.mirror.server.entity.SyncResult;
 import com.gitlab.mirror.server.entity.PullSyncConfig;
@@ -726,6 +727,89 @@ public class SyncController {
     }
 
     /**
+     * Get sync result detail with branch information
+     *
+     * GET /api/sync/results/{id}
+     */
+    @GetMapping("/results/{id}")
+    public ResponseEntity<ApiResponse<SyncResultDetailDTO>> getSyncResultDetail(@PathVariable Long id) {
+        log.info("Query sync result detail - id: {}", id);
+
+        try {
+            SyncResult syncResult = syncResultMapper.selectById(id);
+            if (syncResult == null) {
+                return ResponseEntity.ok(ApiResponse.error("Sync result not found"));
+            }
+
+            SyncResultDetailDTO dto = convertToSyncResultDetailDTO(syncResult);
+            return ResponseEntity.ok(ApiResponse.success(dto));
+        } catch (Exception e) {
+            log.error("Query sync result detail failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Convert SyncResult to SyncResultDetailDTO with branch information
+     */
+    private SyncResultDetailDTO convertToSyncResultDetailDTO(SyncResult syncResult) {
+        SyncResultDetailDTO dto = new SyncResultDetailDTO();
+        dto.setId(syncResult.getId());
+        dto.setSyncProjectId(syncResult.getSyncProjectId());
+        dto.setLastSyncAt(syncResult.getLastSyncAt());
+        dto.setStartedAt(syncResult.getStartedAt());
+        dto.setCompletedAt(syncResult.getCompletedAt());
+        dto.setSyncStatus(syncResult.getSyncStatus());
+        dto.setHasChanges(syncResult.getHasChanges());
+        dto.setChangesCount(syncResult.getChangesCount());
+        dto.setSourceCommitSha(syncResult.getSourceCommitSha());
+        dto.setTargetCommitSha(syncResult.getTargetCommitSha());
+        dto.setDurationSeconds(syncResult.getDurationSeconds());
+        dto.setErrorMessage(syncResult.getErrorMessage());
+        dto.setSummary(syncResult.getSummary());
+
+        // Get project key and sync method
+        SyncProject project = syncProjectMapper.selectById(syncResult.getSyncProjectId());
+        if (project != null) {
+            dto.setProjectKey(project.getProjectKey());
+            dto.setSyncMethod(project.getSyncMethod());
+        }
+
+        // Get branch snapshot information
+        List<ProjectBranchSnapshot> allBranches = branchSnapshotService.getBranchSnapshots(
+                syncResult.getSyncProjectId(),
+                ProjectBranchSnapshot.ProjectType.SOURCE
+        );
+
+        dto.setTotalBranches(allBranches.size());
+
+        // Sort by committed_at DESC and get last 10 branches
+        List<SyncResultDetailDTO.BranchInfo> recentBranches = allBranches.stream()
+                .sorted((b1, b2) -> {
+                    if (b1.getCommittedAt() == null && b2.getCommittedAt() == null) return 0;
+                    if (b1.getCommittedAt() == null) return 1;
+                    if (b2.getCommittedAt() == null) return -1;
+                    return b2.getCommittedAt().compareTo(b1.getCommittedAt());
+                })
+                .limit(10)
+                .map(branch -> {
+                    SyncResultDetailDTO.BranchInfo branchInfo = new SyncResultDetailDTO.BranchInfo();
+                    branchInfo.setBranchName(branch.getBranchName());
+                    branchInfo.setCommitSha(branch.getCommitSha());
+                    branchInfo.setCommitMessage(branch.getCommitMessage());
+                    branchInfo.setCommitAuthor(branch.getCommitAuthor());
+                    branchInfo.setCommittedAt(branch.getCommittedAt());
+                    branchInfo.setIsDefault(branch.getIsDefault());
+                    branchInfo.setIsProtected(branch.getIsProtected());
+                    return branchInfo;
+                })
+                .collect(Collectors.toList());
+        dto.setRecentBranches(recentBranches);
+
+        return dto;
+    }
+
+    /**
      * Batch trigger sync for multiple projects
      *
      * POST /api/sync/projects/batch-sync
@@ -767,9 +851,31 @@ public class SyncController {
                     task.setForceSync(true); // Force sync to bypass change detection
                     task.setErrorType(""); // Clear error type
                     task.setErrorMessage(""); // Clear error message
+
+                    // Force reset stuck tasks
                     if ("running".equals(task.getTaskStatus())) {
-                        // If task is already running, just update next run time
-                        log.info("Task for project {} is already running, will run again after completion", projectKey);
+                        // Check if task has been running for too long (> 30 minutes)
+                        if (task.getStartedAt() != null) {
+                            long minutesRunning = java.time.Duration.between(
+                                task.getStartedAt(), java.time.Instant.now()).toMinutes();
+
+                            if (minutesRunning > 30) {
+                                log.warn("Force resetting stuck task for project {}, running for {} minutes",
+                                    projectKey, minutesRunning);
+                                task.setTaskStatus("waiting");
+                                task.setStartedAt(null);
+                                task.setCompletedAt(null);
+                            } else {
+                                // Task is actively running, will run again after completion
+                                log.info("Task for project {} is actively running ({} min), will queue for next run",
+                                    projectKey, minutesRunning);
+                            }
+                        } else {
+                            // Running without start time is abnormal, reset it
+                            log.warn("Task for project {} is in running state without start time, resetting",
+                                projectKey);
+                            task.setTaskStatus("waiting");
+                        }
                     } else {
                         task.setTaskStatus("waiting");
                     }
@@ -883,9 +989,22 @@ public class SyncController {
                         continue;
                     }
 
+                    // Disable project
                     project.setEnabled(false);
                     project.setSyncStatus("paused");
                     syncProjectMapper.updateById(project);
+
+                    // Disable sync task
+                    SyncTask task = syncTaskService.getTaskBySyncProjectId(projectId);
+                    if (task != null) {
+                        task.setTaskStatus("disabled");
+                        task.setErrorMessage("Task disabled - project paused");
+                        task.setErrorType("PROJECT_PAUSED");
+                        task.setNextRunAt(null);
+                        syncTaskService.updateTask(task);
+                        log.info("Disabled sync task for paused project: {}", project.getProjectKey());
+                    }
+
                     successList.add(project.getProjectKey());
                 } catch (Exception e) {
                     failedList.add("Project ID " + projectId + ": " + e.getMessage());
@@ -928,9 +1047,27 @@ public class SyncController {
                         continue;
                     }
 
+                    // Enable project
                     project.setEnabled(true);
                     project.setSyncStatus("active");
                     syncProjectMapper.updateById(project);
+
+                    // Re-enable sync task
+                    SyncTask task = syncTaskService.getTaskBySyncProjectId(projectId);
+                    if (task != null) {
+                        task.setTaskStatus("waiting");
+                        task.setErrorMessage(null);
+                        task.setErrorType(null);
+                        task.setNextRunAt(java.time.Instant.now());
+                        syncTaskService.updateTask(task);
+                        log.info("Re-enabled sync task for resumed project: {}", project.getProjectKey());
+                    } else {
+                        // Create task if it doesn't exist
+                        String taskType = "pull_sync".equals(project.getSyncMethod()) ? "pull" : "push";
+                        task = syncTaskService.initializeTask(projectId, taskType);
+                        log.info("Created sync task for resumed project: {}", project.getProjectKey());
+                    }
+
                     successList.add(project.getProjectKey());
                 } catch (Exception e) {
                     failedList.add("Project ID " + projectId + ": " + e.getMessage());
@@ -973,6 +1110,14 @@ public class SyncController {
                         continue;
                     }
 
+                    // Delete sync task first (if exists)
+                    SyncTask task = syncTaskService.getTaskBySyncProjectId(projectId);
+                    if (task != null) {
+                        syncTaskService.deleteTask(task.getId());
+                        log.info("Deleted sync task for deleted project: {}", project.getProjectKey());
+                    }
+
+                    // Delete project
                     syncProjectMapper.deleteById(projectId);
                     successList.add(project.getProjectKey());
                 } catch (Exception e) {

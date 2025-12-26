@@ -99,16 +99,34 @@
             <div v-else>{{ row.summary || '-' }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="100" fixed="right">
+        <el-table-column label="Actions" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button
-              type="primary"
-              link
-              size="small"
-              @click="viewDetails(row)"
-            >
-              Details
-            </el-button>
+            <el-space>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                @click="viewDetail(row)"
+              >
+                Detail
+              </el-button>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                @click="viewLogs(row)"
+              >
+                Logs
+              </el-button>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                @click="viewProjectDetail(row)"
+              >
+                Project
+              </el-button>
+            </el-space>
           </template>
         </el-table-column>
       </el-table>
@@ -126,6 +144,132 @@
         />
       </div>
     </el-card>
+
+    <!-- Sync Logs Dialog -->
+    <el-dialog
+      v-model="logsDialogVisible"
+      title="Sync Logs"
+      width="80%"
+      :close-on-click-modal="false"
+    >
+      <div v-loading="logsLoading" class="logs-content">
+        <el-empty v-if="!logsLoading && syncLogs.length === 0" description="No sync events found" />
+
+        <el-timeline v-else>
+          <el-timeline-item
+            v-for="log in syncLogs"
+            :key="log.id"
+            :timestamp="formatTime(log.createdAt)"
+            :type="getLogType(log.status)"
+            placement="top"
+          >
+            <el-card>
+              <template #header>
+                <div class="log-header">
+                  <span class="log-event-type">{{ log.eventType }}</span>
+                  <el-tag :type="getStatusTagType(log.status)" size="small">
+                    {{ log.status }}
+                  </el-tag>
+                </div>
+              </template>
+              <div class="log-message">{{ log.message }}</div>
+              <div v-if="log.durationMs" class="log-duration">
+                Duration: {{ formatDuration(log.durationMs / 1000) }}
+              </div>
+            </el-card>
+          </el-timeline-item>
+        </el-timeline>
+      </div>
+    </el-dialog>
+
+    <!-- Sync Result Detail Dialog -->
+    <el-dialog
+      v-model="detailDialogVisible"
+      title="Sync Result Detail"
+      width="80%"
+      :close-on-click-modal="false"
+    >
+      <div v-loading="detailLoading">
+        <div v-if="resultDetail">
+          <!-- Basic Information -->
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="Project">
+              {{ resultDetail.projectKey }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Sync Method">
+              {{ resultDetail.syncMethod }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Status">
+              <el-tag :type="getSyncStatusType(resultDetail.syncStatus)">
+                {{ resultDetail.syncStatus }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="Changes">
+              <el-tag v-if="resultDetail.hasChanges" type="warning">
+                {{ resultDetail.changesCount }} changes
+              </el-tag>
+              <el-tag v-else type="info">No changes</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="Duration">
+              {{ formatDuration(resultDetail.durationSeconds) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Last Sync">
+              {{ formatTime(resultDetail.lastSyncAt) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Source Commit" :span="2">
+              <code v-if="resultDetail.sourceCommitSha">{{ resultDetail.sourceCommitSha }}</code>
+              <span v-else>-</span>
+            </el-descriptions-item>
+          </el-descriptions>
+
+          <!-- Summary -->
+          <el-divider />
+          <h3>Summary</h3>
+          <div v-if="resultDetail.errorMessage" class="error-text">
+            {{ resultDetail.errorMessage }}
+          </div>
+          <div v-else>{{ resultDetail.summary || 'No summary available' }}</div>
+
+          <!-- Branch Information -->
+          <el-divider />
+          <h3>Branch Information</h3>
+          <div class="branch-summary">
+            <el-tag type="info" size="large">
+              Total Branches: {{ resultDetail.totalBranches }}
+            </el-tag>
+          </div>
+
+          <h4 style="margin-top: 20px">Recent 10 Branches</h4>
+          <el-table :data="resultDetail.recentBranches" stripe style="width: 100%">
+            <el-table-column prop="branchName" label="Branch" min-width="150">
+              <template #default="{ row }">
+                <span style="font-weight: 500">{{ row.branchName }}</span>
+                <el-tag v-if="row.isDefault" type="success" size="small" style="margin-left: 8px">
+                  Default
+                </el-tag>
+                <el-tag v-if="row.isProtected" type="warning" size="small" style="margin-left: 8px">
+                  Protected
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="Commit" width="200">
+              <template #default="{ row }">
+                <el-tooltip :content="row.commitSha">
+                  <code style="font-size: 12px">{{ row.commitSha.substring(0, 8) }}</code>
+                </el-tooltip>
+              </template>
+            </el-table-column>
+            <el-table-column prop="commitMessage" label="Message" min-width="250" />
+            <el-table-column prop="commitAuthor" label="Author" width="150" />
+            <el-table-column label="Committed At" width="180">
+              <template #default="{ row }">
+                {{ formatTime(row.committedAt) }}
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -133,7 +277,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Refresh } from '@element-plus/icons-vue'
-import { syncApi, type SyncResult } from '@/api/sync'
+import { syncApi, type SyncResult, type SyncResultDetail } from '@/api/sync'
 import { ElMessage } from 'element-plus'
 import { useAutoRefreshTimer } from '@/composables/useAutoRefresh'
 
@@ -209,8 +353,102 @@ const formatTime = (time: string | null | undefined) => {
   return date.toLocaleString()
 }
 
-const viewDetails = (row: SyncResult) => {
+const viewProjectDetail = (row: SyncResult) => {
   router.push(`/projects/${row.syncProjectId}`)
+}
+
+// Sync result detail dialog
+const detailDialogVisible = ref(false)
+const detailLoading = ref(false)
+const resultDetail = ref<SyncResultDetail | null>(null)
+
+const viewDetail = async (row: SyncResult) => {
+  detailDialogVisible.value = true
+  detailLoading.value = true
+  resultDetail.value = null
+
+  try {
+    const response = await syncApi.getSyncResultDetail(row.id)
+    if (response.success && response.data) {
+      resultDetail.value = response.data
+    } else {
+      ElMessage.error(response.message || 'Failed to load result detail')
+    }
+  } catch (error: any) {
+    console.error('Load result detail failed:', error)
+    ElMessage.error(error.message || 'Failed to load result detail')
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+// Sync logs dialog
+const logsDialogVisible = ref(false)
+const logsLoading = ref(false)
+const syncLogs = ref<any[]>([])
+
+const viewLogs = async (row: SyncResult) => {
+  logsDialogVisible.value = true
+  logsLoading.value = true
+  syncLogs.value = []
+
+  try {
+    // Filter events by time range of this specific sync task
+    const startDate = row.startedAt ? new Date(row.startedAt).toISOString().split('T')[0] : undefined
+    const endDate = row.completedAt ? new Date(row.completedAt).toISOString().split('T')[0] : undefined
+
+    const response = await syncApi.getEvents({
+      projectId: row.syncProjectId,
+      startDate: startDate,
+      endDate: endDate,
+      page: 1,
+      size: 50
+    })
+
+    if (response.success && response.data) {
+      // Further filter by exact time range to get only events for this sync task
+      const startTime = row.startedAt ? new Date(row.startedAt).getTime() : 0
+      const endTime = row.completedAt ? new Date(row.completedAt).getTime() : Date.now()
+
+      syncLogs.value = (response.data.items || []).filter((log: any) => {
+        const logTime = new Date(log.createdAt).getTime()
+        return logTime >= startTime && logTime <= endTime
+      })
+    } else {
+      ElMessage.error(response.message || 'Failed to load sync logs')
+    }
+  } catch (error: any) {
+    console.error('Load sync logs failed:', error)
+    ElMessage.error(error.message || 'Failed to load sync logs')
+  } finally {
+    logsLoading.value = false
+  }
+}
+
+const getLogType = (status: string) => {
+  switch (status) {
+    case 'SUCCESS':
+      return 'success'
+    case 'FAILED':
+      return 'danger'
+    case 'SKIPPED':
+      return 'info'
+    default:
+      return 'primary'
+  }
+}
+
+const getStatusTagType = (status: string) => {
+  switch (status) {
+    case 'SUCCESS':
+      return 'success'
+    case 'FAILED':
+      return 'danger'
+    case 'SKIPPED':
+      return 'info'
+    default:
+      return ''
+  }
 }
 
 // Auto-refresh timer
@@ -256,4 +494,38 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
 }
+
+.logs-content {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.log-event-type {
+  font-weight: bold;
+  color: #303133;
+}
+
+.log-message {
+  margin: 8px 0;
+  color: #606266;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.log-duration {
+  margin-top: 8px;
+  color: #909399;
+  font-size: 12px;
+}
+
+.branch-summary {
+  margin: 16px 0;
+}
+
 </style>

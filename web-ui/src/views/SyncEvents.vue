@@ -88,43 +88,95 @@
     <el-drawer
       v-model="detailDrawerVisible"
       title="Event Detail"
-      size="50%"
+      size="60%"
       direction="rtl"
     >
-      <div v-if="selectedEvent" class="event-detail">
-        <el-descriptions :column="1" border>
+      <div v-if="selectedEvent && eventDetailEnhanced" class="event-detail">
+        <!-- Basic Info -->
+        <el-descriptions :column="2" border>
           <el-descriptions-item label="Event ID">
-            {{ selectedEvent.id }}
+            {{ eventDetailEnhanced.id }}
           </el-descriptions-item>
           <el-descriptions-item label="Project">
-            {{ selectedEvent.projectKey }}
+            {{ eventDetailEnhanced.projectKey }}
           </el-descriptions-item>
           <el-descriptions-item label="Event Type">
-            {{ formatEventType(selectedEvent.eventType) }}
+            {{ formatEventType(eventDetailEnhanced.eventType) }}
           </el-descriptions-item>
           <el-descriptions-item label="Status">
-            <el-tag :type="getStatusType(selectedEvent.status)">
-              {{ selectedEvent.status }}
+            <el-tag :type="getStatusType(eventDetailEnhanced.status)">
+              {{ eventDetailEnhanced.status }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="Time">
-            {{ formatTime(selectedEvent.createdAt) }}
+            {{ formatTime(eventDetailEnhanced.eventTime) }}
           </el-descriptions-item>
-          <el-descriptions-item label="Duration" v-if="selectedEvent.durationMs">
-            {{ formatDuration(selectedEvent.durationMs) }}
+          <el-descriptions-item label="Duration" v-if="eventDetailEnhanced.durationSeconds">
+            {{ formatDuration(eventDetailEnhanced.durationSeconds * 1000) }}
           </el-descriptions-item>
         </el-descriptions>
 
-        <el-divider />
+        <!-- Error Message for Failed Events -->
+        <div v-if="eventDetailEnhanced.errorMessage" class="error-section">
+          <el-divider />
+          <h3>Error Details</h3>
+          <el-alert type="error" :closable="false">
+            {{ eventDetailEnhanced.errorMessage }}
+          </el-alert>
+        </div>
 
-        <h3>Event Details</h3>
-        <div v-if="eventDetails" class="event-details-json">
-          <pre>{{ JSON.stringify(eventDetails, null, 2) }}</pre>
+        <!-- Branch Information for Successful Events -->
+        <div v-if="eventDetailEnhanced.totalBranches !== undefined && eventDetailEnhanced.totalBranches > 0">
+          <el-divider />
+          <h3>Sync Summary</h3>
+          <div class="branch-summary">
+            <el-tag type="info" size="large">
+              Total Branches: {{ eventDetailEnhanced.totalBranches }}
+            </el-tag>
+          </div>
+
+          <h4 style="margin-top: 20px">Recent 10 Branches</h4>
+          <el-table :data="eventDetailEnhanced.recentBranches" stripe style="width: 100%">
+            <el-table-column label="Branch" min-width="150">
+              <template #default="{ row }">
+                <span style="font-weight: 500">{{ row.branchName }}</span>
+                <el-tag v-if="row.isDefault" type="success" size="small" style="margin-left: 8px">
+                  Default
+                </el-tag>
+                <el-tag v-if="row.isProtected" type="warning" size="small" style="margin-left: 8px">
+                  Protected
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="Commit" width="200">
+              <template #default="{ row }">
+                <el-tooltip :content="row.commitSha">
+                  <code style="font-size: 12px">{{ row.commitSha.substring(0, 8) }}</code>
+                </el-tooltip>
+              </template>
+            </el-table-column>
+            <el-table-column prop="commitMessage" label="Message" min-width="250" />
+            <el-table-column prop="commitAuthor" label="Author" width="150" />
+            <el-table-column label="Committed At" width="180">
+              <template #default="{ row }">
+                {{ formatTime(row.committedAt) }}
+              </template>
+            </el-table-column>
+          </el-table>
         </div>
-        <div v-else class="loading-details">
-          <el-icon class="is-loading"><Loading /></el-icon>
-          Loading details...
+
+        <!-- Event Data (JSON) -->
+        <div v-if="eventDetailEnhanced.eventData">
+          <el-divider />
+          <h3>Event Data</h3>
+          <div class="event-details-json">
+            <pre>{{ JSON.stringify(eventDetailEnhanced.eventData, null, 2) }}</pre>
+          </div>
         </div>
+      </div>
+      <div v-else class="loading-details">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        Loading details...
       </div>
     </el-drawer>
   </div>
@@ -136,7 +188,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import EventStats from '@/components/events/EventStats.vue'
 import EventFilter from '@/components/events/EventFilter.vue'
-import { eventsApi } from '@/api/events'
+import { eventsApi, type EventDetailEnhanced } from '@/api/events'
 import { useAutoRefreshTimer } from '@/composables/useAutoRefresh'
 import type { EventListItem, EventStats as EventStatsType, EventDetails } from '@/types'
 import { Refresh, Warning, Document } from '@element-plus/icons-vue'
@@ -148,6 +200,7 @@ const events = ref<EventListItem[]>([])
 const stats = ref<EventStatsType | null>(null)
 const selectedEvent = ref<EventListItem | null>(null)
 const eventDetails = ref<EventDetails | null>(null)
+const eventDetailEnhanced = ref<EventDetailEnhanced | null>(null)
 const detailDrawerVisible = ref(false)
 
 const filters = reactive({
@@ -203,11 +256,12 @@ const handleViewProject = (event: EventListItem) => {
 const handleViewDetail = async (event: EventListItem) => {
   selectedEvent.value = event
   eventDetails.value = null
+  eventDetailEnhanced.value = null
   detailDrawerVisible.value = true
 
   try {
-    const response = await eventsApi.getEventDetails(event.id)
-    eventDetails.value = response.data
+    const response = await eventsApi.getEventDetail(event.id)
+    eventDetailEnhanced.value = response.data
   } catch (error) {
     ElMessage.error('Failed to load event details')
     console.error('Load event details failed:', error)
@@ -379,6 +433,7 @@ onUnmounted(() => {
   font-family: 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.5;
+  color: #333;
 }
 
 .loading-details {
@@ -388,4 +443,13 @@ onUnmounted(() => {
   color: #666;
   padding: 16px;
 }
+
+.error-section {
+  margin-top: 16px;
+}
+
+.branch-summary {
+  margin: 16px 0;
+}
+
 </style>

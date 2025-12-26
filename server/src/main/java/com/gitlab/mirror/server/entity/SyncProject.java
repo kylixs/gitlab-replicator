@@ -90,6 +90,7 @@ public class SyncProject {
         public static final String TARGET_CREATED = "target_created";
         public static final String MIRROR_CONFIGURED = "mirror_configured";
         public static final String ACTIVE = "active";
+        public static final String SYNCING = "syncing";
         public static final String FAILED = "failed";
         public static final String DELETED = "deleted";
         public static final String SOURCE_NOT_FOUND = "source_not_found";

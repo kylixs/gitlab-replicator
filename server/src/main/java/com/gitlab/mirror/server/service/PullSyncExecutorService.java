@@ -152,6 +152,10 @@ public class PullSyncExecutorService {
     private void executeFirstSync(SyncTask task, SyncProject project, PullSyncConfig config) {
         log.info("Executing first sync for project: {}", project.getProjectKey());
 
+        // Update project status to syncing
+        project.setSyncStatus(SyncProject.SyncStatus.SYNCING);
+        syncProjectMapper.updateById(project);
+
         // 1. Ensure target project exists
         ensureTargetProjectExists(project);
 
@@ -234,6 +238,10 @@ public class PullSyncExecutorService {
      */
     private void executeIncrementalSync(SyncTask task, SyncProject project, PullSyncConfig config) {
         log.info("Executing incremental sync for project: {}", project.getProjectKey());
+
+        // Update project status to syncing
+        project.setSyncStatus(SyncProject.SyncStatus.SYNCING);
+        syncProjectMapper.updateById(project);
 
         // 1. Ensure target project exists
         ensureTargetProjectExists(project);
@@ -684,6 +692,18 @@ public class PullSyncExecutorService {
             task.setDurationSeconds((int) duration);
         }
         task.setCompletedAt(completedAt);
+
+        // Update project status based on sync result
+        if (SyncResult.Status.SKIPPED.equals(status)) {
+            // For skipped syncs, set status to ACTIVE if it was syncing
+            if (SyncProject.SyncStatus.SYNCING.equals(project.getSyncStatus())) {
+                project.setSyncStatus(SyncProject.SyncStatus.ACTIVE);
+                project.setErrorMessage(null);
+                syncProjectMapper.updateById(project);
+                log.info("Updated project status to active after skipped sync: {}", project.getProjectKey());
+            }
+        }
+        // Note: Success and failure status updates are handled in markSyncSuccess() and markSyncFailed()
 
         // Always update sync_result table
         SyncResult syncResult = syncResultMapper.selectBySyncProjectId(project.getId());

@@ -126,4 +126,24 @@ public class SyncTaskService {
         log.debug("Updated task: id={}, status={}, nextRunAt={}",
                  task.getId(), task.getTaskStatus(), task.getNextRunAt());
     }
+
+    /**
+     * Delete sync task
+     *
+     * @param taskId Task ID to delete
+     */
+    @Transactional
+    public void deleteTask(Long taskId) {
+        if (taskId == null) {
+            throw new IllegalArgumentException("Task ID cannot be null");
+        }
+
+        SyncTask task = syncTaskMapper.selectById(taskId);
+        if (task != null) {
+            syncTaskMapper.deleteById(taskId);
+            log.info("Deleted sync task: id={}, syncProjectId={}", taskId, task.getSyncProjectId());
+        } else {
+            log.warn("Attempted to delete non-existent task: id={}", taskId);
+        }
+    }
 }

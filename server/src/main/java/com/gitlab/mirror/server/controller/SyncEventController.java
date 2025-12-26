@@ -1,9 +1,12 @@
 package com.gitlab.mirror.server.controller;
 
+import com.gitlab.mirror.server.controller.dto.SyncEventDetailDTO;
+import com.gitlab.mirror.server.entity.ProjectBranchSnapshot;
 import com.gitlab.mirror.server.entity.SyncEvent;
 import com.gitlab.mirror.server.entity.SyncProject;
 import com.gitlab.mirror.server.mapper.SyncEventMapper;
 import com.gitlab.mirror.server.mapper.SyncProjectMapper;
+import com.gitlab.mirror.server.service.BranchSnapshotService;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -34,10 +37,14 @@ public class SyncEventController {
 
     private final SyncEventMapper syncEventMapper;
     private final SyncProjectMapper syncProjectMapper;
+    private final BranchSnapshotService branchSnapshotService;
 
-    public SyncEventController(SyncEventMapper syncEventMapper, SyncProjectMapper syncProjectMapper) {
+    public SyncEventController(SyncEventMapper syncEventMapper,
+                               SyncProjectMapper syncProjectMapper,
+                               BranchSnapshotService branchSnapshotService) {
         this.syncEventMapper = syncEventMapper;
         this.syncProjectMapper = syncProjectMapper;
+        this.branchSnapshotService = branchSnapshotService;
     }
 
     /**
@@ -202,6 +209,86 @@ public class SyncEventController {
             return ResponseEntity.ok(ApiResponse.success(details));
         } catch (Exception e) {
             log.error("Query event details failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get enhanced event details with branch information
+     *
+     * GET /api/sync/events/{id}/detail
+     */
+    @GetMapping("/{id}/detail")
+    public ResponseEntity<ApiResponse<SyncEventDetailDTO>> getEventDetail(@PathVariable Long id) {
+        log.info("Query enhanced event detail - id: {}", id);
+
+        try {
+            SyncEvent event = syncEventMapper.selectById(id);
+            if (event == null) {
+                return ResponseEntity.ok(ApiResponse.error("Event not found"));
+            }
+
+            SyncEventDetailDTO dto = new SyncEventDetailDTO();
+
+            // Basic event info
+            dto.setId(event.getId());
+            dto.setSyncProjectId(event.getSyncProjectId());
+            dto.setEventType(event.getEventType());
+            dto.setEventSource(event.getEventSource());
+            dto.setStatus(event.getStatus());
+            dto.setEventTime(event.getEventTime());
+            dto.setDurationSeconds(event.getDurationSeconds());
+            dto.setCommitSha(event.getCommitSha());
+            dto.setRef(event.getRef());
+            dto.setBranchName(event.getBranchName());
+            dto.setErrorMessage(event.getErrorMessage());
+            dto.setEventData(event.getEventData());
+
+            // Get project key
+            SyncProject project = null;
+            if (event.getSyncProjectId() != null) {
+                project = syncProjectMapper.selectById(event.getSyncProjectId());
+                if (project != null) {
+                    dto.setProjectKey(project.getProjectKey());
+                }
+            }
+
+            // Add branch information for successful sync events
+            if (project != null && "success".equalsIgnoreCase(event.getStatus())) {
+                List<ProjectBranchSnapshot> allBranches = branchSnapshotService.getBranchSnapshots(
+                        event.getSyncProjectId(),
+                        ProjectBranchSnapshot.ProjectType.SOURCE
+                );
+
+                dto.setTotalBranches(allBranches.size());
+
+                // Sort by committed_at DESC and get last 10 branches
+                List<SyncEventDetailDTO.BranchInfo> recentBranches = allBranches.stream()
+                        .sorted((b1, b2) -> {
+                            if (b1.getCommittedAt() == null && b2.getCommittedAt() == null) return 0;
+                            if (b1.getCommittedAt() == null) return 1;
+                            if (b2.getCommittedAt() == null) return -1;
+                            return b2.getCommittedAt().compareTo(b1.getCommittedAt());
+                        })
+                        .limit(10)
+                        .map(branch -> {
+                            SyncEventDetailDTO.BranchInfo branchInfo = new SyncEventDetailDTO.BranchInfo();
+                            branchInfo.setBranchName(branch.getBranchName());
+                            branchInfo.setCommitSha(branch.getCommitSha());
+                            branchInfo.setCommitMessage(branch.getCommitMessage());
+                            branchInfo.setCommitAuthor(branch.getCommitAuthor());
+                            branchInfo.setCommittedAt(branch.getCommittedAt());
+                            branchInfo.setIsDefault(branch.getIsDefault());
+                            branchInfo.setIsProtected(branch.getIsProtected());
+                            return branchInfo;
+                        })
+                        .collect(Collectors.toList());
+                dto.setRecentBranches(recentBranches);
+            }
+
+            return ResponseEntity.ok(ApiResponse.success(dto));
+        } catch (Exception e) {
+            log.error("Query enhanced event detail failed", e);
             return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
         }
     }

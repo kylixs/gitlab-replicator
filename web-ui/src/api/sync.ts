@@ -30,6 +30,21 @@ export interface SyncResult {
   summary: string
 }
 
+export interface SyncResultDetail extends SyncResult {
+  totalBranches: number
+  recentBranches: BranchInfo[]
+}
+
+export interface BranchInfo {
+  branchName: string
+  commitSha: string
+  commitMessage: string
+  commitAuthor: string
+  committedAt: string
+  isDefault: boolean
+  isProtected: boolean
+}
+
 export interface SyncResultQuery {
   syncStatus?: string
   search?: string
@@ -54,5 +69,28 @@ export const syncApi = {
     return client.get('/sync/results', {
       params: query
     })
+  },
+
+  /**
+   * Get sync events for a project
+   */
+  getEvents(params: {
+    projectId?: number
+    eventType?: string
+    status?: string
+    startDate?: string
+    endDate?: string
+    search?: string
+    page?: number
+    size?: number
+  }): Promise<ApiResponse<PageResult<any>>> {
+    return client.get('/sync/events', { params })
+  },
+
+  /**
+   * Get sync result detail
+   */
+  getSyncResultDetail(id: number): Promise<ApiResponse<SyncResultDetail>> {
+    return client.get(`/sync/results/${id}`)
   }
 }
