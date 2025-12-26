@@ -52,3 +52,5 @@ screenshots
 # Frontend build output
 server/src/main/resources/static/
 web-ui/dist/
+web-ui/tests/.auth
+playwright-report
