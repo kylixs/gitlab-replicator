@@ -40,6 +40,7 @@ public class PullSyncExecutorService {
     private final SourceProjectInfoMapper sourceProjectInfoMapper;
     private final TargetProjectInfoMapper targetProjectInfoMapper;
     private final SyncEventMapper syncEventMapper;
+    private final SyncResultMapper syncResultMapper;
     private final GitLabMirrorProperties properties;
     private final TaskStatusUpdateService taskStatusUpdateService;
     private final BranchSnapshotService branchSnapshotService;
@@ -55,6 +56,7 @@ public class PullSyncExecutorService {
             SourceProjectInfoMapper sourceProjectInfoMapper,
             TargetProjectInfoMapper targetProjectInfoMapper,
             SyncEventMapper syncEventMapper,
+            SyncResultMapper syncResultMapper,
             GitLabMirrorProperties properties,
             TaskStatusUpdateService taskStatusUpdateService,
             BranchSnapshotService branchSnapshotService) {
@@ -68,6 +70,7 @@ public class PullSyncExecutorService {
         this.sourceProjectInfoMapper = sourceProjectInfoMapper;
         this.targetProjectInfoMapper = targetProjectInfoMapper;
         this.syncEventMapper = syncEventMapper;
+        this.syncResultMapper = syncResultMapper;
         this.properties = properties;
         this.taskStatusUpdateService = taskStatusUpdateService;
         this.branchSnapshotService = branchSnapshotService;
@@ -289,7 +292,8 @@ public class PullSyncExecutorService {
                 log.warn("Failed to update branch snapshots: {}", e.getMessage());
             }
 
-            recordSyncFinishedEvent(project, task, currentHeadSha,
+            // Record to sync_result table but not to sync_event (no changes)
+            recordSyncResult(project, task, SyncResult.Status.SKIPPED,
                 "No branch changes detected, sync skipped");
             return;
         }
@@ -666,29 +670,74 @@ public class PullSyncExecutorService {
     }
 
     /**
-     * Record sync finished event with detailed information
+     * Record or update sync result
+     * <p>
+     * Always updates sync_result table (one record per project)
+     * Only records to sync_event table if there are changes or failures
      *
      * @param project Sync project
      * @param task    Sync task
-     * @param commitSha Final commit SHA
-     * @param message Event message
+     * @param status  Sync status: success/failed/skipped
+     * @param message Result message
      */
+    private void recordSyncResult(SyncProject project, SyncTask task, String status, String message) {
+        // Always update sync_result table
+        SyncResult syncResult = syncResultMapper.selectBySyncProjectId(project.getId());
+        if (syncResult == null) {
+            syncResult = new SyncResult();
+            syncResult.setSyncProjectId(project.getId());
+        }
+
+        syncResult.setLastSyncAt(LocalDateTime.now());
+        syncResult.setSyncStatus(status);
+        syncResult.setHasChanges(task.getHasChanges());
+        syncResult.setChangesCount(task.getChangesCount());
+        syncResult.setSourceCommitSha(task.getSourceCommitSha());
+        syncResult.setTargetCommitSha(task.getTargetCommitSha());
+        syncResult.setDurationSeconds(task.getDurationSeconds());
+        syncResult.setSummary(message);
+
+        if (syncResult.getId() == null) {
+            syncResultMapper.insert(syncResult);
+        } else {
+            syncResultMapper.updateById(syncResult);
+        }
+
+        // Only record to sync_event if there are changes or it's a failure
+        boolean hasChanges = Boolean.TRUE.equals(task.getHasChanges());
+        boolean isFailure = SyncResult.Status.FAILED.equals(status);
+
+        if (hasChanges || isFailure) {
+            SyncEvent event = new SyncEvent();
+            event.setSyncProjectId(project.getId());
+            event.setEventType(SyncEvent.EventType.SYNC_FINISHED);
+            event.setEventSource("pull_sync_executor");
+            event.setStatus(isFailure ? SyncEvent.Status.FAILED : SyncEvent.Status.SUCCESS);
+            event.setCommitSha(task.getSourceCommitSha());
+            event.setDurationSeconds(task.getDurationSeconds());
+            event.setEventData(java.util.Map.of(
+                "message", message,
+                "hasChanges", hasChanges,
+                "sourceSha", task.getSourceCommitSha() != null ? task.getSourceCommitSha() : "",
+                "targetSha", task.getTargetCommitSha() != null ? task.getTargetCommitSha() : ""
+            ));
+            event.setEventTime(LocalDateTime.now());
+            syncEventMapper.insert(event);
+            log.info("Recorded sync event for project {} - status: {}, hasChanges: {}",
+                project.getProjectKey(), status, hasChanges);
+        } else {
+            log.info("Skipped event recording for project {} - no changes and not a failure",
+                project.getProjectKey());
+        }
+    }
+
+    /**
+     * Record sync finished event with detailed information
+     * @deprecated Use recordSyncResult instead
+     */
+    @Deprecated
     private void recordSyncFinishedEvent(SyncProject project, SyncTask task, String commitSha, String message) {
-        SyncEvent event = new SyncEvent();
-        event.setSyncProjectId(project.getId());
-        event.setEventType(SyncEvent.EventType.SYNC_FINISHED);
-        event.setEventSource("pull_sync_executor");
-        event.setStatus(SyncEvent.Status.SUCCESS);
-        event.setCommitSha(commitSha);
-        event.setDurationSeconds(task.getDurationSeconds());
-        event.setEventData(java.util.Map.of(
-            "message", message,
-            "hasChanges", task.getHasChanges() != null ? task.getHasChanges() : false,
-            "sourceSha", task.getSourceCommitSha() != null ? task.getSourceCommitSha() : "",
-            "targetSha", task.getTargetCommitSha() != null ? task.getTargetCommitSha() : ""
-        ));
-        event.setEventTime(LocalDateTime.now());
-        syncEventMapper.insert(event);
+        recordSyncResult(project, task, SyncResult.Status.SUCCESS, message);
     }
 
     /**

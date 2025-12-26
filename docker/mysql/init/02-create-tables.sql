@@ -126,7 +126,29 @@ CREATE TABLE IF NOT EXISTS sync_task (
     INDEX idx_task_type (task_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='统一同步任务表';
 
--- ==================== 7. SYNC_EVENT (依赖 SYNC_PROJECT) ====================
+-- ==================== 7. SYNC_RESULT (依赖 SYNC_PROJECT) ====================
+-- Store last sync result for each project (one record per project)
+CREATE TABLE IF NOT EXISTS sync_result (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    sync_project_id BIGINT NOT NULL UNIQUE COMMENT '关联同步项目ID(唯一)',
+    last_sync_at DATETIME COMMENT '最后同步时间',
+    sync_status VARCHAR(20) COMMENT '同步状态: success/failed/skipped',
+    has_changes TINYINT(1) COMMENT '是否有变更',
+    changes_count INT COMMENT '变更数量',
+    source_commit_sha VARCHAR(64) COMMENT '源提交SHA',
+    target_commit_sha VARCHAR(64) COMMENT '目标提交SHA',
+    duration_seconds INT COMMENT '执行耗时(秒)',
+    error_message TEXT COMMENT '错误信息',
+    summary TEXT COMMENT '同步摘要',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    FOREIGN KEY (sync_project_id) REFERENCES sync_project(id) ON DELETE CASCADE,
+    INDEX idx_last_sync_at (last_sync_at),
+    INDEX idx_sync_status (sync_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='同步结果表-每项目一条记录';
+
+-- ==================== 8. SYNC_EVENT (依赖 SYNC_PROJECT) ====================
+-- Only records events with changes or failures (not skipped syncs)
 CREATE TABLE IF NOT EXISTS sync_event (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
     sync_project_id BIGINT NOT NULL COMMENT '关联同步项目ID',
