@@ -194,5 +194,20 @@ public class ProjectOverviewDTO {
          * Error message
          */
         private String errorMessage;
+
+        /**
+         * Last sync summary
+         */
+        private String lastSyncSummary;
+
+        /**
+         * Has changes in last sync
+         */
+        private Boolean hasChanges;
+
+        /**
+         * Changes count in last sync
+         */
+        private Integer changesCount;
     }
 }

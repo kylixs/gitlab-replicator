@@ -220,14 +220,41 @@
           </el-tag>
         </div>
       </template>
+
+      <!-- Last Sync Summary Banner -->
+      <el-alert
+        v-if="overview.task.lastSyncSummary"
+        :title="overview.task.lastSyncSummary"
+        :type="getSyncSummaryType(overview.task.lastSyncSummary)"
+        :closable="false"
+        show-icon
+        class="sync-summary-banner"
+      />
+
       <el-descriptions :column="2" border>
         <el-descriptions-item label="Task Type">
           <el-tag type="info">{{ overview.task.taskType }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="Current Status">
+          <el-tag :type="getTaskStatusType(overview.task.taskStatus)">
+            {{ formatTaskStatus(overview.task.taskStatus) }}
+          </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="Last Sync Status">
           <el-tag v-if="overview.task.lastSyncStatus" :type="overview.task.lastSyncStatus === 'success' ? 'success' : 'danger'">
             {{ overview.task.lastSyncStatus }}
           </el-tag>
+          <span v-else>-</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="Last Sync Result">
+          <span v-if="overview.task.hasChanges !== null && overview.task.hasChanges !== undefined">
+            <el-tag v-if="overview.task.hasChanges" type="success">
+              {{ overview.task.changesCount || 0 }} changes synced
+            </el-tag>
+            <el-tag v-else type="info">
+              No changes (skipped)
+            </el-tag>
+          </span>
           <span v-else>-</span>
         </el-descriptions-item>
         <el-descriptions-item label="Last Run At">
@@ -236,8 +263,9 @@
         <el-descriptions-item label="Next Run At">
           {{ formatInstant(overview.task.nextRunAt) }}
         </el-descriptions-item>
-        <el-descriptions-item label="Duration (seconds)">
-          {{ overview.task.durationSeconds || '-' }}
+        <el-descriptions-item label="Duration">
+          <span v-if="overview.task.durationSeconds">{{ overview.task.durationSeconds }} seconds</span>
+          <span v-else>-</span>
         </el-descriptions-item>
         <el-descriptions-item label="Consecutive Failures">
           <el-tag v-if="overview.task.consecutiveFailures > 0" type="danger">
@@ -354,6 +382,24 @@ const getTaskStatusType = (status: string) => {
     'running': 'success'
   }
   return typeMap[status.toLowerCase()] || 'info'
+}
+
+const formatTaskStatus = (status: string) => {
+  const statusMap: Record<string, string> = {
+    'waiting': 'Waiting',
+    'pending': 'Pending',
+    'running': 'Running'
+  }
+  return statusMap[status.toLowerCase()] || status
+}
+
+const getSyncSummaryType = (summary: string) => {
+  if (summary.includes('✓') || summary.includes('成功') || summary.includes('跳过')) {
+    return 'success'
+  } else if (summary.includes('✗') || summary.includes('失败')) {
+    return 'error'
+  }
+  return 'info'
 }
 </script>
 
@@ -495,5 +541,10 @@ const getTaskStatusType = (status: string) => {
 
 .sync-config {
   margin-bottom: 0;
+}
+
+.sync-summary-banner {
+  margin-bottom: 16px;
+  font-size: 14px;
 }
 </style>

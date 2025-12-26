@@ -103,6 +103,9 @@ export interface ProjectOverview {
     durationSeconds: number
     consecutiveFailures: number
     errorMessage?: string
+    lastSyncSummary?: string
+    hasChanges?: boolean
+    changesCount?: number
   }
 }
 

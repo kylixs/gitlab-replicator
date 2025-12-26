@@ -45,6 +45,7 @@ public class ProjectListService {
     private final PullSyncConfigMapper pullSyncConfigMapper;
     private final DiffCalculator diffCalculator;
     private final SyncTaskService syncTaskService;
+    private final com.gitlab.mirror.server.mapper.SyncEventMapper syncEventMapper;
 
     public ProjectListService(
             BranchSnapshotService branchSnapshotService,
@@ -52,13 +53,15 @@ public class ProjectListService {
             TargetProjectInfoMapper targetProjectInfoMapper,
             PullSyncConfigMapper pullSyncConfigMapper,
             DiffCalculator diffCalculator,
-            SyncTaskService syncTaskService) {
+            SyncTaskService syncTaskService,
+            com.gitlab.mirror.server.mapper.SyncEventMapper syncEventMapper) {
         this.branchSnapshotService = branchSnapshotService;
         this.sourceProjectInfoMapper = sourceProjectInfoMapper;
         this.targetProjectInfoMapper = targetProjectInfoMapper;
         this.pullSyncConfigMapper = pullSyncConfigMapper;
         this.diffCalculator = diffCalculator;
         this.syncTaskService = syncTaskService;
+        this.syncEventMapper = syncEventMapper;
     }
 
     /**
@@ -364,11 +367,80 @@ public class ProjectListService {
                 taskInfo.setDurationSeconds(task.getDurationSeconds());
                 taskInfo.setConsecutiveFailures(task.getConsecutiveFailures());
                 taskInfo.setErrorMessage(task.getErrorMessage());
+                taskInfo.setHasChanges(task.getHasChanges());
+                taskInfo.setChangesCount(task.getChangesCount());
+
+                // Build last sync summary from recent events
+                String summary = buildLastSyncSummary(projectId, task);
+                taskInfo.setLastSyncSummary(summary);
             }
         } catch (Exception e) {
             log.warn("Failed to get task info for project {}: {}", projectId, e.getMessage());
         }
 
         return taskInfo;
+    }
+
+    /**
+     * Build last sync summary from recent sync events
+     */
+    private String buildLastSyncSummary(Long projectId, SyncTask task) {
+        try {
+            // Query recent sync_finished events
+            QueryWrapper<com.gitlab.mirror.server.entity.SyncEvent> query = new QueryWrapper<>();
+            query.eq("sync_project_id", projectId);
+            query.eq("event_type", "sync_finished");
+            query.orderByDesc("event_time");
+            query.last("LIMIT 1");
+
+            com.gitlab.mirror.server.entity.SyncEvent lastEvent = syncEventMapper.selectOne(query);
+
+            if (lastEvent == null) {
+                return "无同步记录";
+            }
+
+            // Build summary based on event data
+            StringBuilder summary = new StringBuilder();
+
+            // Check if sync was skipped
+            if (lastEvent.getErrorMessage() != null &&
+                (lastEvent.getErrorMessage().toLowerCase().contains("skipped") ||
+                 lastEvent.getErrorMessage().toLowerCase().contains("no changes") ||
+                 lastEvent.getErrorMessage().toLowerCase().contains("跳过"))) {
+                summary.append("✓ 跳过同步 (无变更)");
+            } else if ("success".equals(lastEvent.getStatus())) {
+                // Successful sync with changes
+                summary.append("✓ 同步成功");
+
+                if (task.getChangesCount() != null && task.getChangesCount() > 0) {
+                    summary.append(" - ").append(task.getChangesCount()).append(" 个变更");
+                }
+
+                if (lastEvent.getBranchName() != null) {
+                    summary.append(" (分支: ").append(lastEvent.getBranchName()).append(")");
+                }
+            } else if ("failed".equals(lastEvent.getStatus())) {
+                summary.append("✗ 同步失败");
+                if (lastEvent.getErrorMessage() != null && !lastEvent.getErrorMessage().isEmpty()) {
+                    String errorMsg = lastEvent.getErrorMessage();
+                    if (errorMsg.length() > 50) {
+                        errorMsg = errorMsg.substring(0, 50) + "...";
+                    }
+                    summary.append(": ").append(errorMsg);
+                }
+            } else {
+                summary.append("状态: ").append(lastEvent.getStatus());
+            }
+
+            // Add duration if available
+            if (lastEvent.getDurationSeconds() != null && lastEvent.getDurationSeconds() > 0) {
+                summary.append(" (耗时: ").append(lastEvent.getDurationSeconds()).append("秒)");
+            }
+
+            return summary.toString();
+        } catch (Exception e) {
+            log.warn("Failed to build sync summary for project {}: {}", projectId, e.getMessage());
+            return "无法获取同步摘要";
+        }
     }
 }
