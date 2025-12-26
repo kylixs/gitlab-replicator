@@ -115,6 +115,8 @@ public class SyncEvent {
         public static final String SYNC_FAILED = "sync_failed";
         public static final String MIRROR_CREATED = "mirror_created";
         public static final String MIRROR_UPDATED = "mirror_updated";
+        public static final String TASK_BLOCKED = "task_blocked";
+        public static final String TASK_RECOVERED = "task_recovered";
     }
 
     /**

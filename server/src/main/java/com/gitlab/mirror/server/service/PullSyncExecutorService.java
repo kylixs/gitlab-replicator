@@ -159,6 +159,9 @@ public class PullSyncExecutorService {
             task.setNextRunAt(null); // No next run for blocked tasks
             syncTaskMapper.updateById(task);
             log.info("Task {} blocked due to project status: {}", task.getId(), project.getSyncStatus());
+
+            // Record task blocked event
+            recordTaskBlockedEvent(project, task, "Project in non-syncable status: " + project.getSyncStatus());
             return;
         }
 
@@ -584,6 +587,11 @@ public class PullSyncExecutorService {
             task.setNextRunAt(null); // No next run for blocked tasks
             log.warn("Task {} blocked due to: {}, failures: {}",
                 task.getId(), blockReason, task.getConsecutiveFailures());
+
+            // Record task blocked event
+            if (project != null) {
+                recordTaskBlockedEvent(project, task, blockReason);
+            }
         } else {
             task.setTaskStatus("waiting");
             // Calculate retry time with exponential backoff for retryable errors
@@ -824,6 +832,85 @@ public class PullSyncExecutorService {
             log.info("Skipped event recording for project {} - no changes and not a failure",
                 project.getProjectKey());
         }
+    }
+
+    /**
+     * Recover blocked task (manually or automatically)
+     *
+     * @param task Sync task
+     * @param reason Recovery reason
+     */
+    public void recoverBlockedTask(SyncTask task, String reason) {
+        if (!"blocked".equals(task.getTaskStatus())) {
+            log.warn("Task {} is not blocked, current status: {}", task.getId(), task.getTaskStatus());
+            return;
+        }
+
+        SyncProject project = syncProjectMapper.selectById(task.getSyncProjectId());
+        if (project == null) {
+            log.error("Project not found for task {}", task.getId());
+            return;
+        }
+
+        // Check if project is now in syncable state
+        if (!isSyncable(project.getSyncStatus())) {
+            log.warn("Cannot recover task {} - project {} still in non-syncable status: {}",
+                task.getId(), project.getProjectKey(), project.getSyncStatus());
+            return;
+        }
+
+        // Reset task to waiting status
+        task.setTaskStatus("waiting");
+        task.setErrorMessage(null);
+        task.setConsecutiveFailures(0); // Reset failure count
+        task.setNextRunAt(Instant.now().plusSeconds(10)); // Schedule to run soon
+        syncTaskMapper.updateById(task);
+
+        // Record task recovered event
+        SyncEvent event = new SyncEvent();
+        event.setSyncProjectId(project.getId());
+        event.setEventType(SyncEvent.EventType.TASK_RECOVERED);
+        event.setEventSource("pull_sync_executor");
+        event.setStatus(SyncEvent.Status.SUCCESS);
+        event.setErrorMessage(null);
+        event.setEventData(java.util.Map.of(
+            "taskId", task.getId(),
+            "previousStatus", "blocked",
+            "newStatus", "waiting",
+            "recoveryReason", reason,
+            "projectStatus", project.getSyncStatus()
+        ));
+        event.setEventTime(LocalDateTime.now());
+        syncEventMapper.insert(event);
+
+        log.info("Recovered blocked task {} for project {}: {}", task.getId(), project.getProjectKey(), reason);
+    }
+
+    /**
+     * Record task blocked event
+     *
+     * @param project Sync project
+     * @param task Sync task
+     * @param reason Block reason
+     */
+    private void recordTaskBlockedEvent(SyncProject project, SyncTask task, String reason) {
+        SyncEvent event = new SyncEvent();
+        event.setSyncProjectId(project.getId());
+        event.setEventType(SyncEvent.EventType.TASK_BLOCKED);
+        event.setEventSource("pull_sync_executor");
+        event.setStatus(SyncEvent.Status.FAILED);
+        event.setErrorMessage(reason);
+        event.setEventData(java.util.Map.of(
+            "taskId", task.getId(),
+            "taskStatus", task.getTaskStatus(),
+            "projectStatus", project.getSyncStatus(),
+            "blockReason", reason,
+            "consecutiveFailures", task.getConsecutiveFailures(),
+            "errorType", task.getErrorType() != null ? task.getErrorType() : "unknown"
+        ));
+        event.setEventTime(LocalDateTime.now());
+        syncEventMapper.insert(event);
+        log.info("Recorded task blocked event for project {}: {}", project.getProjectKey(), reason);
     }
 
     /**
