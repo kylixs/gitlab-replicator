@@ -99,7 +99,11 @@ const handleSync = async () => {
     )
     syncing.value = true
     await projectsApi.batchSync([projectId])
-    ElMessage.success('Sync triggered successfully')
+    ElMessage.success({
+      message: 'Sync task has been scheduled. The sync will execute shortly. You can check the task status in the overview.',
+      duration: 5000
+    })
+    // Reload overview after 2 seconds to show updated task info
     setTimeout(() => loadOverview(), 2000)
   } catch (error: any) {
     if (error !== 'cancel') {
