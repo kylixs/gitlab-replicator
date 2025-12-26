@@ -1,7 +1,6 @@
 package com.gitlab.mirror.server.executor;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
@@ -11,7 +10,6 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -104,23 +102,40 @@ public class GitCommandExecutor {
     }
 
     /**
-     * Extract shell script from resources to temp directory
+     * Locate external shell script
+     * Searches in the following order:
+     * 1. ../scripts/ (development mode - relative to working directory)
+     * 2. ./scripts/ (production mode - relative to JAR location)
      */
     private String extractScript() throws IOException {
-        ClassPathResource resource = new ClassPathResource("scripts/" + SCRIPT_NAME);
-        Path tempScript = Files.createTempFile("git-sync-", ".sh");
+        // Try relative to current working directory (development mode)
+        Path devScript = Paths.get("scripts", SCRIPT_NAME);
+        if (Files.exists(devScript) && Files.isRegularFile(devScript)) {
+            devScript.toFile().setExecutable(true);
+            log.info("Using development git-sync script: {}", devScript.toAbsolutePath());
+            return devScript.toAbsolutePath().toString();
+        }
 
-        Files.copy(resource.getInputStream(), tempScript, StandardCopyOption.REPLACE_EXISTING);
+        // Try relative to JAR location (production mode)
+        String jarPath = GitCommandExecutor.class.getProtectionDomain()
+            .getCodeSource().getLocation().getPath();
+        Path jarDir = Paths.get(jarPath).getParent();
+        Path prodScript = jarDir.resolve("scripts").resolve(SCRIPT_NAME);
 
-        // Make executable
-        tempScript.toFile().setExecutable(true);
+        if (Files.exists(prodScript) && Files.isRegularFile(prodScript)) {
+            prodScript.toFile().setExecutable(true);
+            log.info("Using production git-sync script: {}", prodScript.toAbsolutePath());
+            return prodScript.toAbsolutePath().toString();
+        }
 
-        log.info("Extracted git-sync script to: {}", tempScript);
-
-        // Delete on exit
-        tempScript.toFile().deleteOnExit();
-
-        return tempScript.toString();
+        throw new IOException(String.format(
+            "git-sync.sh not found. Searched in:\n" +
+            "  - Development: %s\n" +
+            "  - Production: %s\n" +
+            "Please ensure the script exists in one of these locations.",
+            devScript.toAbsolutePath(),
+            prodScript.toAbsolutePath()
+        ));
     }
 
     /**

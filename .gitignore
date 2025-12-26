@@ -54,3 +54,4 @@ server/src/main/resources/static/
 web-ui/dist/
 web-ui/tests/.auth
 playwright-report
+node_modules
