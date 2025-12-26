@@ -22,13 +22,18 @@
           v-model="filters.status"
           placeholder="All Status"
           clearable
-          style="width: 150px"
+          style="width: 180px"
         >
-          <el-option label="Synced" value="synced" />
+          <el-option label="Discovered" value="discovered" />
+          <el-option label="Initializing" value="initializing" />
+          <el-option label="Active" value="active" />
           <el-option label="Syncing" value="syncing" />
-          <el-option label="Outdated" value="outdated" />
+          <el-option label="Error" value="error" />
+          <el-option label="Source Missing" value="source_missing" />
+          <el-option label="Disabled" value="disabled" />
+          <el-option label="Deleted" value="deleted" />
+          <!-- Legacy status for compatibility -->
           <el-option label="Paused" value="paused" />
-          <el-option label="Failed" value="failed" />
           <el-option label="Pending" value="pending" />
         </el-select>
       </el-form-item>

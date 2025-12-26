@@ -536,8 +536,8 @@ public class PullSyncExecutorService {
         // Update SyncProject status based on error type
         if (project != null) {
             if ("not_found".equals(errorType)) {
-                project.setSyncStatus(SyncProject.SyncStatus.SOURCE_NOT_FOUND);
-                log.info("Updated project status to source_not_found: {}", project.getProjectKey());
+                project.setSyncStatus(SyncProject.SyncStatus.SOURCE_MISSING);
+                log.info("Updated project status to source_missing: {}", project.getProjectKey());
             } else {
                 project.setSyncStatus(SyncProject.SyncStatus.FAILED);
                 log.info("Updated project status to failed: {}", project.getProjectKey());

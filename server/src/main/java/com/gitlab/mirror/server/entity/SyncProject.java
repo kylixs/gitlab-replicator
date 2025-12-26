@@ -93,6 +93,10 @@ public class SyncProject {
         public static final String SYNCING = "syncing";
         public static final String FAILED = "failed";
         public static final String DELETED = "deleted";
+        public static final String SOURCE_MISSING = "source_missing";
+
+        // Legacy constant for compatibility - will be removed in future version
+        @Deprecated
         public static final String SOURCE_NOT_FOUND = "source_not_found";
     }
 }

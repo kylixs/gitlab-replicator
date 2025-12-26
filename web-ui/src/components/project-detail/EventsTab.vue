@@ -44,6 +44,14 @@
           <span v-else>-</span>
         </template>
       </el-table-column>
+
+      <el-table-column label="Actions" width="120" fixed="right">
+        <template #default="{ row }">
+          <el-button size="small" @click="handleViewDetail(row)">
+            Detail
+          </el-button>
+        </template>
+      </el-table-column>
     </el-table>
 
     <div class="pagination">
@@ -57,15 +65,111 @@
         @current-change="loadEvents"
       />
     </div>
+
+    <!-- Event Detail Drawer -->
+    <el-drawer
+      v-model="detailDrawerVisible"
+      title="Event Detail"
+      size="60%"
+      direction="rtl"
+    >
+      <div v-if="selectedEvent && eventDetailEnhanced" class="event-detail">
+        <!-- Basic Info -->
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="Event ID">
+            {{ eventDetailEnhanced.id }}
+          </el-descriptions-item>
+          <el-descriptions-item label="Project">
+            {{ eventDetailEnhanced.projectKey }}
+          </el-descriptions-item>
+          <el-descriptions-item label="Event Type">
+            {{ formatEventType(eventDetailEnhanced.eventType) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="Status">
+            <el-tag :type="getStatusType(eventDetailEnhanced.status)">
+              {{ eventDetailEnhanced.status }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="Time">
+            {{ formatTime(eventDetailEnhanced.eventTime) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="Duration" v-if="eventDetailEnhanced.durationSeconds">
+            {{ formatDuration(eventDetailEnhanced.durationSeconds * 1000) }}
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <!-- Error Message for Failed Events -->
+        <div v-if="eventDetailEnhanced.errorMessage" class="error-section">
+          <el-divider />
+          <h3>Error Details</h3>
+          <el-alert type="error" :closable="false">
+            {{ eventDetailEnhanced.errorMessage }}
+          </el-alert>
+        </div>
+
+        <!-- Branch Information for Successful Events -->
+        <div v-if="eventDetailEnhanced.totalBranches !== undefined && eventDetailEnhanced.totalBranches > 0">
+          <el-divider />
+          <h3>Sync Summary</h3>
+          <div class="branch-summary">
+            <el-tag type="info" size="large">
+              Total Branches: {{ eventDetailEnhanced.totalBranches }}
+            </el-tag>
+          </div>
+
+          <h4 style="margin-top: 20px">Recent 10 Branches</h4>
+          <el-table :data="eventDetailEnhanced.recentBranches" stripe style="width: 100%">
+            <el-table-column label="Branch" min-width="150">
+              <template #default="{ row }">
+                <span style="font-weight: 500">{{ row.branchName }}</span>
+                <el-tag v-if="row.isDefault" type="success" size="small" style="margin-left: 8px">
+                  Default
+                </el-tag>
+                <el-tag v-if="row.isProtected" type="warning" size="small" style="margin-left: 8px">
+                  Protected
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="Commit" width="200">
+              <template #default="{ row }">
+                <el-tooltip :content="row.commitSha">
+                  <code style="font-size: 12px">{{ row.commitSha.substring(0, 8) }}</code>
+                </el-tooltip>
+              </template>
+            </el-table-column>
+            <el-table-column prop="commitMessage" label="Message" min-width="250" />
+            <el-table-column prop="commitAuthor" label="Author" width="150" />
+            <el-table-column label="Committed At" width="180">
+              <template #default="{ row }">
+                {{ formatTime(row.committedAt) }}
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <!-- Event Data (JSON) -->
+        <div v-if="eventDetailEnhanced.eventData">
+          <el-divider />
+          <h3>Event Data</h3>
+          <div class="event-details-json">
+            <pre>{{ JSON.stringify(eventDetailEnhanced.eventData, null, 2) }}</pre>
+          </div>
+        </div>
+      </div>
+      <div v-else class="loading-details">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        Loading details...
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { eventsApi } from '@/api/events'
+import { eventsApi, type EventDetailEnhanced } from '@/api/events'
 import type { EventListItem } from '@/types'
-import { Refresh, Warning, Document, CircleCheck } from '@element-plus/icons-vue'
+import { Refresh, Warning, Document, CircleCheck, Loading } from '@element-plus/icons-vue'
 
 interface Props {
   projectId: number
@@ -76,6 +180,9 @@ const props = defineProps<Props>()
 
 const loading = ref(false)
 const events = ref<EventListItem[]>([])
+const detailDrawerVisible = ref(false)
+const selectedEvent = ref<EventListItem | null>(null)
+const eventDetailEnhanced = ref<EventDetailEnhanced | null>(null)
 
 const pagination = reactive({
   page: 1,
@@ -158,6 +265,20 @@ const isSkippedSync = (message: string) => {
   return skipPatterns.some(pattern => lowerMessage.includes(pattern))
 }
 
+const handleViewDetail = async (event: EventListItem) => {
+  selectedEvent.value = event
+  eventDetailEnhanced.value = null
+  detailDrawerVisible.value = true
+
+  try {
+    const response = await eventsApi.getEventDetail(event.id)
+    eventDetailEnhanced.value = response.data
+  } catch (error) {
+    ElMessage.error('Failed to load event details')
+    console.error('Load event details failed:', error)
+  }
+}
+
 onMounted(() => {
   loadEvents()
 })
@@ -193,5 +314,40 @@ onMounted(() => {
 .skip-message {
   color: #67c23a;
   font-style: italic;
+}
+
+.event-detail {
+  padding: 0 8px;
+}
+
+.error-section {
+  margin-top: 16px;
+}
+
+.branch-summary {
+  margin: 16px 0;
+}
+
+.event-details-json {
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.event-details-json pre {
+  margin: 0;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #333;
+}
+
+.loading-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #666;
+  padding: 16px;
 }
 </style>

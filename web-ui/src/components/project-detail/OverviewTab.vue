@@ -221,21 +221,17 @@
       <template #header>
         <div class="card-header">
           <span>Sync Task Information</span>
-          <el-tag :type="getTaskStatusType(overview.task.taskStatus)" size="small">
-            {{ overview.task.taskStatus }}
-          </el-tag>
+          <div class="header-actions">
+            <el-tag :type="getTaskStatusType(overview.task.taskStatus)" size="small">
+              {{ overview.task.taskStatus }}
+            </el-tag>
+            <el-button-group size="small" style="margin-left: 8px">
+              <el-button @click="handleViewTaskDetail">Detail</el-button>
+              <el-button @click="handleViewTaskLogs">Logs</el-button>
+            </el-button-group>
+          </div>
         </div>
       </template>
-
-      <!-- Last Sync Summary Banner -->
-      <el-alert
-        v-if="overview.task.lastSyncSummary"
-        :title="overview.task.lastSyncSummary"
-        :type="getSyncSummaryType(overview.task.lastSyncSummary)"
-        :closable="false"
-        show-icon
-        class="sync-summary-banner"
-      />
 
       <el-descriptions :column="2" border>
         <el-descriptions-item label="Task Type">
@@ -247,12 +243,12 @@
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="Last Sync Status">
-          <el-tag v-if="overview.task.lastSyncStatus" :type="overview.task.lastSyncStatus === 'success' ? 'success' : 'danger'">
+          <el-tag v-if="overview.task.lastSyncStatus" :type="overview.task.lastSyncStatus === 'success' ? 'success' : (overview.task.lastSyncStatus === 'skipped' ? 'info' : 'danger')">
             {{ overview.task.lastSyncStatus }}
           </el-tag>
           <span v-else>-</span>
         </el-descriptions-item>
-        <el-descriptions-item label="Last Sync Result">
+        <el-descriptions-item label="Last Sync Result" v-if="overview.task.lastSyncStatus === 'success' || overview.task.lastSyncStatus === 'skipped'">
           <span v-if="overview.task.hasChanges !== null && overview.task.hasChanges !== undefined">
             <el-tag v-if="overview.task.hasChanges" type="success">
               {{ overview.task.changesCount || 0 }} changes synced
@@ -262,6 +258,12 @@
             </el-tag>
           </span>
           <span v-else>-</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="Started At">
+          {{ formatInstant(overview.task.startedAt) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="Completed At">
+          {{ formatInstant(overview.task.completedAt) }}
         </el-descriptions-item>
         <el-descriptions-item label="Last Run At">
           {{ formatInstant(overview.task.lastRunAt) }}
@@ -311,14 +313,47 @@
 </template>
 
 <script setup lang="ts">
+import { ElMessage } from 'element-plus'
 import { SuccessFilled, WarningFilled, CircleCloseFilled, QuestionFilled } from '@element-plus/icons-vue'
+import { syncApi } from '@/api/sync'
 import type { ProjectOverview } from '@/types'
 
 interface Props {
   overview: ProjectOverview
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
+const emit = defineEmits(['refresh'])
+
+const handleViewTaskDetail = async () => {
+  const task = props.overview.task
+  if (!task) return
+
+  // Find latest sync result for this project
+  try {
+    const response = await syncApi.getSyncResults({
+      search: props.overview.project.projectKey,
+      page: 1,
+      size: 1
+    })
+
+    if (response.success && response.data && response.data.items.length > 0) {
+      const latestResult = response.data.items[0]
+      // Navigate to sync results page with the detail dialog open
+      window.open(`/#/sync-results?detail=${latestResult.id}`, '_blank')
+    } else {
+      ElMessage.info('No sync results found for this project')
+    }
+  } catch (error) {
+    ElMessage.error('Failed to load sync result')
+    console.error('Load sync result failed:', error)
+  }
+}
+
+const handleViewTaskLogs = () => {
+  // Navigate to sync events page filtered by this project
+  window.open(`/#/sync-events?search=${encodeURIComponent(props.overview.project.projectKey)}`, '_blank')
+}
 
 const getStatusType = (status: string) => {
   const typeMap: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
@@ -555,6 +590,12 @@ const getSyncSummaryType = (summary: string) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .sync-config {
