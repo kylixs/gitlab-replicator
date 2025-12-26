@@ -18,11 +18,12 @@ Branch sync works correctly - the branch sync test failures were due to timing/p
 | Branch Sync | 0/4 | 4/4 | ❌ FAIL |
 | Project Discovery | 2/2 | 0/2 | ✅ PASS |
 
-## 🐛 Bug #1: Auto-Sync Does Not Push Commits to Target
+## ✅ Bug #1: Auto-Sync Does Not Push Commits to Target (FIXED)
 
 **Severity**: 🔴 Critical
 **Component**: Auto-Sync Mechanism
-**Status**: 🔴 Open
+**Status**: ✅ Fixed
+**Fix Date**: 2025-12-27
 
 ### Description
 
@@ -46,27 +47,68 @@ After auto-sync completes with "success" status, the new commit should be visibl
 - Target GitLab does NOT have the new commit even after 30+ seconds
 - Manual sync works correctly for the same project
 
-### Impact
+### Root Cause
 
-Auto-sync is effectively non-functional for commit synchronization. Users relying on scheduled sync will have outdated target repositories.
+**Chicken-Egg Problem in Change Detection:**
 
-### Test Evidence
+The `checkForBranchChanges()` method used **stale database snapshots** instead of live data:
+1. New commit created in source GitLab
+2. Change detection compares database snapshots (not updated yet)
+3. No changes detected → sync skipped
+4. Snapshots never updated → loop continues
+
+**Why Manual Sync Worked:**
+- Manual sync sets `forceSync=true`
+- Bypasses change detection entirely
+- Always executes sync and updates snapshots
+
+### Fix Implementation
+
+**Changed**: `PullSyncExecutorService.checkForBranchChanges()`
+
+**Before** (broken):
+```java
+// Used stale database snapshots
+List<ProjectBranchSnapshot> sourceSnapshot =
+    branchSnapshotService.getBranchSnapshots(syncProjectId, "source");
+List<ProjectBranchSnapshot> targetSnapshot =
+    branchSnapshotService.getBranchSnapshots(syncProjectId, "target");
+```
+
+**After** (fixed):
+```java
+// Fetch fresh data from GitLab API
+List<RepositoryBranch> sourceBranches =
+    sourceGitLabApiClient.getBranches(sourceProjectId);
+List<RepositoryBranch> targetBranches =
+    targetGitLabApiClient.getBranches(targetProjectId);
+```
+
+### Verification
+
+**Test Scenario**:
+1. Created commit `3343a8ca` in source GitLab
+2. Waited for auto-sync scheduler (10-second interval)
+3. Observed logs:
 
 ```
-=== Testing auto-sync for ai group ===
-Creating commit: test: auto-sync test commit at 2025-12-26T19:32:21.871Z
-New commit created: 4375ed80
-Waiting for auto-sync (max 6 minutes)...
-Auto-sync completed with status: success
-Auto-sync result - status: success, hasChanges: true
-Waiting for commit 4375ed80 to appear in target...
-Error: Timeout waiting for commit 4375ed807faecddbab9769902db67a4040d51cd1 after 30000ms
+Branch differs: master, source=3343a8ca, target=06ce2962
+Branch changes detected for project: ai/test-rails-5, proceeding with sync
+Incremental sync completed successfully
 ```
+
+4. Verified target GitLab:
+```
+Target master commit: 3343a8ca ✅
+Commit message: test: auto-sync detection
+```
+
+**Result**: Auto-sync now correctly detects and syncs new commits! ✅
 
 ### Related Files
 
-- `server/src/main/java/com/gitlab/mirror/server/scheduler/*` - Scheduled sync tasks
-- `server/src/main/java/com/gitlab/mirror/server/service/sync/*` - Sync service logic
+- `server/src/main/java/com/gitlab/mirror/server/service/PullSyncExecutorService.java` - Fixed change detection
+- Commit: `fix(auto-sync): use live GitLab API data for change detection`
 
 ## ✅ Bug #2: New Branches Are Not Synced to Target (FALSE POSITIVE)
 
