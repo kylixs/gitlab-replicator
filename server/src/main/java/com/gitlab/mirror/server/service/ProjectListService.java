@@ -88,6 +88,16 @@ public class ProjectListService {
             dto.setGroupPath(sourceInfo.getGroupPath());
         }
 
+        // Get last sync status and consecutive failures from task
+        SyncTask task = syncTaskService.getTaskBySyncProjectId(project.getId());
+        if (task != null) {
+            dto.setLastSyncStatus(task.getLastSyncStatus());
+            dto.setConsecutiveFailures(task.getConsecutiveFailures());
+        } else {
+            dto.setLastSyncStatus(null);
+            dto.setConsecutiveFailures(0);
+        }
+
         // Calculate diff using DiffCalculator (not legacy method)
         ProjectListDTO.DiffInfo diff = calculateDiffWithCalculator(project);
         dto.setDiff(diff);

@@ -39,7 +39,6 @@ public class ApplicationStartupListener implements ApplicationListener<Applicati
 
         // Execute initialization tasks
         resetRunningTasks();
-        resetSyncingProjects();
 
         log.info("=== Application Startup Initialization Completed ===");
     }
@@ -96,49 +95,4 @@ public class ApplicationStartupListener implements ApplicationListener<Applicati
         }
     }
 
-    /**
-     * Reset projects stuck in syncing state to active
-     */
-    private void resetSyncingProjects() {
-        log.info("Checking for syncing projects to reset...");
-
-        try {
-            // Find all projects in syncing state
-            QueryWrapper<SyncProject> query = new QueryWrapper<>();
-            query.eq("sync_status", SyncProject.SyncStatus.SYNCING);
-            List<SyncProject> syncingProjects = syncProjectMapper.selectList(query);
-
-            if (syncingProjects.isEmpty()) {
-                log.info("No syncing projects found - system state is clean");
-                return;
-            }
-
-            log.warn("Found {} projects in syncing state from previous session - resetting to active",
-                    syncingProjects.size());
-
-            int resetCount = 0;
-            for (SyncProject project : syncingProjects) {
-                try {
-                    log.info("Resetting project: projectKey={}, status={}",
-                            project.getProjectKey(), project.getSyncStatus());
-
-                    // Reset to active state
-                    project.setSyncStatus(SyncProject.SyncStatus.ACTIVE);
-                    syncProjectMapper.updateById(project);
-                    resetCount++;
-
-                    log.info("Project reset successfully: projectKey={}", project.getProjectKey());
-
-                } catch (Exception e) {
-                    log.error("Failed to reset project: projectKey={}", project.getProjectKey(), e);
-                }
-            }
-
-            log.info("Project reset completed - reset {} out of {} syncing projects",
-                    resetCount, syncingProjects.size());
-
-        } catch (Exception e) {
-            log.error("Project reset failed", e);
-        }
-    }
 }

@@ -27,9 +27,9 @@
           <el-option label="Discovered" value="discovered" />
           <el-option label="Initializing" value="initializing" />
           <el-option label="Active" value="active" />
-          <el-option label="Syncing" value="syncing" />
           <el-option label="Warning" value="warning" />
           <el-option label="Error" value="error" />
+          <el-option label="Failed" value="failed" />
           <el-option label="Missing" value="missing" />
           <el-option label="Disabled" value="disabled" />
           <el-option label="Deleted" value="deleted" />

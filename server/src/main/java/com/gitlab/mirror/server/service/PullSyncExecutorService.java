@@ -191,10 +191,6 @@ public class PullSyncExecutorService {
     private void executeFirstSync(SyncTask task, SyncProject project, PullSyncConfig config) {
         log.info("Executing first sync for project: {}", project.getProjectKey());
 
-        // Update project status to syncing
-        project.setSyncStatus(SyncProject.SyncStatus.SYNCING);
-        syncProjectMapper.updateById(project);
-
         // 1. Ensure target project exists
         ensureTargetProjectExists(project);
 
@@ -277,10 +273,6 @@ public class PullSyncExecutorService {
      */
     private void executeIncrementalSync(SyncTask task, SyncProject project, PullSyncConfig config) {
         log.info("Executing incremental sync for project: {}", project.getProjectKey());
-
-        // Update project status to syncing
-        project.setSyncStatus(SyncProject.SyncStatus.SYNCING);
-        syncProjectMapper.updateById(project);
 
         // 1. Ensure target project exists
         ensureTargetProjectExists(project);
@@ -520,7 +512,7 @@ public class PullSyncExecutorService {
         SyncProject project = syncProjectMapper.selectById(task.getSyncProjectId());
         if (project != null) {
             String previousStatus = project.getSyncStatus();
-            // Always reset to active on success (from syncing, warning, or error states)
+            // Always reset to active on success (from warning or error states)
             if (!SyncProject.SyncStatus.ACTIVE.equals(previousStatus)) {
                 project.setSyncStatus(SyncProject.SyncStatus.ACTIVE);
                 project.setErrorMessage(null);
@@ -534,6 +526,12 @@ public class PullSyncExecutorService {
                 project.setLastSyncAt(LocalDateTime.now());
                 syncProjectMapper.updateById(project);
             }
+
+            // Record sync result to sync_result table
+            String message = hasChanges ?
+                String.format("Sync completed with changes (source: %s, target: %s)", sourceSha, targetSha) :
+                "Sync completed without changes";
+            recordSyncResult(project, task, SyncResult.Status.SUCCESS, message);
         }
     }
 
@@ -592,18 +590,12 @@ public class PullSyncExecutorService {
                 log.info("Updated project status to failed: {} (was: {}, failures: {})",
                     project.getProjectKey(), previousStatus, task.getConsecutiveFailures());
             } else {
-                // Retryable error with failures < 5
-                // Reset syncing to warning (has failures) or active (if was active)
-                if (SyncProject.SyncStatus.SYNCING.equals(previousStatus)) {
-                    // Always set to WARNING when there are failures
+                // Retryable error with failures < 5 - set to WARNING
+                if (SyncProject.SyncStatus.ACTIVE.equals(previousStatus) ||
+                    SyncProject.SyncStatus.WARNING.equals(previousStatus)) {
                     project.setSyncStatus(SyncProject.SyncStatus.WARNING);
-                    log.info("Set project status to warning after sync failure: {} (failures: {})",
-                        project.getProjectKey(), task.getConsecutiveFailures());
-                } else if (SyncProject.SyncStatus.ACTIVE.equals(previousStatus)) {
-                    // First failure on an active project
-                    project.setSyncStatus(SyncProject.SyncStatus.WARNING);
-                    log.info("Set project status to warning: {} (was active, failures: {})",
-                        project.getProjectKey(), task.getConsecutiveFailures());
+                    log.info("Set project status to warning: {} (was: {}, failures: {})",
+                        project.getProjectKey(), previousStatus, task.getConsecutiveFailures());
                 }
                 // If already WARNING, keep it as WARNING
             }
@@ -631,8 +623,13 @@ public class PullSyncExecutorService {
         // Update task status in new transaction to ensure it persists
         taskStatusUpdateService.updateAfterFailure(task);
 
-        // Record sync failed event with details
+        // Record sync result to sync_result table
         if (project != null) {
+            String failureMessage = String.format("Sync failed: %s (failures: %d, error: %s)",
+                e.getMessage(), task.getConsecutiveFailures(), errorType);
+            recordSyncResult(project, task, SyncResult.Status.FAILED, failureMessage);
+
+            // Record sync failed event with details
             SyncEvent event = new SyncEvent();
             event.setSyncProjectId(project.getId());
             event.setEventType(SyncEvent.EventType.SYNC_FAILED);
@@ -696,10 +693,9 @@ public class PullSyncExecutorService {
      * @return true if syncable
      */
     private boolean isSyncable(String syncStatus) {
-        // Syncable states: active, syncing, warning, pending (for backward compatibility)
+        // Syncable states: active, warning, pending (for backward compatibility)
         // Not syncable: missing, deleted, failed
         return SyncProject.SyncStatus.ACTIVE.equals(syncStatus) ||
-               SyncProject.SyncStatus.SYNCING.equals(syncStatus) ||
                SyncProject.SyncStatus.WARNING.equals(syncStatus) ||
                SyncProject.SyncStatus.PENDING.equals(syncStatus) ||
                SyncProject.SyncStatus.TARGET_CREATED.equals(syncStatus) ||
@@ -781,17 +777,7 @@ public class PullSyncExecutorService {
         }
         task.setCompletedAt(completedAt);
 
-        // Update project status based on sync result
-        if (SyncResult.Status.SKIPPED.equals(status)) {
-            // For skipped syncs, set status to ACTIVE if it was syncing
-            if (SyncProject.SyncStatus.SYNCING.equals(project.getSyncStatus())) {
-                project.setSyncStatus(SyncProject.SyncStatus.ACTIVE);
-                project.setErrorMessage(null);
-                syncProjectMapper.updateById(project);
-                log.info("Updated project status to active after skipped sync: {}", project.getProjectKey());
-            }
-        }
-        // Note: Success and failure status updates are handled in markSyncSuccess() and markSyncFailed()
+        // Note: Project status updates are handled in updateTaskAfterSuccess() and handleSyncFailure()
 
         // Always update sync_result table
         SyncResult syncResult = syncResultMapper.selectBySyncProjectId(project.getId());

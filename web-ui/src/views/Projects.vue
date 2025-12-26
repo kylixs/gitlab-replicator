@@ -67,16 +67,34 @@
           </template>
         </el-table-column>
 
+        <el-table-column label="Last Sync" width="100">
+          <template #default="{ row }">
+            <el-tag v-if="row.lastSyncStatus" :type="getSyncStatusType(row.lastSyncStatus)" size="small">
+              {{ formatLastSyncStatus(row.lastSyncStatus) }}
+            </el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="Failures" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.consecutiveFailures > 0" type="danger" size="small">
+              {{ row.consecutiveFailures }}
+            </el-tag>
+            <span v-else style="color: #67c23a">0</span>
+          </template>
+        </el-table-column>
+
         <el-table-column label="Diff" width="240">
           <template #default="{ row }">
             <DiffBadge :diff="row.diff" />
           </template>
         </el-table-column>
 
-        <el-table-column label="Delay" width="120" sortable="custom" prop="delaySeconds">
+        <el-table-column label="Delay" width="100" sortable="custom" prop="delaySeconds">
           <template #default="{ row }">
-            <el-tag :type="getDelayType(row.delaySeconds)">
-              {{ row.delayFormatted }}
+            <el-tag :type="getDelayType(row.delaySeconds)" size="small">
+              {{ formatDelayReadable(row.delaySeconds) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -329,13 +347,16 @@ const getStatusType = (status: string) => {
   const typeMap: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
     'active': 'success',
     'synced': 'success',
-    'syncing': 'info',
     'warning': 'warning',
     'outdated': 'warning',
     'paused': 'info',
     'failed': 'danger',
     'missing': 'danger',
-    'pending': 'warning'
+    'error': 'danger',
+    'pending': 'warning',
+    'discovered': 'info',
+    'initializing': 'info',
+    'disabled': 'info'
   }
   return typeMap[status.toLowerCase()] || 'info'
 }
@@ -357,7 +378,6 @@ const formatStatus = (status: string) => {
     'discovered': 'Discovered',
     'initializing': 'Initializing',
     'active': 'Active',
-    'syncing': 'Syncing',
     'warning': 'Warning',
     'error': 'Error',
     'failed': 'Failed',
@@ -373,6 +393,43 @@ const formatStatus = (status: string) => {
 const formatTime = (time: string) => {
   if (!time) return '-'
   return new Date(time).toLocaleString()
+}
+
+const getSyncStatusType = (status: string) => {
+  const typeMap: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
+    'success': 'success',
+    'failed': 'danger',
+    'skipped': 'info'
+  }
+  return typeMap[status.toLowerCase()] || 'info'
+}
+
+const formatLastSyncStatus = (status: string) => {
+  if (!status) return '-'
+  const statusLower = status.toLowerCase()
+  const statusMap: Record<string, string> = {
+    'success': 'Success',
+    'failed': 'Failed',
+    'skipped': 'Skipped'
+  }
+  return statusMap[statusLower] || status
+}
+
+const formatDelayReadable = (delaySeconds: number) => {
+  if (!delaySeconds || delaySeconds === 0) return '0s'
+
+  if (delaySeconds < 60) {
+    return `${delaySeconds}s`
+  } else if (delaySeconds < 3600) {
+    const minutes = Math.floor(delaySeconds / 60)
+    return `${minutes}m`
+  } else if (delaySeconds < 86400) {
+    const hours = Math.floor(delaySeconds / 3600)
+    return `${hours}h`
+  } else {
+    const days = Math.floor(delaySeconds / 86400)
+    return `${days}d`
+  }
 }
 
 const handleExport = () => {

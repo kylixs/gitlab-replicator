@@ -49,6 +49,8 @@ export interface ProjectListItem {
   syncMethod: string
   lastSyncAt: string
   updatedAt: string
+  lastSyncStatus?: string
+  consecutiveFailures?: number
   groupPath?: string
   diff: {
     diffStatus?: string

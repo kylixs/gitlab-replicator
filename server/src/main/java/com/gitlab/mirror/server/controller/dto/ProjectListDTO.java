@@ -45,6 +45,16 @@ public class ProjectListDTO {
     private LocalDateTime updatedAt;
 
     /**
+     * Last sync status (success/failed/skipped)
+     */
+    private String lastSyncStatus;
+
+    /**
+     * Consecutive failures count
+     */
+    private Integer consecutiveFailures;
+
+    /**
      * Project diff statistics
      */
     private DiffInfo diff;
