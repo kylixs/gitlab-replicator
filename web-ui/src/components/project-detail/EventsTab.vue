@@ -29,7 +29,14 @@
         </template>
       </el-table-column>
 
-      <el-table-column prop="message" label="Message" min-width="200" />
+      <el-table-column prop="message" label="Message" min-width="200">
+        <template #default="{ row }">
+          <div class="message-cell">
+            <el-icon v-if="isSkippedSync(row.message)" :size="16" class="skip-icon"><CircleCheck /></el-icon>
+            <span :class="{ 'skip-message': isSkippedSync(row.message) }">{{ row.message }}</span>
+          </div>
+        </template>
+      </el-table-column>
 
       <el-table-column label="Duration" width="120">
         <template #default="{ row }">
@@ -58,7 +65,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { eventsApi } from '@/api/events'
 import type { EventListItem } from '@/types'
-import { Refresh, Warning, Document } from '@element-plus/icons-vue'
+import { Refresh, Warning, Document, CircleCheck } from '@element-plus/icons-vue'
 
 interface Props {
   projectId: number
@@ -138,6 +145,19 @@ const formatDuration = (ms: number) => {
   return `${minutes}m ${remainingSeconds}s`
 }
 
+const isSkippedSync = (message: string) => {
+  if (!message) return false
+  const skipPatterns = [
+    'skipped',
+    '跳过',
+    'no changes',
+    '无变更',
+    'no branch changes'
+  ]
+  const lowerMessage = message.toLowerCase()
+  return skipPatterns.some(pattern => lowerMessage.includes(pattern))
+}
+
 onMounted(() => {
   loadEvents()
 })
@@ -158,5 +178,20 @@ onMounted(() => {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+
+.message-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.skip-icon {
+  color: #67c23a;
+}
+
+.skip-message {
+  color: #67c23a;
+  font-style: italic;
 }
 </style>
