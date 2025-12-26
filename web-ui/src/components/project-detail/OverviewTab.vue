@@ -309,6 +309,134 @@
         </el-descriptions-item>
       </el-descriptions>
     </el-card>
+
+    <!-- Sync Result Detail Dialog -->
+    <el-dialog
+      v-model="detailDialogVisible"
+      title="Sync Result Detail"
+      width="80%"
+      :close-on-click-modal="false"
+    >
+      <div v-loading="detailLoading">
+        <div v-if="resultDetail">
+          <!-- Basic Information -->
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="Project">
+              {{ resultDetail.projectKey }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Sync Method">
+              {{ resultDetail.syncMethod }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Status">
+              <el-tag :type="resultDetail.syncStatus === 'success' ? 'success' : 'danger'">
+                {{ resultDetail.syncStatus }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="Changes">
+              <el-tag v-if="resultDetail.hasChanges" type="warning">
+                {{ resultDetail.changesCount }} changes
+              </el-tag>
+              <el-tag v-else type="info">No changes</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="Duration">
+              {{ formatDuration(resultDetail.durationSeconds) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Last Sync">
+              {{ formatTime(resultDetail.lastSyncAt) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Source Commit" :span="2">
+              <code v-if="resultDetail.sourceCommitSha">{{ resultDetail.sourceCommitSha }}</code>
+              <span v-else>-</span>
+            </el-descriptions-item>
+          </el-descriptions>
+
+          <!-- Summary -->
+          <el-divider />
+          <h3>Summary</h3>
+          <div v-if="resultDetail.errorMessage" style="color: #f56c6c;">
+            {{ resultDetail.errorMessage }}
+          </div>
+          <div v-else>{{ resultDetail.summary || 'No summary available' }}</div>
+
+          <!-- Branch Information -->
+          <el-divider />
+          <h3>Branch Information</h3>
+          <div style="margin: 16px 0;">
+            <el-tag type="info" size="large">
+              Total Branches: {{ resultDetail.totalBranches }}
+            </el-tag>
+          </div>
+
+          <h4 style="margin-top: 20px">Recent 10 Branches</h4>
+          <el-table :data="resultDetail.recentBranches" stripe style="width: 100%">
+            <el-table-column prop="branchName" label="Branch" min-width="150">
+              <template #default="{ row }">
+                <span style="font-weight: 500">{{ row.branchName }}</span>
+                <el-tag v-if="row.isDefault" type="success" size="small" style="margin-left: 8px">
+                  Default
+                </el-tag>
+                <el-tag v-if="row.isProtected" type="warning" size="small" style="margin-left: 8px">
+                  Protected
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="Commit" width="200">
+              <template #default="{ row }">
+                <el-tooltip :content="row.commitSha">
+                  <code style="font-size: 12px">{{ row.commitSha.substring(0, 8) }}</code>
+                </el-tooltip>
+              </template>
+            </el-table-column>
+            <el-table-column prop="commitMessage" label="Message" min-width="250" />
+            <el-table-column prop="commitAuthor" label="Author" width="150" />
+            <el-table-column label="Committed At" width="180">
+              <template #default="{ row }">
+                {{ formatTime(row.committedAt) }}
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- Sync Logs Dialog -->
+    <el-dialog
+      v-model="logsDialogVisible"
+      title="Sync Logs"
+      width="80%"
+      :close-on-click-modal="false"
+    >
+      <div v-loading="logsLoading" style="max-height: 600px; overflow-y: auto;">
+        <el-empty v-if="!logsLoading && syncLogs.length === 0" description="No sync events found" />
+
+        <el-timeline v-else>
+          <el-timeline-item
+            v-for="log in syncLogs"
+            :key="log.id"
+            :timestamp="formatTime(log.createdAt)"
+            :type="getLogType(log.status)"
+            placement="top"
+          >
+            <el-card>
+              <template #header>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-weight: bold;">{{ formatEventType(log.eventType) }}</span>
+                  <el-tag :type="getStatusTagType(log.status)" size="small">
+                    {{ log.status }}
+                  </el-tag>
+                </div>
+              </template>
+              <div style="margin: 8px 0; color: #606266; font-size: 14px; line-height: 1.6;">
+                {{ log.message }}
+              </div>
+              <div v-if="log.durationMs" style="margin-top: 8px; color: #909399; font-size: 12px;">
+                Duration: {{ formatDuration(log.durationMs / 1000) }}
+              </div>
+            </el-card>
+          </el-timeline-item>
+        </el-timeline>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -325,12 +453,28 @@ interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits(['refresh'])
 
+import { ref } from 'vue'
+import { eventsApi, type EventDetailEnhanced } from '@/api/events'
+import type { SyncResultDetail, EventListItem } from '@/types'
+
+const detailDialogVisible = ref(false)
+const detailLoading = ref(false)
+const resultDetail = ref<SyncResultDetail | null>(null)
+
+const logsDialogVisible = ref(false)
+const logsLoading = ref(false)
+const syncLogs = ref<EventListItem[]>([])
+
 const handleViewTaskDetail = async () => {
   const task = props.overview.task
   if (!task) return
 
   // Find latest sync result for this project
   try {
+    detailDialogVisible.value = true
+    detailLoading.value = true
+    resultDetail.value = null
+
     const response = await syncApi.getSyncResults({
       search: props.overview.project.projectKey,
       page: 1,
@@ -339,20 +483,72 @@ const handleViewTaskDetail = async () => {
 
     if (response.success && response.data && response.data.items.length > 0) {
       const latestResult = response.data.items[0]
-      // Navigate to sync results page with the detail dialog open
-      window.open(`/#/sync-results?detail=${latestResult.id}`, '_blank')
+      // Load detail
+      const detailResponse = await syncApi.getSyncResultDetail(latestResult.id)
+      if (detailResponse.success && detailResponse.data) {
+        resultDetail.value = detailResponse.data
+      }
     } else {
       ElMessage.info('No sync results found for this project')
+      detailDialogVisible.value = false
     }
   } catch (error) {
     ElMessage.error('Failed to load sync result')
     console.error('Load sync result failed:', error)
+  } finally {
+    detailLoading.value = false
   }
 }
 
-const handleViewTaskLogs = () => {
-  // Navigate to sync events page filtered by this project
-  window.open(`/#/sync-events?search=${encodeURIComponent(props.overview.project.projectKey)}`, '_blank')
+const handleViewTaskLogs = async () => {
+  const task = props.overview.task
+  if (!task) return
+
+  try {
+    logsDialogVisible.value = true
+    logsLoading.value = true
+    syncLogs.value = []
+
+    // Find latest sync result to get time range
+    const response = await syncApi.getSyncResults({
+      search: props.overview.project.projectKey,
+      page: 1,
+      size: 1
+    })
+
+    if (response.success && response.data && response.data.items.length > 0) {
+      const latestResult = response.data.items[0]
+      const startDate = latestResult.startedAt ? new Date(latestResult.startedAt).toISOString().split('T')[0] : undefined
+      const endDate = latestResult.completedAt ? new Date(latestResult.completedAt).toISOString().split('T')[0] : undefined
+
+      const eventsResponse = await eventsApi.getEvents({
+        search: props.overview.project.projectKey,
+        startDate: startDate,
+        endDate: endDate,
+        page: 1,
+        size: 50
+      })
+
+      if (eventsResponse.success && eventsResponse.data) {
+        // Filter by exact time range
+        const startTime = latestResult.startedAt ? new Date(latestResult.startedAt).getTime() : 0
+        const endTime = latestResult.completedAt ? new Date(latestResult.completedAt).getTime() : Date.now()
+
+        syncLogs.value = (eventsResponse.data.items || []).filter((log: EventListItem) => {
+          const logTime = new Date(log.createdAt).getTime()
+          return logTime >= startTime && logTime <= endTime
+        })
+      }
+    } else {
+      ElMessage.info('No sync logs found for this project')
+      logsDialogVisible.value = false
+    }
+  } catch (error) {
+    ElMessage.error('Failed to load sync logs')
+    console.error('Load sync logs failed:', error)
+  } finally {
+    logsLoading.value = false
+  }
 }
 
 const getStatusType = (status: string) => {
