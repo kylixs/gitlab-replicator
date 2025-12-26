@@ -51,6 +51,8 @@ export interface ProjectListItem {
   updatedAt: string
   lastSyncStatus?: string
   consecutiveFailures?: number
+  lastSyncSummary?: string
+  lastSyncErrorMessage?: string
   groupPath?: string
   diff: {
     diffStatus?: string

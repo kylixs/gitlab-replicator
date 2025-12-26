@@ -69,7 +69,13 @@
 
         <el-table-column label="Last Sync" width="100">
           <template #default="{ row }">
-            <el-tag v-if="row.lastSyncStatus" :type="getSyncStatusType(row.lastSyncStatus)" size="small">
+            <el-tag
+              v-if="row.lastSyncStatus"
+              :type="getSyncStatusType(row.lastSyncStatus)"
+              size="small"
+              style="cursor: pointer"
+              @click="handleShowSyncDetails(row)"
+            >
               {{ formatLastSyncStatus(row.lastSyncStatus) }}
             </el-tag>
             <span v-else>-</span>
@@ -93,9 +99,10 @@
 
         <el-table-column label="Delay" width="90" sortable="custom" prop="delaySeconds">
           <template #default="{ row }">
-            <el-tag :type="getDelayType(row.delaySeconds)" size="small">
+            <el-tag v-if="row.delaySeconds != null" :type="getDelayType(row.delaySeconds)" size="small">
               {{ formatDelayReadable(row.delaySeconds) }}
             </el-tag>
+            <span v-else>-</span>
           </template>
         </el-table-column>
 
@@ -132,6 +139,40 @@
         />
       </div>
     </el-card>
+
+    <!-- Sync Details Dialog -->
+    <el-dialog v-model="syncDetailsVisible" title="Sync Details" width="700px">
+      <div v-if="selectedProject" class="sync-details">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="Project">{{ selectedProject.projectKey }}</el-descriptions-item>
+          <el-descriptions-item label="Last Sync Status">
+            <el-tag :type="getSyncStatusType(selectedProject.lastSyncStatus || '')">
+              {{ formatLastSyncStatus(selectedProject.lastSyncStatus || '') }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="Consecutive Failures">
+            <el-tag v-if="selectedProject.consecutiveFailures && selectedProject.consecutiveFailures > 0" type="danger">
+              {{ selectedProject.consecutiveFailures }}
+            </el-tag>
+            <span v-else style="color: #67c23a">0</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="Last Sync At">
+            {{ formatTime(selectedProject.lastSyncAt) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="Project Status">
+            <el-tag :type="getStatusType(selectedProject.syncStatus)">
+              {{ formatStatus(selectedProject.syncStatus) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="selectedProject.lastSyncSummary" label="Sync Summary">
+            <div style="white-space: pre-wrap; word-break: break-word;">{{ selectedProject.lastSyncSummary }}</div>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="selectedProject.lastSyncErrorMessage" label="Error Message">
+            <div style="white-space: pre-wrap; word-break: break-word; color: #f56c6c;">{{ selectedProject.lastSyncErrorMessage }}</div>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -151,6 +192,8 @@ const loading = ref(false)
 const projects = ref<ProjectListItem[]>([])
 const groups = ref<string[]>([])
 const selectedIds = ref<number[]>([])
+const syncDetailsVisible = ref(false)
+const selectedProject = ref<ProjectListItem | null>(null)
 
 const filters = reactive({
   group: (route.query.group as string) || '',
@@ -221,6 +264,11 @@ const handleSortChange = ({ prop, order }: any) => {
 
 const handleViewDetail = (project: ProjectListItem) => {
   router.push(`/projects/${project.id}`)
+}
+
+const handleShowSyncDetails = (project: ProjectListItem) => {
+  selectedProject.value = project
+  syncDetailsVisible.value = true
 }
 
 const handleSync = async (project: ProjectListItem) => {

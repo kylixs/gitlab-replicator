@@ -6,11 +6,13 @@ import com.gitlab.mirror.server.entity.ProjectBranchSnapshot;
 import com.gitlab.mirror.server.entity.PullSyncConfig;
 import com.gitlab.mirror.server.entity.SourceProjectInfo;
 import com.gitlab.mirror.server.entity.SyncProject;
+import com.gitlab.mirror.server.entity.SyncResult;
 import com.gitlab.mirror.server.entity.SyncTask;
 import com.gitlab.mirror.server.entity.TargetProjectInfo;
 import com.gitlab.mirror.server.mapper.ProjectBranchSnapshotMapper;
 import com.gitlab.mirror.server.mapper.PullSyncConfigMapper;
 import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
+import com.gitlab.mirror.server.mapper.SyncResultMapper;
 import com.gitlab.mirror.server.mapper.TargetProjectInfoMapper;
 import com.gitlab.mirror.server.service.monitor.DiffCalculator;
 import com.gitlab.mirror.server.service.monitor.model.DiffDetails;
@@ -47,6 +49,7 @@ public class ProjectListService {
     private final ProjectBranchSnapshotMapper projectBranchSnapshotMapper;
     private final DiffCalculator diffCalculator;
     private final SyncTaskService syncTaskService;
+    private final SyncResultMapper syncResultMapper;
     private final com.gitlab.mirror.server.mapper.SyncEventMapper syncEventMapper;
 
     public ProjectListService(
@@ -57,6 +60,7 @@ public class ProjectListService {
             ProjectBranchSnapshotMapper projectBranchSnapshotMapper,
             DiffCalculator diffCalculator,
             SyncTaskService syncTaskService,
+            SyncResultMapper syncResultMapper,
             com.gitlab.mirror.server.mapper.SyncEventMapper syncEventMapper) {
         this.branchSnapshotService = branchSnapshotService;
         this.sourceProjectInfoMapper = sourceProjectInfoMapper;
@@ -65,6 +69,7 @@ public class ProjectListService {
         this.projectBranchSnapshotMapper = projectBranchSnapshotMapper;
         this.diffCalculator = diffCalculator;
         this.syncTaskService = syncTaskService;
+        this.syncResultMapper = syncResultMapper;
         this.syncEventMapper = syncEventMapper;
     }
 
@@ -96,6 +101,13 @@ public class ProjectListService {
         } else {
             dto.setLastSyncStatus(null);
             dto.setConsecutiveFailures(0);
+        }
+
+        // Get last sync summary and error message from sync result
+        SyncResult syncResult = syncResultMapper.selectBySyncProjectId(project.getId());
+        if (syncResult != null) {
+            dto.setLastSyncSummary(syncResult.getSummary());
+            dto.setLastSyncErrorMessage(syncResult.getErrorMessage());
         }
 
         // Calculate diff using DiffCalculator (not legacy method)
@@ -256,14 +268,19 @@ public class ProjectListService {
             log.warn("Failed to calculate delay for project {}: {}", syncProjectId, e.getMessage());
         }
 
-        return 0L;
+        // Return null when no branch/commit information available
+        return null;
     }
 
     /**
      * Format delay seconds to human-readable string
      */
     private String formatDelay(Long seconds) {
-        if (seconds == null || seconds < 0) {
+        if (seconds == null) {
+            return null;  // Return null when no branch/commit data available
+        }
+
+        if (seconds < 0) {
             return "未知";
         }
 

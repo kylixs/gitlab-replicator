@@ -55,6 +55,16 @@ public class ProjectListDTO {
     private Integer consecutiveFailures;
 
     /**
+     * Last sync summary
+     */
+    private String lastSyncSummary;
+
+    /**
+     * Last sync error message
+     */
+    private String lastSyncErrorMessage;
+
+    /**
      * Project diff statistics
      */
     private DiffInfo diff;
