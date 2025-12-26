@@ -67,7 +67,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Diff" width="200">
+        <el-table-column label="Diff" width="240">
           <template #default="{ row }">
             <DiffBadge :diff="row.diff" />
           </template>

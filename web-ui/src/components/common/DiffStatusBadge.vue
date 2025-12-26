@@ -5,7 +5,7 @@
     size="small"
     class="diff-status-badge"
   >
-    <el-icon :size="14" style="margin-right: 4px">
+    <el-icon :size="14" class="badge-icon">
       <component :is="getIcon(diffStatus)" />
     </el-icon>
     {{ getStatusText(diffStatus) }}
@@ -90,7 +90,7 @@ const getStatusText = (status?: string) => {
     case 'diverged':
       return 'Diverged'
     case 'source_missing':
-      return 'Source Missing'
+      return 'Missing'
     case 'pending':
       return 'Pending'
     default:
@@ -101,8 +101,23 @@ const getStatusText = (status?: string) => {
 
 <style scoped>
 .diff-status-badge {
-  display: inline-flex;
+  display: inline-flex !important;
   align-items: center;
   font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge-icon {
+  margin-right: 4px;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.diff-status-badge :deep(.el-tag__content) {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  flex-wrap: nowrap;
 }
 </style>

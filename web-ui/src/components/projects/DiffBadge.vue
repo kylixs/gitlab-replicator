@@ -1,24 +1,20 @@
 <template>
   <div class="diff-badge">
     <!-- Diff Status Badge -->
-    <div v-if="diff.diffStatus" class="diff-item">
-      <DiffStatusBadge :diff-status="diff.diffStatus" />
-    </div>
+    <DiffStatusBadge v-if="diff.diffStatus" :diff-status="diff.diffStatus" />
 
     <!-- Branch Diff Details -->
-    <div class="diff-item">
-      <span class="diff-label">Branches:</span>
+    <template v-if="hasBranchDiff">
       <span v-if="diff.branchNew > 0" class="diff-value new">+{{ diff.branchNew }}</span>
       <span v-if="diff.branchDeleted > 0" class="diff-value deleted">-{{ diff.branchDeleted }}</span>
       <span v-if="diff.branchOutdated > 0" class="diff-value outdated">~{{ diff.branchOutdated }}</span>
-      <span v-if="!hasBranchDiff" class="diff-value synced">Synced</span>
-    </div>
+    </template>
 
     <!-- Commit Diff (only if significant) -->
-    <div v-if="diff.commitDiff > 0" class="diff-item">
-      <span class="diff-label">Commits:</span>
+    <template v-if="diff.commitDiff > 0">
+      <span class="diff-label">C:</span>
       <span class="diff-value new">+{{ diff.commitDiff }}</span>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -50,20 +46,18 @@ const hasBranchDiff = computed(() => {
 <style scoped>
 .diff-badge {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-}
-
-.diff-item {
-  display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 6px;
+  font-size: 13px;
+  flex-wrap: nowrap;
 }
 
 .diff-label {
   color: #666;
   font-weight: 500;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
 .diff-value {
@@ -71,6 +65,8 @@ const hasBranchDiff = computed(() => {
   border-radius: 3px;
   font-weight: 600;
   font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .diff-value.new {
