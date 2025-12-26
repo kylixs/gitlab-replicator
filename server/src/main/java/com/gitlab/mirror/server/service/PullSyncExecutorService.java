@@ -149,10 +149,11 @@ public class PullSyncExecutorService {
             throw new IllegalStateException("Pull sync config not found: " + project.getId());
         }
 
-        // Check if enabled
-        if (!config.getEnabled()) {
-            log.warn("Pull sync disabled for project: {}", project.getProjectKey());
-            taskStatusUpdateService.updateToWaiting(task, null, "Disabled");
+        // Check project status - only sync if in syncable states
+        if (!isSyncable(project.getSyncStatus())) {
+            log.warn("Project {} is not in syncable status: {}", project.getProjectKey(), project.getSyncStatus());
+            taskStatusUpdateService.updateToWaiting(task, null,
+                "Skipped: project status is " + project.getSyncStatus());
             return;
         }
 
@@ -576,10 +577,10 @@ public class PullSyncExecutorService {
             syncProjectMapper.updateById(project);
         }
 
-        if (shouldDisable && config != null) {
-            config.setEnabled(false);
-            pullSyncConfigMapper.updateById(config);
-            log.warn("Auto-disabled pull sync for project: {}, reason: {}, failures: {}",
+        // Note: shouldDisable logic is removed - project status is already updated above
+        // Auto-disabling is now handled through project status (source_missing, failed, etc.)
+        if (shouldDisable) {
+            log.warn("Project {} marked as non-syncable due to: {}, failures: {}",
                 project != null ? project.getProjectKey() : task.getSyncProjectId(),
                 disableReason, task.getConsecutiveFailures());
         }
@@ -646,6 +647,22 @@ public class PullSyncExecutorService {
         } else {
             return "unknown";
         }
+    }
+
+    /**
+     * Check if project status allows sync execution
+     *
+     * @param syncStatus Project sync status
+     * @return true if syncable
+     */
+    private boolean isSyncable(String syncStatus) {
+        // Syncable states: active, syncing, pending (for backward compatibility)
+        // Not syncable: source_missing, deleted, failed
+        return SyncProject.SyncStatus.ACTIVE.equals(syncStatus) ||
+               SyncProject.SyncStatus.SYNCING.equals(syncStatus) ||
+               SyncProject.SyncStatus.PENDING.equals(syncStatus) ||
+               SyncProject.SyncStatus.TARGET_CREATED.equals(syncStatus) ||
+               SyncProject.SyncStatus.MIRROR_CONFIGURED.equals(syncStatus);
     }
 
     /**
