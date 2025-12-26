@@ -262,11 +262,11 @@
         <el-descriptions-item label="Started At">
           {{ formatInstant(overview.task.startedAt) }}
         </el-descriptions-item>
-        <el-descriptions-item label="Completed At">
-          {{ formatInstant(overview.task.completedAt) }}
-        </el-descriptions-item>
         <el-descriptions-item label="Last Run At">
           {{ formatInstant(overview.task.lastRunAt) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="Completed At">
+          {{ formatInstant(overview.task.completedAt) }}
         </el-descriptions-item>
         <el-descriptions-item label="Next Run At">
           {{ formatInstant(overview.task.nextRunAt) }}
