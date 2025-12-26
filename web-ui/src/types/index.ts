@@ -134,12 +134,14 @@ export interface BranchInfo {
   syncStatus: 'synced' | 'outdated' | 'missing_in_target' | 'extra_in_target'
   sourceCommitId?: string
   sourceCommitShort?: string
-  sourceCommitCount?: number
   sourceLastCommitAt?: string
+  sourceCommitAuthor?: string
+  sourceCommitMessage?: string
   targetCommitId?: string
   targetCommitShort?: string
-  targetCommitCount?: number
   targetLastCommitAt?: string
+  targetCommitAuthor?: string
+  targetCommitMessage?: string
   commitDiff?: number
   delaySeconds?: number
   delayFormatted?: string

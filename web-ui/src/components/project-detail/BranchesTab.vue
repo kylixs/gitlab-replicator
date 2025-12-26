@@ -97,6 +97,62 @@
         stripe
         style="width: 100%"
       >
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="branch-details">
+              <el-row :gutter="24">
+                <!-- Source Branch Details -->
+                <el-col :span="12">
+                  <h4>Source Branch</h4>
+                  <el-descriptions :column="1" border size="small">
+                    <el-descriptions-item label="Commit SHA">
+                      <code v-if="row.sourceCommitId" class="commit-hash-full">{{ row.sourceCommitId }}</code>
+                      <span v-else class="not-available">-</span>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="Commit Time">
+                      {{ formatTime(row.sourceLastCommitAt) }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="Author">
+                      <span v-if="row.sourceCommitAuthor">{{ row.sourceCommitAuthor }}</span>
+                      <span v-else class="not-available">-</span>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="Message">
+                      <div v-if="row.sourceCommitMessage" class="commit-message">
+                        {{ row.sourceCommitMessage }}
+                      </div>
+                      <span v-else class="not-available">-</span>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </el-col>
+
+                <!-- Target Branch Details -->
+                <el-col :span="12">
+                  <h4>Target Branch</h4>
+                  <el-descriptions :column="1" border size="small">
+                    <el-descriptions-item label="Commit SHA">
+                      <code v-if="row.targetCommitId" class="commit-hash-full">{{ row.targetCommitId }}</code>
+                      <span v-else class="not-available">-</span>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="Commit Time">
+                      {{ formatTime(row.targetLastCommitAt) }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="Author">
+                      <span v-if="row.targetCommitAuthor">{{ row.targetCommitAuthor }}</span>
+                      <span v-else class="not-available">-</span>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="Message">
+                      <div v-if="row.targetCommitMessage" class="commit-message">
+                        {{ row.targetCommitMessage }}
+                      </div>
+                      <span v-else class="not-available">-</span>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </el-col>
+              </el-row>
+            </div>
+          </template>
+        </el-table-column>
+
         <el-table-column prop="branchName" label="Branch" min-width="200">
           <template #default="{ row }">
             <div class="branch-name">
@@ -114,22 +170,16 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Source Commit" width="200">
+        <el-table-column label="Source Commit" width="120">
           <template #default="{ row }">
-            <div v-if="row.sourceCommitShort" class="commit-info">
-              <code class="commit-hash">{{ row.sourceCommitShort }}</code>
-              <div class="commit-count">{{ row.sourceCommitCount || 0 }} commits</div>
-            </div>
+            <code v-if="row.sourceCommitShort" class="commit-hash">{{ row.sourceCommitShort }}</code>
             <span v-else class="not-available">-</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="Target Commit" width="200">
+        <el-table-column label="Target Commit" width="120">
           <template #default="{ row }">
-            <div v-if="row.targetCommitShort" class="commit-info">
-              <code class="commit-hash">{{ row.targetCommitShort }}</code>
-              <div class="commit-count">{{ row.targetCommitCount || 0 }} commits</div>
-            </div>
+            <code v-if="row.targetCommitShort" class="commit-hash">{{ row.targetCommitShort }}</code>
             <span v-else class="not-available">-</span>
           </template>
         </el-table-column>
@@ -372,5 +422,34 @@ onMounted(() => {
 
 .not-available {
   color: #999;
+}
+
+.branch-details {
+  padding: 16px 24px;
+  background-color: #fafafa;
+}
+
+.branch-details h4 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.commit-hash-full {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  background-color: #f5f5f5;
+  padding: 4px 8px;
+  border-radius: 3px;
+  color: #666;
+  word-break: break-all;
+}
+
+.commit-message {
+  line-height: 1.5;
+  color: #333;
+  word-break: break-word;
 }
 </style>

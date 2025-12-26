@@ -8,6 +8,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 后端启动脚本: ./scripts/gitlab-mirror restart
 - 前端启动脚本: ./start-dev.sh
   
+## 项目调试/集成测试
+- 使用playwright模拟登录，然后点击web界面（参考：web-ui/tests/e2e/setup-auth.spec.ts）
+- 对比api接口数据和web界面显示是否一致
+- 获取api key:  .env文件的GITLAB_MIRROR_API_KEY
+
+## 单元测试
+- 检查API接口返回结果的每个属性是否符合预期
+
+## 数据库更新
+- 更新字符串字段的值为空字符串以便真实更新数据，避免MyBatis-Plus忽略更新null值属性
+
 ## Project Overview
 
 GitLab Mirror MVP is a GitLab project synchronization tool based on GitLab's native Push Mirror feature. It provides a client/server architecture for batch configuration and management of GitLab Push Mirrors.
