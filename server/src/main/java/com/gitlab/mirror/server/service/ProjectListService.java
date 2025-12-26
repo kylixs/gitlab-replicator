@@ -83,31 +83,32 @@ public class ProjectListService {
         dto.setSyncStatus(project.getSyncStatus());
         dto.setSyncMethod(project.getSyncMethod());
         dto.setLastSyncAt(project.getLastSyncAt());
-        dto.setUpdatedAt(project.getUpdatedAt());
 
-        // Get group path from source project info
+        // Get group path and last commit time from source project info
         QueryWrapper<SourceProjectInfo> sourceQuery = new QueryWrapper<>();
         sourceQuery.eq("sync_project_id", project.getId());
         SourceProjectInfo sourceInfo = sourceProjectInfoMapper.selectOne(sourceQuery);
         if (sourceInfo != null) {
             dto.setGroupPath(sourceInfo.getGroupPath());
+            dto.setLastCommitTime(sourceInfo.getLastActivityAt());
         }
 
-        // Get last sync status and consecutive failures from task
+        // Get consecutive failures from task
         SyncTask task = syncTaskService.getTaskBySyncProjectId(project.getId());
         if (task != null) {
-            dto.setLastSyncStatus(task.getLastSyncStatus());
             dto.setConsecutiveFailures(task.getConsecutiveFailures());
         } else {
-            dto.setLastSyncStatus(null);
             dto.setConsecutiveFailures(0);
         }
 
-        // Get last sync summary and error message from sync result
+        // Get last sync status, summary and error message from sync result
         SyncResult syncResult = syncResultMapper.selectBySyncProjectId(project.getId());
         if (syncResult != null) {
+            dto.setLastSyncStatus(syncResult.getSyncStatus());
             dto.setLastSyncSummary(syncResult.getSummary());
             dto.setLastSyncErrorMessage(syncResult.getErrorMessage());
+        } else {
+            dto.setLastSyncStatus(null);
         }
 
         // Calculate diff using DiffCalculator (not legacy method)

@@ -46,5 +46,9 @@ export const projectsApi = {
 
   getBranchComparison: (params: { syncProjectId?: number; projectKey?: string }) => {
     return client.get<any, { data: BranchComparison }>('/sync/branches', { params })
+  },
+
+  getSyncResult: (projectId: number) => {
+    return client.get<any, { data: any }>(`/sync/projects/${projectId}/result`)
   }
 }

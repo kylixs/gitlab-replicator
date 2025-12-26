@@ -207,8 +207,8 @@
         <el-descriptions-item label="Created At">
           {{ formatTime(overview.project.createdAt) }}
         </el-descriptions-item>
-        <el-descriptions-item label="Updated At">
-          {{ formatTime(overview.project.updatedAt) }}
+        <el-descriptions-item label="Last Commit Time">
+          {{ formatTime(overview.source?.lastActivityAt) }}
         </el-descriptions-item>
         <el-descriptions-item label="Last Sync At">
           {{ formatTime(overview.project.lastSyncAt) }}

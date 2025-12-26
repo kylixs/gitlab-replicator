@@ -67,7 +67,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Last Sync" width="100">
+        <el-table-column label="Sync" width="100">
           <template #default="{ row }">
             <el-tag
               v-if="row.lastSyncStatus"
@@ -106,15 +106,15 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="lastSyncAt" label="Last Sync At" width="160" sortable="custom">
+        <el-table-column prop="lastSyncAt" label="Last Sync" width="120" sortable="custom">
           <template #default="{ row }">
             {{ formatTime(row.lastSyncAt) }}
           </template>
         </el-table-column>
 
-        <el-table-column prop="updatedAt" label="Updated" width="160" sortable="custom">
+        <el-table-column prop="lastCommitTime" label="Last Commit" width="140" sortable="custom">
           <template #default="{ row }">
-            {{ formatTime(row.updatedAt) }}
+            {{ formatTime(row.lastCommitTime) }}
           </template>
         </el-table-column>
 
@@ -266,9 +266,32 @@ const handleViewDetail = (project: ProjectListItem) => {
   router.push(`/projects/${project.id}`)
 }
 
-const handleShowSyncDetails = (project: ProjectListItem) => {
-  selectedProject.value = project
-  syncDetailsVisible.value = true
+const handleShowSyncDetails = async (project: ProjectListItem) => {
+  try {
+    // Fetch latest sync result from backend
+    const response = await projectsApi.getSyncResult(project.id)
+
+    if (response.success && response.data) {
+      const syncResult = response.data
+      // Update project with sync result data
+      selectedProject.value = {
+        ...project,
+        lastSyncStatus: syncResult.syncStatus,
+        lastSyncAt: syncResult.lastSyncAt,
+        lastSyncSummary: syncResult.summary,
+        lastSyncErrorMessage: syncResult.errorMessage
+      }
+    } else {
+      // Fallback to project data if no sync result
+      selectedProject.value = project
+    }
+    syncDetailsVisible.value = true
+  } catch (error) {
+    console.error('Failed to fetch sync result:', error)
+    // Fallback to project data on error
+    selectedProject.value = project
+    syncDetailsVisible.value = true
+  }
 }
 
 const handleSync = async (project: ProjectListItem) => {
@@ -485,7 +508,7 @@ const handleExport = () => {
       'Delay',
       'Sync Method',
       'Last Sync',
-      'Updated'
+      'Last Commit'
     ]
 
     // Convert projects data to CSV rows
@@ -499,7 +522,7 @@ const handleExport = () => {
       project.delayFormatted,
       formatSyncMethod(project.syncMethod),
       formatTime(project.lastSyncAt),
-      formatTime(project.updatedAt)
+      formatTime(project.lastCommitTime)
     ])
 
     // Create CSV content

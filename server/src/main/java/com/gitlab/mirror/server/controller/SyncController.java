@@ -247,7 +247,7 @@ public class SyncController {
         Comparator<ProjectListDTO> comparator = switch (sortBy) {
             case "delay" -> Comparator.comparing(ProjectListDTO::getDelaySeconds,
                     Comparator.nullsLast(Comparator.naturalOrder()));
-            case "updatedAt" -> Comparator.comparing(ProjectListDTO::getUpdatedAt,
+            case "lastCommitTime" -> Comparator.comparing(ProjectListDTO::getLastCommitTime,
                     Comparator.nullsLast(Comparator.naturalOrder()));
             case "lastSyncAt" -> Comparator.comparing(ProjectListDTO::getLastSyncAt,
                     Comparator.nullsLast(Comparator.naturalOrder()));
@@ -745,6 +745,29 @@ public class SyncController {
             return ResponseEntity.ok(ApiResponse.success(dto));
         } catch (Exception e) {
             log.error("Query sync result detail failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get sync result by project ID
+     *
+     * GET /api/sync/projects/{projectId}/result
+     */
+    @GetMapping("/projects/{projectId}/result")
+    public ResponseEntity<ApiResponse<SyncResultDetailDTO>> getSyncResultByProjectId(@PathVariable Long projectId) {
+        log.info("Query sync result by project ID - projectId: {}", projectId);
+
+        try {
+            SyncResult syncResult = syncResultMapper.selectBySyncProjectId(projectId);
+            if (syncResult == null) {
+                return ResponseEntity.ok(ApiResponse.error("Sync result not found for project"));
+            }
+
+            SyncResultDetailDTO dto = convertToSyncResultDetailDTO(syncResult);
+            return ResponseEntity.ok(ApiResponse.success(dto));
+        } catch (Exception e) {
+            log.error("Query sync result by project ID failed", e);
             return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
         }
     }

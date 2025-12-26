@@ -40,9 +40,9 @@ public class ProjectListDTO {
     private LocalDateTime lastSyncAt;
 
     /**
-     * Last update time
+     * Last commit time (from source project)
      */
-    private LocalDateTime updatedAt;
+    private LocalDateTime lastCommitTime;
 
     /**
      * Last sync status (success/failed/skipped)

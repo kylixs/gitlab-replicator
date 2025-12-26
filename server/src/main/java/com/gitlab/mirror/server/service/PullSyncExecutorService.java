@@ -239,7 +239,7 @@ public class PullSyncExecutorService {
 
         // 7. Update task with sync result
         String finalSha = result.getParsedValue("FINAL_SHA");
-        updateTaskAfterSuccess(task, true, finalSha, finalSha);
+        updateTaskAfterSuccess(task, true, finalSha, finalSha, true);
 
         // 8. Update branch snapshots after successful sync
         try {
@@ -321,8 +321,31 @@ public class PullSyncExecutorService {
         // 6. If no changes and not forced, skip sync but still update snapshots to ensure accuracy
         if (!hasChanges && !Boolean.TRUE.equals(task.getForceSync())) {
             log.info("No branch changes detected for project: {}, skipping sync", project.getProjectKey());
-            String currentHeadSha = task.getSourceCommitSha();
-            updateTaskAfterSuccess(task, false, currentHeadSha, currentHeadSha);
+
+            // Get current SHA for reporting
+            String currentHeadSha = gitCommandExecutor.getLocalHeadSha(config.getLocalRepoPath());
+
+            // Update task status to completed with SKIPPED status
+            // IMPORTANT: Don't update sync_project.last_sync_at for skipped syncs
+            Instant now = Instant.now();
+            Instant completedAt = now;
+            long durationSeconds = ChronoUnit.SECONDS.between(task.getStartedAt(), completedAt);
+
+            task.setTaskStatus("waiting");
+            task.setCompletedAt(completedAt);
+            task.setDurationSeconds((int) durationSeconds);
+            task.setHasChanges(false);
+            task.setSourceCommitSha(currentHeadSha);
+            task.setTargetCommitSha(currentHeadSha);
+            task.setLastSyncStatus("skipped");
+            task.setLastRunAt(completedAt);
+            task.setConsecutiveFailures(0);
+            task.setForceSync(false);
+            task.setNextRunAt(calculateNextRunTime(task));
+            task.setUpdatedAt(LocalDateTime.now());
+            task.setErrorType("");
+            task.setErrorMessage("");
+            syncTaskMapper.updateById(task);
 
             // Update snapshots even when skipping sync to keep database accurate
             try {
@@ -341,9 +364,11 @@ public class PullSyncExecutorService {
                 log.warn("Failed to update branch snapshots: {}", e.getMessage());
             }
 
-            // Record to sync_result table but not to sync_event (no changes)
+            // Record to sync_result table (no changes, skipped)
+            // IMPORTANT: Don't update sync_project.last_sync_at for skipped syncs
             recordSyncResult(project, task, SyncResult.Status.SKIPPED,
                 "No branch changes detected, sync skipped");
+
             return;
         }
 
@@ -366,7 +391,7 @@ public class PullSyncExecutorService {
 
         // 8. Update task with sync result
         String finalSha = result.getParsedValue("FINAL_SHA");
-        updateTaskAfterSuccess(task, true, finalSha, finalSha);
+        updateTaskAfterSuccess(task, true, finalSha, finalSha, true);
 
         // 9. Update branch snapshots after successful sync
         try {
@@ -477,9 +502,10 @@ public class PullSyncExecutorService {
      * @param hasChanges Whether has changes
      * @param sourceSha Source commit SHA
      * @param targetSha Target commit SHA
+     * @param updateLastSyncAt Whether to update project.last_sync_at (only when sync script actually executes)
      */
     private void updateTaskAfterSuccess(SyncTask task, boolean hasChanges,
-                                        String sourceSha, String targetSha) {
+                                        String sourceSha, String targetSha, boolean updateLastSyncAt) {
         Instant now = Instant.now();
         Instant completedAt = now;
         long durationSeconds = ChronoUnit.SECONDS.between(task.getStartedAt(), completedAt);
@@ -513,14 +539,20 @@ public class PullSyncExecutorService {
             if (!SyncProject.SyncStatus.ACTIVE.equals(previousStatus)) {
                 project.setSyncStatus(SyncProject.SyncStatus.ACTIVE);
                 project.setErrorMessage(null);
-                project.setLastSyncAt(LocalDateTime.now());
+                // Only update last_sync_at if sync script actually executed
+                if (updateLastSyncAt) {
+                    project.setLastSyncAt(LocalDateTime.now());
+                }
                 syncProjectMapper.updateById(project);
                 log.info("Reset project status to active after success: {} (was: {})",
                     project.getProjectKey(), previousStatus);
             } else {
-                // Even if already active, update last sync time and clear error
+                // Even if already active, clear error and conditionally update last sync time
                 project.setErrorMessage(null);
-                project.setLastSyncAt(LocalDateTime.now());
+                // Only update last_sync_at if sync script actually executed
+                if (updateLastSyncAt) {
+                    project.setLastSyncAt(LocalDateTime.now());
+                }
                 syncProjectMapper.updateById(project);
             }
 
