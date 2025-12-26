@@ -120,6 +120,15 @@ public class BranchSnapshotService {
             snapshot.setBranchName(branch.getName());
             snapshot.setCommitSha(branch.getCommit() != null ? branch.getCommit().getId() : null);
             snapshot.setCommitMessage(extractCommitTitle(branch.getCommit() != null ? branch.getCommit().getMessage() : null));
+
+            // Debug log for author information
+            if (branch.getCommit() != null) {
+                log.debug("Branch: {}, Commit: {}, Author: {}",
+                    branch.getName(),
+                    branch.getCommit().getId(),
+                    branch.getCommit().getAuthorName());
+            }
+
             snapshot.setCommitAuthor(branch.getCommit() != null && branch.getCommit().getAuthorName() != null
                 ? branch.getCommit().getAuthorName() : null);
 

@@ -66,11 +66,13 @@ public class RepositoryBranch {
         /**
          * Author name
          */
+        @JsonProperty("author_name")
         private String authorName;
 
         /**
          * Author email
          */
+        @JsonProperty("author_email")
         private String authorEmail;
 
         /**
@@ -88,11 +90,13 @@ public class RepositoryBranch {
         /**
          * Committer name
          */
+        @JsonProperty("committer_name")
         private String committerName;
 
         /**
          * Committer email
          */
+        @JsonProperty("committer_email")
         private String committerEmail;
     }
 

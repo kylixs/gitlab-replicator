@@ -603,6 +603,16 @@ public class SyncController {
             this.status = status;
             this.syncStatus = status;
         }
+
+        public void setSourceCommittedAt(LocalDateTime sourceCommittedAt) {
+            this.sourceCommittedAt = sourceCommittedAt;
+            this.sourceLastCommitAt = sourceCommittedAt != null ? sourceCommittedAt.toString() : null;
+        }
+
+        public void setTargetCommittedAt(LocalDateTime targetCommittedAt) {
+            this.targetCommittedAt = targetCommittedAt;
+            this.targetLastCommitAt = targetCommittedAt != null ? targetCommittedAt.toString() : null;
+        }
     }
 
     /**
