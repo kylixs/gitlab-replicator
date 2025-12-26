@@ -70,6 +70,11 @@ public class ProjectListDTO {
     @Data
     public static class DiffInfo {
         /**
+         * Diff status (SYNCED/OUTDATED/AHEAD/DIVERGED/SOURCE_MISSING/PENDING/UNKNOWN)
+         */
+        private String diffStatus;
+
+        /**
          * New branches in source (not in target)
          */
         private Integer branchNew = 0;

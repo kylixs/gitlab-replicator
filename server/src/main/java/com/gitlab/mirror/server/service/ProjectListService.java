@@ -88,8 +88,8 @@ public class ProjectListService {
             dto.setGroupPath(sourceInfo.getGroupPath());
         }
 
-        // Calculate diff
-        ProjectListDTO.DiffInfo diff = calculateDiff(project.getId());
+        // Calculate diff using DiffCalculator (not legacy method)
+        ProjectListDTO.DiffInfo diff = calculateDiffWithCalculator(project);
         dto.setDiff(diff);
 
         // Calculate delay
@@ -101,8 +101,58 @@ public class ProjectListService {
     }
 
     /**
-     * Calculate diff for project
+     * Calculate diff for project list using DiffCalculator
      */
+    private ProjectListDTO.DiffInfo calculateDiffWithCalculator(SyncProject project) {
+        ProjectListDTO.DiffInfo diff = new ProjectListDTO.DiffInfo();
+
+        try {
+            // Use DiffCalculator for accurate status detection
+            ProjectDiff projectDiff = diffCalculator.calculateDiff(project.getId(), true);
+
+            if (projectDiff != null) {
+                // Set diff status first
+                diff.setDiffStatus(projectDiff.getStatus() != null ? projectDiff.getStatus().name() : "UNKNOWN");
+
+                // Set diff details if available
+                if (projectDiff.getDiff() != null) {
+                    DiffDetails details = projectDiff.getDiff();
+                    DiffDetails.BranchComparisonSummary summary = details.getBranchSummary();
+
+                    if (summary != null) {
+                        diff.setBranchNew(summary.getMissingInTargetCount());
+                        diff.setBranchDeleted(summary.getExtraInTargetCount());
+                        diff.setBranchOutdated(summary.getOutdatedCount());
+                        // Don't set ahead/diverged in list view to keep it simple
+                    } else {
+                        // No branch summary (e.g., source missing) - set defaults
+                        diff.setBranchNew(0);
+                        diff.setBranchDeleted(0);
+                        diff.setBranchOutdated(0);
+                    }
+
+                    diff.setCommitDiff(details.getCommitBehind() != null ? details.getCommitBehind() : 0);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to calculate diff using DiffCalculator for project {}, falling back to legacy: {}",
+                project.getId(), e.getMessage());
+            // Fallback to legacy calculation
+            ProjectListDTO.DiffInfo legacyDiff = calculateDiff(project.getId());
+            diff.setBranchNew(legacyDiff.getBranchNew());
+            diff.setBranchDeleted(legacyDiff.getBranchDeleted());
+            diff.setBranchOutdated(legacyDiff.getBranchOutdated());
+            diff.setCommitDiff(legacyDiff.getCommitDiff());
+        }
+
+        return diff;
+    }
+
+    /**
+     * Calculate diff for project (legacy method, kept for fallback)
+     * @deprecated Use calculateDiffWithCalculator instead
+     */
+    @Deprecated
     private ProjectListDTO.DiffInfo calculateDiff(Long syncProjectId) {
         ProjectListDTO.DiffInfo diff = new ProjectListDTO.DiffInfo();
 
