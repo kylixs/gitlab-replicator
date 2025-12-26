@@ -85,16 +85,46 @@ public class PullSyncExecutorService {
         log.info("Executing Pull sync task, taskId={}, projectId={}",
             task.getId(), task.getSyncProjectId());
 
+        Instant startTime = Instant.now();
+        boolean success = false;
+        Throwable exception = null;
+
         try {
             // Update task status: pending → running (in separate transaction to ensure it persists)
-            taskStatusUpdateService.updateStatus(task, "running", Instant.now());
+            taskStatusUpdateService.updateStatus(task, "running", startTime);
 
             // Execute sync in transaction
             executeSyncInternal(task);
 
+            // Mark as successful if no exception thrown
+            success = true;
+
         } catch (Throwable e) {
             log.error("Pull sync failed, taskId={}", task.getId(), e);
-            handleSyncFailure(task, e);
+            exception = e;
+        } finally {
+            // Always record completion time and result
+            Instant completedAt = Instant.now();
+
+            if (success) {
+                // Success case: completion time should already be set in recordSyncResult
+                // But ensure it's set in case of early returns
+                if (task.getCompletedAt() == null) {
+                    task.setCompletedAt(completedAt);
+                    if (task.getStartedAt() != null) {
+                        long duration = ChronoUnit.SECONDS.between(task.getStartedAt(), completedAt);
+                        task.setDurationSeconds((int) duration);
+                    }
+                    syncTaskMapper.updateById(task);
+                    log.warn("CompletedAt was not set during sync execution, set it in finally block");
+                }
+                log.info("Pull sync completed successfully, taskId={}, duration={}s",
+                    task.getId(),
+                    task.getStartedAt() != null ? ChronoUnit.SECONDS.between(task.getStartedAt(), completedAt) : 0);
+            } else {
+                // Failure case: ensure completion time is recorded
+                handleSyncFailure(task, exception != null ? exception : new RuntimeException("Unknown error"));
+            }
         }
     }
 
