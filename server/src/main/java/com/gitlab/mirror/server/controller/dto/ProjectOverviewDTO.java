@@ -73,9 +73,24 @@ public class ProjectOverviewDTO {
         private Integer branchOutdated = 0;
 
         /**
+         * Branches where target is ahead of source
+         */
+        private Integer branchAhead = 0;
+
+        /**
+         * Branches where source and target have diverged
+         */
+        private Integer branchDiverged = 0;
+
+        /**
          * Total commit difference (source ahead of target)
          */
         private Integer commitDiff = 0;
+
+        /**
+         * Overall diff status
+         */
+        private String diffStatus;
     }
 
     /**

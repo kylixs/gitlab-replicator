@@ -10,6 +10,9 @@ import com.gitlab.mirror.server.entity.TargetProjectInfo;
 import com.gitlab.mirror.server.mapper.PullSyncConfigMapper;
 import com.gitlab.mirror.server.mapper.SourceProjectInfoMapper;
 import com.gitlab.mirror.server.mapper.TargetProjectInfoMapper;
+import com.gitlab.mirror.server.service.monitor.DiffCalculator;
+import com.gitlab.mirror.server.service.monitor.model.DiffDetails;
+import com.gitlab.mirror.server.service.monitor.model.ProjectDiff;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -39,16 +42,19 @@ public class ProjectListService {
     private final SourceProjectInfoMapper sourceProjectInfoMapper;
     private final TargetProjectInfoMapper targetProjectInfoMapper;
     private final PullSyncConfigMapper pullSyncConfigMapper;
+    private final DiffCalculator diffCalculator;
 
     public ProjectListService(
             BranchSnapshotService branchSnapshotService,
             SourceProjectInfoMapper sourceProjectInfoMapper,
             TargetProjectInfoMapper targetProjectInfoMapper,
-            PullSyncConfigMapper pullSyncConfigMapper) {
+            PullSyncConfigMapper pullSyncConfigMapper,
+            DiffCalculator diffCalculator) {
         this.branchSnapshotService = branchSnapshotService;
         this.sourceProjectInfoMapper = sourceProjectInfoMapper;
         this.targetProjectInfoMapper = targetProjectInfoMapper;
         this.pullSyncConfigMapper = pullSyncConfigMapper;
+        this.diffCalculator = diffCalculator;
     }
 
     /**
@@ -199,13 +205,34 @@ public class ProjectListService {
         TargetProjectInfo targetInfo = targetProjectInfoMapper.selectOne(targetQuery);
         overview.setTarget(targetInfo);
 
-        // Calculate diff
+        // Calculate diff using DiffCalculator
         ProjectOverviewDTO.DiffInfo diff = new ProjectOverviewDTO.DiffInfo();
-        ProjectListDTO.DiffInfo listDiff = calculateDiff(project.getId());
-        diff.setBranchNew(listDiff.getBranchNew());
-        diff.setBranchDeleted(listDiff.getBranchDeleted());
-        diff.setBranchOutdated(listDiff.getBranchOutdated());
-        diff.setCommitDiff(listDiff.getCommitDiff());
+        try {
+            ProjectDiff projectDiff = diffCalculator.calculateDiff(project.getId(), true);
+            if (projectDiff != null && projectDiff.getDiff() != null) {
+                DiffDetails details = projectDiff.getDiff();
+                DiffDetails.BranchComparisonSummary summary = details.getBranchSummary();
+
+                if (summary != null) {
+                    diff.setBranchNew(summary.getMissingInTargetCount());
+                    diff.setBranchDeleted(summary.getExtraInTargetCount());
+                    diff.setBranchOutdated(summary.getOutdatedCount());
+                    diff.setBranchAhead(summary.getAheadCount());
+                    diff.setBranchDiverged(summary.getDivergedCount());
+                }
+
+                diff.setCommitDiff(details.getCommitBehind() != null ? details.getCommitBehind() : 0);
+                diff.setDiffStatus(projectDiff.getStatus() != null ? projectDiff.getStatus().name() : "UNKNOWN");
+            }
+        } catch (Exception e) {
+            log.warn("Failed to calculate diff using DiffCalculator for project {}: {}", project.getId(), e.getMessage());
+            // Fallback to legacy calculation
+            ProjectListDTO.DiffInfo listDiff = calculateDiff(project.getId());
+            diff.setBranchNew(listDiff.getBranchNew());
+            diff.setBranchDeleted(listDiff.getBranchDeleted());
+            diff.setBranchOutdated(listDiff.getBranchOutdated());
+            diff.setCommitDiff(listDiff.getCommitDiff());
+        }
         overview.setDiff(diff);
 
         // Calculate delay
