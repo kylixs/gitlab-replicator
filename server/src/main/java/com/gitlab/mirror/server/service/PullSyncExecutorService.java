@@ -152,8 +152,13 @@ public class PullSyncExecutorService {
         // Check project status - only sync if in syncable states
         if (!isSyncable(project.getSyncStatus())) {
             log.warn("Project {} is not in syncable status: {}", project.getProjectKey(), project.getSyncStatus());
-            taskStatusUpdateService.updateToWaiting(task, null,
-                "Skipped: project status is " + project.getSyncStatus());
+            // Set task status to 'blocked' instead of 'waiting'
+            // This prevents scheduler from picking it up
+            task.setTaskStatus("blocked");
+            task.setErrorMessage("Project status is " + project.getSyncStatus());
+            task.setNextRunAt(null); // No next run for blocked tasks
+            syncTaskMapper.updateById(task);
+            log.info("Task {} blocked due to project status: {}", task.getId(), project.getSyncStatus());
             return;
         }
 
@@ -532,7 +537,6 @@ public class PullSyncExecutorService {
         long durationSeconds = task.getStartedAt() != null ?
             ChronoUnit.SECONDS.between(task.getStartedAt(), completedAt) : 0;
 
-        task.setTaskStatus("waiting");
         task.setCompletedAt(completedAt);
         task.setDurationSeconds((int) durationSeconds);
         task.setLastSyncStatus("failed");
@@ -543,25 +547,21 @@ public class PullSyncExecutorService {
         task.setErrorMessage(e.getMessage());
         task.setConsecutiveFailures(task.getConsecutiveFailures() + 1);
 
-        // Check if auto-disable is needed
+        // Check if should block task
         SyncProject project = syncProjectMapper.selectById(task.getSyncProjectId());
-        PullSyncConfig config = pullSyncConfigMapper.selectOne(
-            new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<PullSyncConfig>()
-                .eq("sync_project_id", task.getSyncProjectId())
-        );
 
-        boolean shouldDisable = false;
-        String disableReason = null;
+        boolean shouldBlock = false;
+        String blockReason = null;
 
-        // Disable immediately for non-retryable errors
+        // Block immediately for non-retryable errors
         if (isNonRetryableError(errorType)) {
-            shouldDisable = true;
-            disableReason = "Non-retryable error: " + errorType;
+            shouldBlock = true;
+            blockReason = "Non-retryable error: " + errorType;
         }
-        // Disable after 5 consecutive failures
+        // Block after 5 consecutive failures
         else if (task.getConsecutiveFailures() >= 5) {
-            shouldDisable = true;
-            disableReason = "Too many consecutive failures (≥5)";
+            shouldBlock = true;
+            blockReason = "Too many consecutive failures (≥5)";
         }
 
         // Update SyncProject status based on error type
@@ -569,24 +569,26 @@ public class PullSyncExecutorService {
             if ("not_found".equals(errorType)) {
                 project.setSyncStatus(SyncProject.SyncStatus.SOURCE_MISSING);
                 log.info("Updated project status to source_missing: {}", project.getProjectKey());
-            } else {
+            } else if (shouldBlock) {
                 project.setSyncStatus(SyncProject.SyncStatus.FAILED);
                 log.info("Updated project status to failed: {}", project.getProjectKey());
             }
+            // For retryable errors with < 5 failures, keep project active
             project.setErrorMessage(e.getMessage());
             syncProjectMapper.updateById(project);
         }
 
-        // Note: shouldDisable logic is removed - project status is already updated above
-        // Auto-disabling is now handled through project status (source_missing, failed, etc.)
-        if (shouldDisable) {
-            log.warn("Project {} marked as non-syncable due to: {}, failures: {}",
-                project != null ? project.getProjectKey() : task.getSyncProjectId(),
-                disableReason, task.getConsecutiveFailures());
+        // Set task status based on whether it should be blocked
+        if (shouldBlock) {
+            task.setTaskStatus("blocked");
+            task.setNextRunAt(null); // No next run for blocked tasks
+            log.warn("Task {} blocked due to: {}, failures: {}",
+                task.getId(), blockReason, task.getConsecutiveFailures());
+        } else {
+            task.setTaskStatus("waiting");
+            // Calculate retry time with exponential backoff for retryable errors
+            task.setNextRunAt(calculateRetryTime(task.getConsecutiveFailures()));
         }
-
-        // Calculate retry time with exponential backoff
-        task.setNextRunAt(calculateRetryTime(task.getConsecutiveFailures()));
 
         // Update task status in new transaction to ensure it persists
         taskStatusUpdateService.updateAfterFailure(task);
@@ -603,7 +605,7 @@ public class PullSyncExecutorService {
             event.setEventData(java.util.Map.of(
                 "errorType", errorType,
                 "consecutiveFailures", task.getConsecutiveFailures(),
-                "shouldDisable", shouldDisable
+                "isBlocked", shouldBlock
             ));
             event.setEventTime(LocalDateTime.now());
             syncEventMapper.insert(event);
