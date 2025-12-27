@@ -12,12 +12,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 使用playwright模拟登录，然后点击web界面（参考：web-ui/tests/e2e/setup-auth.spec.ts）
 - 对比api接口数据和web界面显示是否一致
 - 获取api key:  .env文件的GITLAB_MIRROR_API_KEY
+- 禁止随意手工触发同步项目，避免干扰正常同步逻辑，除非是需要测试手工触发同步的效果
 
 ## 单元测试
 - 检查API接口返回结果的每个属性是否符合预期
 
 ## 数据库更新
 - 更新字符串字段的值为空字符串以便真实更新数据，避免MyBatis-Plus忽略更新null值属性
+- 禁止随意通过命令行修改数据库的数据，如果发现错误必须经过用户确认后才能修改
 
 ## Project Overview
 
