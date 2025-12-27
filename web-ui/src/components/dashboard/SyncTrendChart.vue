@@ -38,7 +38,7 @@ const emit = defineEmits<{
 }>()
 
 const chartRef = ref<HTMLElement | null>(null)
-const timeRange = ref<'24h' | '7d'>('7d')
+const timeRange = ref<'24h' | '7d'>('24h')
 let chartInstance: echarts.ECharts | null = null
 
 const handleTimeRangeChange = (range: '24h' | '7d') => {

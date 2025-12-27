@@ -29,12 +29,12 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="Statistics" width="140">
+      <el-table-column label="Statistics" width="180">
         <template #default="{ row }">
-          <div v-if="row.statistics && hasStatistics(row.statistics)" style="font-size: 12px;">
-            <span v-if="row.statistics.branchesCreated" style="color: #67c23a;">+{{ row.statistics.branchesCreated }}B </span>
-            <span v-if="row.statistics.branchesUpdated" style="color: #409eff;">~{{ row.statistics.branchesUpdated }}B </span>
-            <span v-if="row.statistics.branchesDeleted" style="color: #f56c6c;">-{{ row.statistics.branchesDeleted }}B </span>
+          <div v-if="row.statistics && hasStatistics(row.statistics)" style="font-size: 12px; line-height: 1.6;">
+            <span v-if="row.statistics.branchesCreated" style="color: #67c23a;">+{{ row.statistics.branchesCreated }} </span>
+            <span v-if="row.statistics.branchesUpdated" style="color: #409eff;">~{{ row.statistics.branchesUpdated }} </span>
+            <span v-if="row.statistics.branchesDeleted" style="color: #f56c6c;">-{{ row.statistics.branchesDeleted }} </span>
             <span v-if="row.statistics.commitsPushed" style="color: #909399;">{{ row.statistics.commitsPushed }}C</span>
           </div>
           <span v-else style="color: #909399;">-</span>
@@ -378,11 +378,14 @@ const formatCompactMessage = (event: EventListItem) => {
     return event.message || '-'
   }
 
-  // Build multi-line compact message
-  const branchesChanged = (stats.branchesCreated || 0) + (stats.branchesUpdated || 0) + (stats.branchesDeleted || 0)
-  const commitsPushed = stats.commitsPushed || 0
+  // Build multi-line compact message with readable first line
+  const parts: string[] = []
+  if (stats.branchesCreated) parts.push(`+${stats.branchesCreated} ${stats.branchesCreated === 1 ? 'branch' : 'branches'}`)
+  if (stats.branchesUpdated) parts.push(`~${stats.branchesUpdated} ${stats.branchesUpdated === 1 ? 'branch' : 'branches'}`)
+  if (stats.branchesDeleted) parts.push(`-${stats.branchesDeleted} ${stats.branchesDeleted === 1 ? 'branch' : 'branches'}`)
+  if (stats.commitsPushed) parts.push(`${stats.commitsPushed} ${stats.commitsPushed === 1 ? 'commit' : 'commits'}`)
 
-  let message = `Sync: ${branchesChanged} branches changed (${commitsPushed} commits)`
+  let message = parts.join('  ')
 
   // Add top 3 changed branches (one per line)
   if (stats.changedBranches && stats.changedBranches.length > 0) {

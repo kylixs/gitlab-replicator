@@ -141,11 +141,11 @@ const getSummaryMessage = (event: RecentEvent): string => {
     const stats = event.statistics
     if (hasStatistics(stats)) {
       const parts: string[] = []
-      if (stats.branchesCreated) parts.push(`+${stats.branchesCreated}B`)
-      if (stats.branchesUpdated) parts.push(`~${stats.branchesUpdated}B`)
-      if (stats.branchesDeleted) parts.push(`-${stats.branchesDeleted}B`)
-      if (stats.commitsPushed) parts.push(`${stats.commitsPushed}C`)
-      return parts.join(' ')
+      if (stats.branchesCreated) parts.push(`+${stats.branchesCreated} ${stats.branchesCreated === 1 ? 'branch' : 'branches'}`)
+      if (stats.branchesUpdated) parts.push(`~${stats.branchesUpdated} ${stats.branchesUpdated === 1 ? 'branch' : 'branches'}`)
+      if (stats.branchesDeleted) parts.push(`-${stats.branchesDeleted} ${stats.branchesDeleted === 1 ? 'branch' : 'branches'}`)
+      if (stats.commitsPushed) parts.push(`${stats.commitsPushed} ${stats.commitsPushed === 1 ? 'commit' : 'commits'}`)
+      return parts.join('  ')
     }
     return 'No changes'
   }
