@@ -52,7 +52,11 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="message" label="Message" min-width="200" />
+        <el-table-column prop="message" label="Message" min-width="200">
+          <template #default="{ row }">
+            <div class="text-ellipsis-5">{{ row.message }}</div>
+          </template>
+        </el-table-column>
 
         <el-table-column label="Duration" width="120">
           <template #default="{ row }">
@@ -450,6 +454,17 @@ onUnmounted(() => {
 
 .branch-summary {
   margin: 16px 0;
+}
+
+.text-ellipsis-5 {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.5;
+  max-height: 7.5em; /* 5 lines * 1.5 line-height */
+  word-break: break-word;
 }
 
 </style>

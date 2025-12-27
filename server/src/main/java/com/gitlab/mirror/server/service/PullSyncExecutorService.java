@@ -6,6 +6,7 @@ import com.gitlab.mirror.server.config.properties.GitLabMirrorProperties;
 import com.gitlab.mirror.server.entity.*;
 import com.gitlab.mirror.server.executor.GitCommandExecutor;
 import com.gitlab.mirror.server.mapper.*;
+import com.gitlab.mirror.server.model.SyncStatistics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -240,9 +241,15 @@ public class PullSyncExecutorService {
         config.setLocalRepoPath(localRepoPath);
         pullSyncConfigMapper.updateById(config);
 
-        // 7. Update task with sync result
+        // 7. Parse statistics from git output
+        com.gitlab.mirror.server.model.SyncStatistics statistics =
+            com.gitlab.mirror.server.model.SyncStatistics.parseFromGitOutput(result.getOutput());
+        log.info("First sync statistics: {}", statistics);
+
+        // 8. Update task with sync result
         String finalSha = result.getParsedValue("FINAL_SHA");
-        updateTaskAfterSuccess(task, true, finalSha, finalSha, true);
+        boolean hasChanges = statistics != null && statistics.hasChanges();
+        updateTaskAfterSuccess(task, hasChanges, finalSha, finalSha, true, statistics);
 
         // 8. Update branch snapshots after successful sync
         try {
@@ -370,7 +377,7 @@ public class PullSyncExecutorService {
             // Record to sync_result table (no changes, skipped)
             // IMPORTANT: Don't update sync_project.last_sync_at for skipped syncs
             recordSyncResult(project, task, SyncResult.Status.SKIPPED,
-                "No branch changes detected, sync skipped");
+                "No branch changes detected, sync skipped", SyncStatistics.empty());
 
             return;
         }
@@ -392,11 +399,17 @@ public class PullSyncExecutorService {
             throw new RuntimeException("Incremental sync failed: " + result.getError());
         }
 
-        // 8. Update task with sync result
-        String finalSha = result.getParsedValue("FINAL_SHA");
-        updateTaskAfterSuccess(task, true, finalSha, finalSha, true);
+        // 8. Parse statistics from git output
+        com.gitlab.mirror.server.model.SyncStatistics statistics =
+            com.gitlab.mirror.server.model.SyncStatistics.parseFromGitOutput(result.getOutput());
+        log.info("Incremental sync statistics: {}", statistics);
 
-        // 9. Update branch snapshots after successful sync
+        // 9. Update task with sync result
+        String finalSha = result.getParsedValue("FINAL_SHA");
+        hasChanges = statistics != null && statistics.hasChanges();  // Reuse variable from line 328
+        updateTaskAfterSuccess(task, hasChanges, finalSha, finalSha, true, statistics);
+
+        // 10. Update branch snapshots after successful sync
         try {
             branchSnapshotService.updateSourceBranchSnapshot(
                 project.getId(), sourceInfo.getGitlabProjectId(), sourceInfo.getDefaultBranch());
@@ -508,7 +521,8 @@ public class PullSyncExecutorService {
      * @param updateLastSyncAt Whether to update project.last_sync_at (only when sync script actually executes)
      */
     private void updateTaskAfterSuccess(SyncTask task, boolean hasChanges,
-                                        String sourceSha, String targetSha, boolean updateLastSyncAt) {
+                                        String sourceSha, String targetSha, boolean updateLastSyncAt,
+                                        com.gitlab.mirror.server.model.SyncStatistics statistics) {
         Instant now = Instant.now();
         Instant completedAt = now;
         long durationSeconds = ChronoUnit.SECONDS.between(task.getStartedAt(), completedAt);
@@ -563,7 +577,7 @@ public class PullSyncExecutorService {
             String message = hasChanges ?
                 String.format("Sync completed with changes (source: %s, target: %s)", sourceSha, targetSha) :
                 "Sync completed without changes";
-            recordSyncResult(project, task, SyncResult.Status.SUCCESS, message);
+            recordSyncResult(project, task, SyncResult.Status.SUCCESS, message, statistics);
         }
     }
 
@@ -659,7 +673,7 @@ public class PullSyncExecutorService {
         if (project != null) {
             String failureMessage = String.format("Sync failed: %s (failures: %d, error: %s)",
                 e.getMessage(), task.getConsecutiveFailures(), errorType);
-            recordSyncResult(project, task, SyncResult.Status.FAILED, failureMessage);
+            recordSyncResult(project, task, SyncResult.Status.FAILED, failureMessage, SyncStatistics.empty());
 
             // Record sync failed event with details
             SyncEvent event = new SyncEvent();
@@ -800,7 +814,8 @@ public class PullSyncExecutorService {
      * @param status  Sync status: success/failed/skipped
      * @param message Result message
      */
-    private void recordSyncResult(SyncProject project, SyncTask task, String status, String message) {
+    private void recordSyncResult(SyncProject project, SyncTask task, String status, String message,
+                                  com.gitlab.mirror.server.model.SyncStatistics statistics) {
         // Calculate completion time and duration
         java.time.Instant completedAt = java.time.Instant.now();
         if (task.getStartedAt() != null) {
@@ -829,6 +844,7 @@ public class PullSyncExecutorService {
         syncResult.setTargetCommitSha(task.getTargetCommitSha());
         syncResult.setDurationSeconds(task.getDurationSeconds());
         syncResult.setSummary(message);
+        syncResult.setStatistics(statistics);  // Save statistics
 
         // Set error_message only for failures, use empty string for success/skipped
         // Empty string triggers MyBatis-Plus to update the field (null values are skipped)
@@ -862,6 +878,7 @@ public class PullSyncExecutorService {
             event.setStartedAt(task.getStartedAt() != null ?
                 LocalDateTime.ofInstant(task.getStartedAt(), java.time.ZoneId.systemDefault()) : null);
             event.setCompletedAt(LocalDateTime.ofInstant(completedAt, java.time.ZoneId.systemDefault()));
+            event.setStatistics(statistics);  // Save statistics
 
             event.setEventData(java.util.Map.of(
                 "message", message,

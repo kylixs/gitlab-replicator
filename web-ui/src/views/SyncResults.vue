@@ -91,12 +91,23 @@
             </div>
           </template>
         </el-table-column>
+        <el-table-column label="Statistics" width="200">
+          <template #default="{ row }">
+            <div v-if="row.statistics && (row.statistics.branchesCreated || row.statistics.branchesUpdated || row.statistics.branchesDeleted || row.statistics.commitsPushed)" style="font-size: 12px;">
+              <span v-if="row.statistics.branchesCreated" style="color: #67c23a;">+{{ row.statistics.branchesCreated }}B </span>
+              <span v-if="row.statistics.branchesUpdated" style="color: #409eff;">~{{ row.statistics.branchesUpdated }}B </span>
+              <span v-if="row.statistics.branchesDeleted" style="color: #f56c6c;">-{{ row.statistics.branchesDeleted }}B </span>
+              <span v-if="row.statistics.commitsPushed" style="color: #909399;">{{ row.statistics.commitsPushed }}C</span>
+            </div>
+            <span v-else style="color: #909399;">-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="Summary" min-width="200">
           <template #default="{ row }">
-            <div v-if="row.errorMessage" class="error-text">
+            <div v-if="row.errorMessage" class="text-ellipsis-5 error-text">
               {{ row.errorMessage }}
             </div>
-            <div v-else>{{ row.summary || '-' }}</div>
+            <div v-else class="text-ellipsis-5">{{ row.summary || '-' }}</div>
           </template>
         </el-table-column>
         <el-table-column label="Actions" width="200" fixed="right">
@@ -222,6 +233,26 @@
             </el-descriptions-item>
           </el-descriptions>
 
+          <!-- Statistics -->
+          <div v-if="resultDetail.statistics && hasStatistics(resultDetail.statistics)">
+            <el-divider />
+            <h3>Sync Statistics</h3>
+            <div class="statistics-summary">
+              <el-tag v-if="resultDetail.statistics.branchesCreated" type="success" size="large" style="margin-right: 8px;">
+                <span style="font-weight: bold;">+{{ resultDetail.statistics.branchesCreated }}</span> Branches Created
+              </el-tag>
+              <el-tag v-if="resultDetail.statistics.branchesUpdated" type="primary" size="large" style="margin-right: 8px;">
+                <span style="font-weight: bold;">~{{ resultDetail.statistics.branchesUpdated }}</span> Branches Updated
+              </el-tag>
+              <el-tag v-if="resultDetail.statistics.branchesDeleted" type="danger" size="large" style="margin-right: 8px;">
+                <span style="font-weight: bold;">-{{ resultDetail.statistics.branchesDeleted }}</span> Branches Deleted
+              </el-tag>
+              <el-tag v-if="resultDetail.statistics.commitsPushed" type="info" size="large">
+                <span style="font-weight: bold;">{{ resultDetail.statistics.commitsPushed }}</span> Commits Pushed
+              </el-tag>
+            </div>
+          </div>
+
           <!-- Summary -->
           <el-divider />
           <h3>Summary</h3>
@@ -249,6 +280,9 @@
                 </el-tag>
                 <el-tag v-if="row.isProtected" type="warning" size="small" style="margin-left: 8px">
                   Protected
+                </el-tag>
+                <el-tag v-if="row.isRecentlyUpdated" type="danger" size="small" style="margin-left: 8px">
+                  Recently Updated
                 </el-tag>
               </template>
             </el-table-column>
@@ -451,6 +485,14 @@ const getStatusTagType = (status: string) => {
   }
 }
 
+const hasStatistics = (statistics: any) => {
+  if (!statistics) return false
+  return (statistics.branchesCreated && statistics.branchesCreated > 0) ||
+         (statistics.branchesUpdated && statistics.branchesUpdated > 0) ||
+         (statistics.branchesDeleted && statistics.branchesDeleted > 0) ||
+         (statistics.commitsPushed && statistics.commitsPushed > 0)
+}
+
 // Auto-refresh timer
 const { startTimer, stopTimer } = useAutoRefreshTimer(loadData)
 
@@ -484,9 +526,24 @@ onUnmounted(() => {
   margin-bottom: 20px;
 }
 
+.filters :deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+
 .error-text {
   color: #f56c6c;
   font-size: 12px;
+}
+
+.text-ellipsis-5 {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.5;
+  max-height: 7.5em; /* 5 lines * 1.5 line-height */
+  word-break: break-word;
 }
 
 .pagination-wrapper {
@@ -526,6 +583,13 @@ onUnmounted(() => {
 
 .branch-summary {
   margin: 16px 0;
+}
+
+.statistics-summary {
+  margin: 16px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 </style>
