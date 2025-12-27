@@ -69,7 +69,7 @@ export class GitLabHelper {
       throw new Error(`Failed to get project: ${response.statusText}`)
     }
 
-    return await response.json()
+    return await response.json() as GitLabProject
   }
 
   /**
@@ -87,7 +87,7 @@ export class GitLabHelper {
       throw new Error(`Failed to get group: ${groupResponse.statusText}`)
     }
 
-    const group = await groupResponse.json()
+    const group: any = await groupResponse.json()
 
     // Create project
     const response = await fetch(`${this.baseUrl}/api/v4/projects`, {
@@ -109,7 +109,7 @@ export class GitLabHelper {
       throw new Error(`Failed to create project: ${error}`)
     }
 
-    return await response.json()
+    return await response.json() as GitLabProject
   }
 
   /**
@@ -164,7 +164,7 @@ export class GitLabHelper {
       throw new Error(`Failed to create commit: ${error}`)
     }
 
-    return await response.json()
+    return await response.json() as GitLabCommit
   }
 
   /**
@@ -188,7 +188,7 @@ export class GitLabHelper {
       throw new Error(`Failed to create branch: ${error}`)
     }
 
-    return await response.json()
+    return await response.json() as GitLabBranch
   }
 
   /**
@@ -210,7 +210,7 @@ export class GitLabHelper {
       throw new Error(`Failed to get branch: ${response.statusText}`)
     }
 
-    return await response.json()
+    return await response.json() as GitLabBranch
   }
 
   /**
@@ -227,7 +227,7 @@ export class GitLabHelper {
       throw new Error(`Failed to get branches: ${response.statusText}`)
     }
 
-    return await response.json()
+    return await response.json() as GitLabBranch[]
   }
 
   /**

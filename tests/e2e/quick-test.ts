@@ -4,7 +4,8 @@
  * Runs a short version (5 minutes) to verify all scenarios work
  */
 
-import { LongRunningSimulation, CONFIG } from './long-running-simulation'
+const { LongRunningSimulation } = require('./long-running-simulation')
+const CONFIG = require('./long-running-simulation').CONFIG
 
 // Override config for quick test
 const QUICK_CONFIG = {

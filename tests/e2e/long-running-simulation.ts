@@ -12,7 +12,7 @@
  * Duration: Up to 3 days (72 hours)
  */
 
-import { GitLabHelper, GitLabProject, GitLabBranch } from '../integration/helpers/gitlab-helper'
+const { GitLabHelper } = require('../integration/helpers/gitlab-helper')
 
 // Configuration
 const SOURCE_GITLAB_URL = process.env.SOURCE_GITLAB_URL || 'http://localhost:8000'
@@ -27,20 +27,20 @@ const CONFIG = {
   PROJECT_NAME: 'long-running-test',
 
   // Operation frequencies (minutes)
-  COMMIT_INTERVAL_MIN: 15,
-  COMMIT_INTERVAL_MAX: 45,
+  COMMIT_INTERVAL_MIN: 3,
+  COMMIT_INTERVAL_MAX: 5,
 
-  BRANCH_INTERVAL_MIN: 60,
-  BRANCH_INTERVAL_MAX: 180,
+  BRANCH_INTERVAL_MIN: 10,
+  BRANCH_INTERVAL_MAX: 20,
 
-  TAG_INTERVAL_MIN: 120,
-  TAG_INTERVAL_MAX: 360,
+  TAG_INTERVAL_MIN: 10,
+  TAG_INTERVAL_MAX: 20,
 
-  MR_INTERVAL_MIN: 90,
-  MR_INTERVAL_MAX: 240,
+  MR_INTERVAL_MIN: 10,
+  MR_INTERVAL_MAX: 20,
 
-  CLEANUP_INTERVAL_MIN: 180,
-  CLEANUP_INTERVAL_MAX: 360,
+  CLEANUP_INTERVAL_MIN: 60,
+  CLEANUP_INTERVAL_MAX: 240,
 
   // Cleanup rules
   MIN_HOURS_BEFORE_DELETE: 2, // Wait at least 2 hours before deleting merged branches
@@ -66,8 +66,17 @@ interface TestState {
   errors: Array<{ time: number, operation: string, error: string }>
 }
 
+interface GitLabProject {
+  id: number
+  name: string
+  path: string
+  path_with_namespace: string
+  default_branch: string
+  web_url: string
+}
+
 class LongRunningSimulation {
-  private gitlab: GitLabHelper
+  private gitlab: any
   private state: TestState
   private isRunning: boolean = false
   private timers: NodeJS.Timeout[] = []
@@ -318,7 +327,7 @@ class LongRunningSimulation {
         throw new Error(`Failed to create MR: HTTP ${mrResponse.status}`)
       }
 
-      const mr = await mrResponse.json()
+      const mr: any = await mrResponse.json()
       this.log(`✓ Created MR !${mr.iid}: ${sourceBranch} → ${this.state.project.default_branch}`)
 
       // Wait a bit before merging
@@ -555,4 +564,4 @@ if (require.main === module) {
   })
 }
 
-export { LongRunningSimulation, CONFIG }
+module.exports = { LongRunningSimulation, CONFIG }
