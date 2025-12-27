@@ -6,6 +6,7 @@ import com.gitlab.mirror.server.mapper.SyncEventMapper;
 import com.gitlab.mirror.server.mapper.SyncProjectMapper;
 import com.gitlab.mirror.server.service.ProjectListService;
 import com.gitlab.mirror.server.controller.dto.ProjectListDTO;
+import com.gitlab.mirror.server.model.SyncStatistics;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -144,6 +145,302 @@ public class DashboardController {
     }
 
     /**
+     * Get today's sync statistics
+     *
+     * GET /api/dashboard/today-stats
+     */
+    @GetMapping("/today-stats")
+    public ResponseEntity<ApiResponse<TodaySyncStats>> getTodayStats() {
+        log.info("Query today's sync statistics");
+
+        try {
+            LocalDateTime todayStart = LocalDateTime.now().toLocalDate().atStartOfDay();
+
+            // Query today's sync events
+            QueryWrapper<SyncEvent> queryWrapper = new QueryWrapper<>();
+            queryWrapper.ge("event_time", todayStart);
+            queryWrapper.eq("event_type", "sync_finished");
+
+            List<SyncEvent> todayEvents = syncEventMapper.selectList(queryWrapper);
+
+            // Calculate statistics
+            long totalSyncs = todayEvents.size();
+            long successSyncs = todayEvents.stream()
+                    .filter(e -> "success".equalsIgnoreCase(e.getStatus()))
+                    .count();
+            long failedSyncs = todayEvents.stream()
+                    .filter(e -> "failed".equalsIgnoreCase(e.getStatus()))
+                    .count();
+
+            // Calculate total branch changes
+            int totalBranchChanges = todayEvents.stream()
+                    .filter(e -> e.getStatistics() != null)
+                    .mapToInt(e -> {
+                        SyncStatistics stats = e.getStatistics();
+                        int changes = 0;
+                        if (stats.getBranchesCreated() != null) changes += stats.getBranchesCreated();
+                        if (stats.getBranchesUpdated() != null) changes += stats.getBranchesUpdated();
+                        if (stats.getBranchesDeleted() != null) changes += stats.getBranchesDeleted();
+                        return changes;
+                    })
+                    .sum();
+
+            TodaySyncStats stats = new TodaySyncStats();
+            stats.setTotalSyncs((int) totalSyncs);
+            stats.setSuccessSyncs((int) successSyncs);
+            stats.setFailedSyncs((int) failedSyncs);
+            stats.setTotalBranchChanges(totalBranchChanges);
+
+            return ResponseEntity.ok(ApiResponse.success(stats));
+        } catch (Exception e) {
+            log.error("Query today's sync statistics failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get sync event trends
+     *
+     * GET /api/dashboard/trend?range=7d or range=24h
+     */
+    @GetMapping("/trend")
+    public ResponseEntity<ApiResponse<TrendData>> getTrend(
+            @RequestParam(defaultValue = "7d") String range) {
+        log.info("Query trend data - range: {}", range);
+
+        try {
+            if ("24h".equals(range)) {
+                return ResponseEntity.ok(ApiResponse.success(getTrend24h()));
+            } else {
+                return ResponseEntity.ok(ApiResponse.success(getTrend7d()));
+            }
+        } catch (Exception e) {
+            log.error("Query trend data failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
+        }
+    }
+
+    private TrendData getTrend7d() {
+        LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
+
+        QueryWrapper<SyncEvent> queryWrapper = new QueryWrapper<>();
+        queryWrapper.ge("event_time", sevenDaysAgo);
+        queryWrapper.eq("event_type", "sync_finished");
+
+        List<SyncEvent> events = syncEventMapper.selectList(queryWrapper);
+
+        // Group by date
+        java.util.Map<String, java.util.List<SyncEvent>> eventsByDate = events.stream()
+                .collect(Collectors.groupingBy(e -> e.getEventTime().toLocalDate().toString()));
+
+        // Build trend data for last 7 days
+        java.util.List<String> dates = new java.util.ArrayList<>();
+        java.util.List<Integer> totalSyncs = new java.util.ArrayList<>();
+        java.util.List<Integer> successSyncs = new java.util.ArrayList<>();
+        java.util.List<Integer> failedSyncs = new java.util.ArrayList<>();
+
+        for (int i = 6; i >= 0; i--) {
+            LocalDateTime date = LocalDateTime.now().minusDays(i);
+            String dateStr = date.toLocalDate().toString();
+            dates.add(dateStr);
+
+            java.util.List<SyncEvent> dayEvents = eventsByDate.getOrDefault(dateStr, new java.util.ArrayList<>());
+            int total = dayEvents.size();
+            int success = (int) dayEvents.stream().filter(e -> "success".equalsIgnoreCase(e.getStatus())).count();
+            int failed = (int) dayEvents.stream().filter(e -> "failed".equalsIgnoreCase(e.getStatus())).count();
+
+            totalSyncs.add(total);
+            successSyncs.add(success);
+            failedSyncs.add(failed);
+        }
+
+        TrendData trendData = new TrendData();
+        trendData.setDates(dates);
+        trendData.setTotalSyncs(totalSyncs);
+        trendData.setSuccessSyncs(successSyncs);
+        trendData.setFailedSyncs(failedSyncs);
+
+        return trendData;
+    }
+
+    private TrendData getTrend24h() {
+        LocalDateTime twentyFourHoursAgo = LocalDateTime.now().minusHours(24);
+
+        QueryWrapper<SyncEvent> queryWrapper = new QueryWrapper<>();
+        queryWrapper.ge("event_time", twentyFourHoursAgo);
+        queryWrapper.eq("event_type", "sync_finished");
+
+        List<SyncEvent> events = syncEventMapper.selectList(queryWrapper);
+
+        // Group by hour
+        java.util.Map<Integer, java.util.List<SyncEvent>> eventsByHour = events.stream()
+                .collect(Collectors.groupingBy(e -> e.getEventTime().getHour()));
+
+        // Build trend data for last 24 hours
+        java.util.List<String> hours = new java.util.ArrayList<>();
+        java.util.List<Integer> totalSyncs = new java.util.ArrayList<>();
+        java.util.List<Integer> successSyncs = new java.util.ArrayList<>();
+        java.util.List<Integer> failedSyncs = new java.util.ArrayList<>();
+
+        for (int i = 23; i >= 0; i--) {
+            LocalDateTime hourTime = LocalDateTime.now().minusHours(i);
+            int hour = hourTime.getHour();
+            hours.add(String.valueOf(hour));
+
+            java.util.List<SyncEvent> hourEvents = eventsByHour.getOrDefault(hour, new java.util.ArrayList<>());
+            // Filter events to only those within this specific hour of the last 24h
+            hourEvents = hourEvents.stream()
+                    .filter(e -> e.getEventTime().isAfter(hourTime.minusMinutes(30)) &&
+                                 e.getEventTime().isBefore(hourTime.plusMinutes(30)))
+                    .collect(Collectors.toList());
+
+            int total = hourEvents.size();
+            int success = (int) hourEvents.stream().filter(e -> "success".equalsIgnoreCase(e.getStatus())).count();
+            int failed = (int) hourEvents.stream().filter(e -> "failed".equalsIgnoreCase(e.getStatus())).count();
+
+            totalSyncs.add(total);
+            successSyncs.add(success);
+            failedSyncs.add(failed);
+        }
+
+        TrendData trendData = new TrendData();
+        trendData.setDates(hours);  // Reuse dates field for hours
+        trendData.setTotalSyncs(totalSyncs);
+        trendData.setSuccessSyncs(successSyncs);
+        trendData.setFailedSyncs(failedSyncs);
+
+        return trendData;
+    }
+
+    /**
+     * Get event type trends
+     *
+     * GET /api/dashboard/event-type-trend?range=7d or range=24h
+     */
+    @GetMapping("/event-type-trend")
+    public ResponseEntity<ApiResponse<EventTypeTrend>> getEventTypeTrend(
+            @RequestParam(defaultValue = "7d") String range) {
+        log.info("Query event type trend - range: {}", range);
+
+        try {
+            if ("24h".equals(range)) {
+                return ResponseEntity.ok(ApiResponse.success(getEventTypeTrend24h()));
+            } else {
+                return ResponseEntity.ok(ApiResponse.success(getEventTypeTrend7d()));
+            }
+        } catch (Exception e) {
+            log.error("Query event type trend failed", e);
+            return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
+        }
+    }
+
+    private EventTypeTrend getEventTypeTrend7d() {
+        LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
+
+        QueryWrapper<SyncEvent> queryWrapper = new QueryWrapper<>();
+        queryWrapper.ge("event_time", sevenDaysAgo);
+
+        List<SyncEvent> events = syncEventMapper.selectList(queryWrapper);
+
+        // Group by date and event type
+        java.util.Map<String, java.util.Map<String, Long>> eventsByDateAndType = events.stream()
+                .collect(Collectors.groupingBy(
+                        e -> e.getEventTime().toLocalDate().toString(),
+                        Collectors.groupingBy(
+                                SyncEvent::getEventType,
+                                Collectors.counting()
+                        )
+                ));
+
+        // Collect all event types from all 7 days
+        java.util.Set<String> allEventTypes = eventsByDateAndType.values().stream()
+                .flatMap(m -> m.keySet().stream())
+                .collect(Collectors.toSet());
+
+        // Build trend data for last 7 days
+        java.util.List<String> dates = new java.util.ArrayList<>();
+        java.util.Map<String, java.util.List<Integer>> typeData = new java.util.HashMap<>();
+
+        // Initialize typeData for all event types
+        for (String eventType : allEventTypes) {
+            typeData.put(eventType, new java.util.ArrayList<>());
+        }
+
+        // Fill in data for each day
+        for (int i = 6; i >= 0; i--) {
+            LocalDateTime date = LocalDateTime.now().minusDays(i);
+            String dateStr = date.toLocalDate().toString();
+            dates.add(dateStr);
+
+            java.util.Map<String, Long> dayTypeCount = eventsByDateAndType.getOrDefault(dateStr, new java.util.HashMap<>());
+
+            // Fill in counts for this day for all event types
+            for (String eventType : allEventTypes) {
+                int count = dayTypeCount.getOrDefault(eventType, 0L).intValue();
+                typeData.get(eventType).add(count);
+            }
+        }
+
+        EventTypeTrend trend = new EventTypeTrend();
+        trend.setDates(dates);
+        trend.setTypeData(typeData);
+
+        return trend;
+    }
+
+    private EventTypeTrend getEventTypeTrend24h() {
+        LocalDateTime twentyFourHoursAgo = LocalDateTime.now().minusHours(24);
+
+        QueryWrapper<SyncEvent> queryWrapper = new QueryWrapper<>();
+        queryWrapper.ge("event_time", twentyFourHoursAgo);
+
+        List<SyncEvent> events = syncEventMapper.selectList(queryWrapper);
+
+        // Group by hour and event type
+        java.util.Map<Integer, java.util.Map<String, Long>> eventsByHourAndType = new java.util.HashMap<>();
+
+        for (SyncEvent event : events) {
+            int hour = event.getEventTime().getHour();
+            eventsByHourAndType.putIfAbsent(hour, new java.util.HashMap<>());
+            String eventType = event.getEventType();
+            eventsByHourAndType.get(hour).merge(eventType, 1L, Long::sum);
+        }
+
+        // Build trend data for last 24 hours
+        java.util.List<String> hours = new java.util.ArrayList<>();
+        java.util.Map<String, java.util.List<Integer>> typeData = new java.util.HashMap<>();
+
+        // Collect all event types
+        java.util.Set<String> allTypes = eventsByHourAndType.values().stream()
+                .flatMap(m -> m.keySet().stream())
+                .collect(Collectors.toSet());
+
+        for (String type : allTypes) {
+            typeData.put(type, new java.util.ArrayList<>());
+        }
+
+        for (int i = 23; i >= 0; i--) {
+            LocalDateTime hourTime = LocalDateTime.now().minusHours(i);
+            int hour = hourTime.getHour();
+            hours.add(String.valueOf(hour));
+
+            java.util.Map<String, Long> hourTypeCount = eventsByHourAndType.getOrDefault(hour, new java.util.HashMap<>());
+
+            // Fill in counts for this hour
+            for (String eventType : typeData.keySet()) {
+                int count = hourTypeCount.getOrDefault(eventType, 0L).intValue();
+                typeData.get(eventType).add(count);
+            }
+        }
+
+        EventTypeTrend trend = new EventTypeTrend();
+        trend.setDates(hours);  // Reuse dates field for hours
+        trend.setTypeData(typeData);
+
+        return trend;
+    }
+
+    /**
      * Get recent events
      *
      * GET /api/dashboard/recent-events?limit=20
@@ -170,6 +467,8 @@ public class DashboardController {
                         recentEvent.setStatus(event.getStatus());
                         recentEvent.setEventTime(event.getEventTime());
                         recentEvent.setDurationSeconds(event.getDurationSeconds());
+                        recentEvent.setStatistics(event.getStatistics());
+                        recentEvent.setErrorMessage(event.getErrorMessage());
 
                         // Get project key
                         if (event.getSyncProjectId() != null) {
@@ -222,6 +521,37 @@ public class DashboardController {
     }
 
     /**
+     * Today's sync statistics
+     */
+    @Data
+    public static class TodaySyncStats {
+        private Integer totalSyncs;
+        private Integer successSyncs;
+        private Integer failedSyncs;
+        private Integer totalBranchChanges;
+    }
+
+    /**
+     * Trend data (for both 7d and 24h)
+     */
+    @Data
+    public static class TrendData {
+        private java.util.List<String> dates;  // dates for 7d, hours for 24h
+        private java.util.List<Integer> totalSyncs;
+        private java.util.List<Integer> successSyncs;
+        private java.util.List<Integer> failedSyncs;
+    }
+
+    /**
+     * Event type trend data
+     */
+    @Data
+    public static class EventTypeTrend {
+        private java.util.List<String> dates;  // dates for 7d, hours for 24h
+        private java.util.Map<String, java.util.List<Integer>> typeData;  // eventType -> counts
+    }
+
+    /**
      * Recent event
      */
     @Data
@@ -234,6 +564,8 @@ public class DashboardController {
         private String status;
         private LocalDateTime eventTime;
         private Integer durationSeconds;
+        private SyncStatistics statistics;
+        private String errorMessage;
     }
 
     /**

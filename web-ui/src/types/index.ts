@@ -35,6 +35,8 @@ export interface RecentEvent {
   status: string
   eventTime: string
   durationSeconds: number
+  statistics?: SyncStatistics
+  errorMessage?: string
 }
 
 // Projects
