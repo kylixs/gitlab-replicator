@@ -157,27 +157,59 @@ public class SyncController {
                 queryWrapper.like("project_key", search);
             }
 
-            Page<SyncProject> pageQuery = new Page<>(page, size);
-            Page<SyncProject> result = syncProjectMapper.selectPage(pageQuery, queryWrapper);
+            // Determine if we need full query (for calculated field sorting/filtering)
+            boolean needsFullQuery = (delayRange != null && !delayRange.isEmpty()) ||
+                                   (sortBy != null && !sortBy.isEmpty() &&
+                                    isCalculatedField(sortBy));
 
-            // Build DTOs with diff and delay
-            List<ProjectListDTO> dtos = result.getRecords().stream()
-                    .map(projectListService::buildProjectListDTO)
-                    .collect(Collectors.toList());
+            List<ProjectListDTO> dtos;
+            long total;
 
-            // Apply delay range filter (post-processing since it's calculated)
-            if (delayRange != null && !delayRange.isEmpty()) {
-                dtos = filterByDelayRange(dtos, delayRange);
-            }
+            if (needsFullQuery) {
+                // Query all matching records for calculated field sorting
+                List<SyncProject> allProjects = syncProjectMapper.selectList(queryWrapper);
+                total = allProjects.size();
 
-            // Apply sorting (post-processing for calculated fields)
-            if (sortBy != null && !sortBy.isEmpty()) {
-                dtos = sortProjects(dtos, sortBy, sortOrder);
+                // Build all DTOs
+                dtos = allProjects.stream()
+                        .map(projectListService::buildProjectListDTO)
+                        .collect(Collectors.toList());
+
+                // Apply delay range filter
+                if (delayRange != null && !delayRange.isEmpty()) {
+                    dtos = filterByDelayRange(dtos, delayRange);
+                    total = dtos.size(); // Update total after filter
+                }
+
+                // Apply sorting
+                if (sortBy != null && !sortBy.isEmpty()) {
+                    dtos = sortProjects(dtos, sortBy, sortOrder);
+                }
+
+                // Manual pagination
+                int start = (page - 1) * size;
+                int end = Math.min(start + size, dtos.size());
+                dtos = dtos.subList(start, end);
+            } else {
+                // Use database sorting for database fields
+                if (sortBy != null && !sortBy.isEmpty()) {
+                    applyDatabaseSort(queryWrapper, sortBy, sortOrder);
+                }
+
+                // Execute database pagination query
+                Page<SyncProject> pageQuery = new Page<>(page, size);
+                Page<SyncProject> result = syncProjectMapper.selectPage(pageQuery, queryWrapper);
+                total = result.getTotal();
+
+                // Build DTOs
+                dtos = result.getRecords().stream()
+                        .map(projectListService::buildProjectListDTO)
+                        .collect(Collectors.toList());
             }
 
             PageResult<ProjectListDTO> pageResult = new PageResult<>();
             pageResult.setItems(dtos);
-            pageResult.setTotal(result.getTotal());
+            pageResult.setTotal(total);
             pageResult.setPage(page);
             pageResult.setSize(size);
 
@@ -210,6 +242,58 @@ public class SyncController {
         } catch (Exception e) {
             log.error("Query groups failed", e);
             return ResponseEntity.ok(ApiResponse.error("Query failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Check if field is calculated (not a database field)
+     */
+    private boolean isCalculatedField(String field) {
+        return "delay".equals(field) || "lastCommitTime".equals(field);
+    }
+
+    /**
+     * Apply database-level sorting for database fields
+     */
+    private void applyDatabaseSort(QueryWrapper<SyncProject> queryWrapper, String sortBy, String sortOrder) {
+        boolean ascending = "asc".equalsIgnoreCase(sortOrder);
+
+        switch (sortBy) {
+            case "lastSyncAt":
+                if (ascending) {
+                    queryWrapper.orderByAsc("last_sync_at");
+                } else {
+                    queryWrapper.orderByDesc("last_sync_at");
+                }
+                break;
+            case "projectKey":
+                if (ascending) {
+                    queryWrapper.orderByAsc("project_key");
+                } else {
+                    queryWrapper.orderByDesc("project_key");
+                }
+                break;
+            case "syncStatus":
+                if (ascending) {
+                    queryWrapper.orderByAsc("sync_status");
+                } else {
+                    queryWrapper.orderByDesc("sync_status");
+                }
+                break;
+            case "syncMethod":
+                if (ascending) {
+                    queryWrapper.orderByAsc("sync_method");
+                } else {
+                    queryWrapper.orderByDesc("sync_method");
+                }
+                break;
+            default:
+                // Default sort by id
+                if (ascending) {
+                    queryWrapper.orderByAsc("id");
+                } else {
+                    queryWrapper.orderByDesc("id");
+                }
         }
     }
 
