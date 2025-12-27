@@ -166,6 +166,9 @@ const initChart = () => {
 }
 
 onMounted(() => {
+  // Emit initial time range to load data
+  emit('timeRangeChange', timeRange.value)
+
   initChart()
 
   window.addEventListener('resize', () => {

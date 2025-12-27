@@ -232,11 +232,7 @@ const loadData = async () => {
     // Load today's sync statistics
     await loadTodayStats()
 
-    // Load trend data for past 7 days
-    await loadTrendData()
-
-    // Load event type trend data
-    await loadEventTypeTrend()
+    // Note: Trend data will be loaded by chart components via timeRangeChange event
   } catch (error) {
     ElMessage.error('Failed to load dashboard data')
     console.error('Load dashboard data failed:', error)
