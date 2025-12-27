@@ -193,7 +193,9 @@ case "$COMMAND" in
 
         cd "$LOCAL_PATH"
 
-        # Configure to fetch all tags (bare clone already fetches all branches)
+        # Configure to fetch all branches and tags
+        # Note: bare clone does NOT automatically configure fetch refspecs
+        git config --add remote.origin.fetch '+refs/heads/*:refs/heads/*'
         git config --add remote.origin.fetch '+refs/tags/*:refs/tags/*'
 
         # Set push URL
