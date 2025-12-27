@@ -1,5 +1,6 @@
 package com.gitlab.mirror.server.controller.dto;
 
+import com.gitlab.mirror.server.model.SyncStatistics;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -32,6 +33,9 @@ public class SyncEventDetailDTO {
     private String branchName;
     private String errorMessage;
     private Map<String, Object> eventData;
+
+    // Sync statistics
+    private SyncStatistics statistics;
 
     // Branch summary (for successful syncs)
     private Integer totalBranches;

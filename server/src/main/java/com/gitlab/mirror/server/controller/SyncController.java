@@ -725,6 +725,7 @@ public class SyncController {
         dto.setDurationSeconds(syncResult.getDurationSeconds());
         dto.setErrorMessage(syncResult.getErrorMessage());
         dto.setSummary(syncResult.getSummary());
+        dto.setStatistics(syncResult.getStatistics());
 
         // Get project key and sync method from sync_project
         SyncProject project = syncProjectMapper.selectById(syncResult.getSyncProjectId());
@@ -800,6 +801,7 @@ public class SyncController {
         dto.setDurationSeconds(syncResult.getDurationSeconds());
         dto.setErrorMessage(syncResult.getErrorMessage());
         dto.setSummary(syncResult.getSummary());
+        dto.setStatistics(syncResult.getStatistics());
 
         // Get project key and sync method
         SyncProject project = syncProjectMapper.selectById(syncResult.getSyncProjectId());
@@ -834,6 +836,15 @@ public class SyncController {
                     branchInfo.setCommittedAt(branch.getCommittedAt());
                     branchInfo.setIsDefault(branch.getIsDefault());
                     branchInfo.setIsProtected(branch.getIsProtected());
+
+                    // 标记24小时内更新的分支
+                    if (branch.getCommittedAt() != null) {
+                        LocalDateTime twentyFourHoursAgo = LocalDateTime.now().minusHours(24);
+                        branchInfo.setIsRecentlyUpdated(branch.getCommittedAt().isAfter(twentyFourHoursAgo));
+                    } else {
+                        branchInfo.setIsRecentlyUpdated(false);
+                    }
+
                     return branchInfo;
                 })
                 .collect(Collectors.toList());

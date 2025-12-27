@@ -143,6 +143,16 @@ export interface BranchInfo {
   delayFormatted?: string
 }
 
+// Sync Statistics
+export interface SyncStatistics {
+  branchesCreated?: number
+  branchesUpdated?: number
+  branchesDeleted?: number
+  commitsPushed?: number
+  totalBranches?: number
+  tagsSynced?: number
+}
+
 // Events
 export interface EventListItem {
   id: number
@@ -153,6 +163,7 @@ export interface EventListItem {
   message: string
   durationMs: number
   createdAt: string
+  statistics?: SyncStatistics
 }
 
 export interface EventStats {
@@ -172,6 +183,7 @@ export interface EventDetails {
     status: string
     eventTime: string
     durationSeconds: number
+    statistics?: SyncStatistics
   }
   details: Record<string, any>
 }
@@ -186,6 +198,7 @@ export interface SyncResult {
   completedAt?: string
   durationSeconds?: number
   summary?: string
+  statistics?: SyncStatistics
 }
 
 export interface SyncResultDetail extends SyncResult {
@@ -197,6 +210,7 @@ export interface SyncResultDetail extends SyncResult {
   lastSyncAt?: string
   sourceCommitSha?: string
   errorMessage?: string
+  statistics?: SyncStatistics
 }
 
 export interface SyncResultBranchInfo {
@@ -207,6 +221,7 @@ export interface SyncResultBranchInfo {
   committedAt: string
   isDefault: boolean
   isProtected: boolean
+  isRecentlyUpdated: boolean  // 标记最近更新的分支（24小时内）
 }
 
 // Configuration

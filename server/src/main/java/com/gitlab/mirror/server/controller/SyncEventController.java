@@ -151,6 +151,7 @@ public class SyncEventController {
 
                         item.setDurationMs(event.getDurationSeconds() != null ? event.getDurationSeconds() * 1000L : null);
                         item.setCreatedAt(event.getEventTime());
+                        item.setStatistics(event.getStatistics());
                         return item;
                     })
                     .collect(Collectors.toList());
@@ -243,6 +244,7 @@ public class SyncEventController {
             dto.setBranchName(event.getBranchName());
             dto.setErrorMessage(event.getErrorMessage());
             dto.setEventData(event.getEventData());
+            dto.setStatistics(event.getStatistics());
 
             // Get project key
             SyncProject project = null;
@@ -405,6 +407,7 @@ public class SyncEventController {
         private String message;
         private Long durationMs;
         private LocalDateTime createdAt;
+        private com.gitlab.mirror.server.model.SyncStatistics statistics;
     }
 
     /**

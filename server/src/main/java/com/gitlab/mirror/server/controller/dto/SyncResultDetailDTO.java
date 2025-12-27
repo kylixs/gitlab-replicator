@@ -1,5 +1,6 @@
 package com.gitlab.mirror.server.controller.dto;
 
+import com.gitlab.mirror.server.model.SyncStatistics;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -31,6 +32,9 @@ public class SyncResultDetailDTO {
     private String errorMessage;
     private String summary;
 
+    // Sync statistics
+    private SyncStatistics statistics;
+
     // Branch summary
     private Integer totalBranches;
     private List<BranchInfo> recentBranches;
@@ -44,5 +48,6 @@ public class SyncResultDetailDTO {
         private LocalDateTime committedAt;
         private Boolean isDefault;
         private Boolean isProtected;
+        private Boolean isRecentlyUpdated;  // 标记最近更新的分支（24小时内）
     }
 }

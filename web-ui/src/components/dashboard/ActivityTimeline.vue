@@ -18,17 +18,18 @@
         </el-select>
       </div>
     </template>
-    <el-timeline v-if="filteredEvents && filteredEvents.length > 0">
-      <el-timeline-item
-        v-for="event in filteredEvents"
+    <div v-if="sortedEvents && sortedEvents.length > 0" class="event-list">
+      <div
+        v-for="event in sortedEvents"
         :key="event.id"
-        :timestamp="formatTime(event.eventTime)"
-        :color="getEventColor(event.status)"
-        placement="top"
+        class="event-item"
       >
-        <div class="event-content">
+        <div class="event-time">{{ formatTime(event.eventTime) }}</div>
+        <div class="event-main">
           <div class="event-header">
-            <el-icon :size="16"><component :is="getEventIcon(event.eventType)" /></el-icon>
+            <el-icon :size="16" :color="getEventColor(event.status)">
+              <component :is="getEventIcon(event.eventType)" />
+            </el-icon>
             <span class="event-project">{{ event.projectKey }}</span>
             <el-tag :type="getStatusType(event.status)" size="small">
               {{ event.status }}
@@ -39,8 +40,8 @@
             Duration: {{ event.durationSeconds }}s
           </div>
         </div>
-      </el-timeline-item>
-    </el-timeline>
+      </div>
+    </div>
     <div v-else class="empty-state">
       <el-empty description="No recent activities" />
     </div>
@@ -59,10 +60,16 @@ interface Props {
 const props = defineProps<Props>()
 const selectedType = ref('')
 
-const filteredEvents = computed(() => {
+const sortedEvents = computed(() => {
   if (!props.events) return []
-  if (!selectedType.value) return props.events
-  return props.events.filter(e => e.eventType === selectedType.value)
+  let events = selectedType.value
+    ? props.events.filter(e => e.eventType === selectedType.value)
+    : props.events
+
+  // Sort by eventTime in reverse chronological order (newest first)
+  return [...events].sort((a, b) =>
+    new Date(b.eventTime).getTime() - new Date(a.eventTime).getTime()
+  )
 })
 
 const formatTime = (time: string) => {
@@ -116,8 +123,35 @@ const formatEventType = (eventType: string) => {
   font-weight: 600;
 }
 
-.event-content {
-  padding: 8px 0;
+.event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.event-item {
+  display: flex;
+  gap: 16px;
+  padding: 12px;
+  border-left: 3px solid #e8e8e8;
+  transition: all 0.3s;
+  border-radius: 4px;
+}
+
+.event-item:hover {
+  border-left-color: #1890ff;
+  background-color: #f5f5f5;
+}
+
+.event-time {
+  min-width: 150px;
+  color: #999;
+  font-size: 12px;
+  padding-top: 2px;
+}
+
+.event-main {
+  flex: 1;
 }
 
 .event-header {

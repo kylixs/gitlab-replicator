@@ -2,6 +2,7 @@ package com.gitlab.mirror.server.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.gitlab.mirror.server.model.SyncStatistics;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -86,6 +87,13 @@ public class SyncEvent {
      */
     @TableField(value = "event_data", typeHandler = JacksonTypeHandler.class)
     private Map<String, Object> eventData;
+
+    /**
+     * Detailed sync statistics (JSON)
+     * Contains branch and commit statistics
+     */
+    @TableField(value = "statistics", typeHandler = JacksonTypeHandler.class)
+    private SyncStatistics statistics;
 
     /**
      * Event time

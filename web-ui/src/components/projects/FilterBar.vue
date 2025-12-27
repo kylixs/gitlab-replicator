@@ -154,6 +154,6 @@ const handleExport = () => {
 }
 
 .filter-form :deep(.el-form-item) {
-  margin-bottom: 0;
+  margin-bottom: 16px;
 }
 </style>

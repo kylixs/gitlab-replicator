@@ -338,10 +338,12 @@ public class GitCommandExecutor {
      * @return Execution result
      */
     private GitResult executeScript(String command, int timeoutSeconds, String... args) {
-        String[] fullCommand = new String[args.length + 2];
-        fullCommand[0] = scriptPath;
-        fullCommand[1] = command;
-        System.arraycopy(args, 0, fullCommand, 2, args.length);
+        // Use bash explicitly to support bash features like declare -A
+        String[] fullCommand = new String[args.length + 3];
+        fullCommand[0] = "bash";
+        fullCommand[1] = scriptPath;
+        fullCommand[2] = command;
+        System.arraycopy(args, 0, fullCommand, 3, args.length);
 
         ProcessBuilder pb = new ProcessBuilder(fullCommand);
         pb.redirectErrorStream(false);

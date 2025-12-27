@@ -2,7 +2,7 @@
   <div class="branches-tab">
     <!-- Statistics Cards -->
     <el-row :gutter="16" class="branch-stats">
-      <el-col :xs="24" :sm="12" :md:="6">
+      <el-col :xs="24" :sm="12" :md="6">
         <el-card shadow="hover">
           <div class="stat-item">
             <div class="stat-icon success">
@@ -310,7 +310,7 @@ onMounted(() => {
 .branches-tab {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .branch-stats {
@@ -327,8 +327,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
 }
 
@@ -363,7 +363,7 @@ onMounted(() => {
 }
 
 .stat-value {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   color: #333;
 }

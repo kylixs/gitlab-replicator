@@ -1,6 +1,8 @@
 package com.gitlab.mirror.server.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.gitlab.mirror.server.model.SyncStatistics;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -14,7 +16,7 @@ import java.time.LocalDateTime;
  * @author GitLab Mirror Team
  */
 @Data
-@TableName("sync_result")
+@TableName(value = "sync_result", autoResultMap = true)
 public class SyncResult {
 
     /**
@@ -94,6 +96,13 @@ public class SyncResult {
      */
     @TableField("summary")
     private String summary;
+
+    /**
+     * Detailed sync statistics (JSON)
+     * Contains branch and commit statistics
+     */
+    @TableField(value = "statistics", typeHandler = JacksonTypeHandler.class)
+    private SyncStatistics statistics;
 
     /**
      * Created time (auto-fill on insert)

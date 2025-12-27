@@ -81,11 +81,66 @@ case "$COMMAND" in
 
         cd "$LOCAL_PATH"
 
+        log "Collecting branch statistics before sync"
+
+        # Collect branch information BEFORE fetch
+        # Use temp file instead of associative array for sh compatibility
+        BEFORE_BRANCHES_FILE=$(mktemp)
+        git for-each-ref --format='%(refname:short) %(objectname)' refs/remotes/origin/ | sed 's|origin/||' > "$BEFORE_BRANCHES_FILE"
+
+        BEFORE_BRANCH_COUNT=$(wc -l < "$BEFORE_BRANCHES_FILE" | tr -d ' ')
+        log "Before sync: $BEFORE_BRANCH_COUNT branches"
+
         log "Updating from source: $(mask_url "$SOURCE_URL")"
 
         # Update from source using fetch to ensure all branches (including new ones) are synced
         # --prune removes remote-tracking refs that no longer exist on the remote
         git fetch origin --prune
+
+        log "Calculating statistics after fetch"
+
+        # Collect branch information AFTER fetch and calculate statistics
+        BRANCHES_CREATED=0
+        BRANCHES_UPDATED=0
+        BRANCHES_DELETED=0
+        COMMITS_PUSHED=0
+
+        # Use temp file for after branches
+        AFTER_BRANCHES_FILE=$(mktemp)
+        git for-each-ref --format='%(refname:short) %(objectname)' refs/remotes/origin/ | sed 's|origin/||' > "$AFTER_BRANCHES_FILE"
+
+        # Calculate new and updated branches
+        while IFS=' ' read -r branch sha; do
+            # Find old SHA for this branch
+            old_sha=$(grep "^${branch} " "$BEFORE_BRANCHES_FILE" 2>/dev/null | awk '{print $2}')
+
+            if [ -z "$old_sha" ]; then
+                # New branch
+                BRANCHES_CREATED=$((BRANCHES_CREATED + 1))
+                # Count commits in new branch
+                commit_count=$(git rev-list --count "$sha" 2>/dev/null || echo 0)
+                COMMITS_PUSHED=$((COMMITS_PUSHED + commit_count))
+            elif [ "$old_sha" != "$sha" ]; then
+                # Updated branch
+                BRANCHES_UPDATED=$((BRANCHES_UPDATED + 1))
+                # Count new commits
+                commit_count=$(git rev-list --count "$old_sha..$sha" 2>/dev/null || echo 0)
+                COMMITS_PUSHED=$((COMMITS_PUSHED + commit_count))
+            fi
+        done < "$AFTER_BRANCHES_FILE"
+
+        # Check for deleted branches
+        while IFS=' ' read -r branch sha; do
+            if ! grep -q "^${branch} " "$AFTER_BRANCHES_FILE" 2>/dev/null; then
+                BRANCHES_DELETED=$((BRANCHES_DELETED + 1))
+            fi
+        done < "$BEFORE_BRANCHES_FILE"
+
+        AFTER_BRANCH_COUNT=$(wc -l < "$AFTER_BRANCHES_FILE" | tr -d ' ')
+        log "After sync: $AFTER_BRANCH_COUNT branches (created: $BRANCHES_CREATED, updated: $BRANCHES_UPDATED, deleted: $BRANCHES_DELETED, commits: $COMMITS_PUSHED)"
+
+        # Cleanup temp files
+        rm -f "$BEFORE_BRANCHES_FILE" "$AFTER_BRANCHES_FILE"
 
         log "Pushing to target: $(mask_url "$TARGET_URL")"
 
@@ -105,6 +160,12 @@ case "$COMMAND" in
         # Get final SHA
         FINAL_SHA=$(git rev-parse HEAD)
         echo "FINAL_SHA=$FINAL_SHA"
+
+        # Output statistics
+        echo "BRANCHES_CREATED=$BRANCHES_CREATED"
+        echo "BRANCHES_UPDATED=$BRANCHES_UPDATED"
+        echo "BRANCHES_DELETED=$BRANCHES_DELETED"
+        echo "COMMITS_PUSHED=$COMMITS_PUSHED"
 
         log "Sync completed successfully"
         ;;
@@ -138,6 +199,16 @@ case "$COMMAND" in
         # Set push URL
         git remote set-url --push origin "$TARGET_URL"
 
+        # Collect statistics for first sync (all branches are new)
+        log "Collecting statistics for first sync"
+        BRANCHES_CREATED=$(git for-each-ref --format='%(refname)' refs/remotes/origin/ | wc -l)
+        BRANCHES_UPDATED=0
+        BRANCHES_DELETED=0
+        # Count total commits across all branches
+        COMMITS_PUSHED=$(git rev-list --all --count 2>/dev/null || echo 0)
+
+        log "First sync statistics: $BRANCHES_CREATED branches, $COMMITS_PUSHED total commits"
+
         # Push to target using --all and --tags
         # This pushes all branches and tags, which is exactly what we need for GitLab sync
         log "Pushing to target: $(mask_url "$TARGET_URL")"
@@ -147,6 +218,12 @@ case "$COMMAND" in
         # Get final SHA
         FINAL_SHA=$(git rev-parse HEAD)
         echo "FINAL_SHA=$FINAL_SHA"
+
+        # Output statistics
+        echo "BRANCHES_CREATED=$BRANCHES_CREATED"
+        echo "BRANCHES_UPDATED=$BRANCHES_UPDATED"
+        echo "BRANCHES_DELETED=$BRANCHES_DELETED"
+        echo "COMMITS_PUSHED=$COMMITS_PUSHED"
 
         log "First sync completed successfully"
         ;;

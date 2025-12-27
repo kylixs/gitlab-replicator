@@ -1,5 +1,6 @@
 package com.gitlab.mirror.server.controller.dto;
 
+import com.gitlab.mirror.server.model.SyncStatistics;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -86,4 +87,9 @@ public class SyncResultListDTO {
      * Sync method
      */
     private String syncMethod;
+
+    /**
+     * Sync statistics (branches created/updated/deleted, commits pushed)
+     */
+    private SyncStatistics statistics;
 }
