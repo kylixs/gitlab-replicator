@@ -20,12 +20,12 @@
           </div>
         </div>
         <div class="action-buttons">
-          <el-button :loading="syncing" @click="handleSync">
+          <el-button type="primary" :loading="syncing" @click="handleSync">
             <el-icon><Refresh /></el-icon>
             Sync Now
           </el-button>
           <el-button @click="handleRefresh">
-            <el-icon><Refresh /></el-icon>
+            <el-icon><RefreshRight /></el-icon>
             Refresh
           </el-button>
         </div>
@@ -147,7 +147,7 @@ onUnmounted(() => {
 .project-detail {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .breadcrumb {
@@ -198,5 +198,13 @@ onUnmounted(() => {
 .tabs-card {
   border-radius: 8px;
   min-height: 400px;
+}
+
+:deep(.el-tabs__content) {
+  padding-top: 12px;
+}
+
+:deep(.el-card__body) {
+  padding: 16px;
 }
 </style>

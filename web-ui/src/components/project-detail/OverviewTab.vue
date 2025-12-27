@@ -5,13 +5,15 @@
       <el-col :xs="24" :sm="12" :md="6">
         <el-card shadow="hover">
           <div class="stat-item">
-            <div class="stat-icon success">
-              <el-icon :size="24"><Check /></el-icon>
+            <div class="stat-icon" :class="getStatusIconClass(overview.project.syncStatus)">
+              <el-icon :size="24">
+                <component :is="getStatusIcon(overview.project.syncStatus)" />
+              </el-icon>
             </div>
             <div class="stat-info">
               <div class="stat-label">Status</div>
               <el-tag :type="getStatusType(overview.project.syncStatus)">
-                {{ overview.project.syncStatus }}
+                {{ formatStatus(overview.project.syncStatus) }}
               </el-tag>
             </div>
           </div>
@@ -25,7 +27,10 @@
             </div>
             <div class="stat-info">
               <div class="stat-label">Delay</div>
-              <div class="stat-value">{{ overview.delay?.formatted || '-' }}</div>
+              <el-tag v-if="overview.delay?.seconds != null" :type="getDelayType(overview.delay.seconds)" size="default">
+                {{ formatDelayReadable(overview.delay.seconds) }}
+              </el-tag>
+              <span v-else>-</span>
             </div>
           </div>
         </el-card>
@@ -58,70 +63,61 @@
       </el-col>
     </el-row>
 
-    <!-- Diff Status Badge -->
-    <el-card v-if="overview.diff?.diffStatus" shadow="hover" class="diff-status-card">
-      <div class="diff-status-container">
-        <div class="diff-status-label">Overall Diff Status</div>
-        <el-tag :type="getDiffStatusType(overview.diff.diffStatus)" size="large" class="diff-status-badge">
-          <el-icon class="status-icon">
-            <component :is="getDiffStatusIcon(overview.diff.diffStatus)" />
-          </el-icon>
-          {{ getDiffStatusLabel(overview.diff.diffStatus) }}
-        </el-tag>
+    <!-- Diff Statistics (Merged Card) -->
+    <el-card shadow="hover" class="diff-summary-card">
+      <template #header>
+        <div class="diff-summary-header">
+          <span class="diff-summary-title">Branch Sync Status</span>
+          <el-tag :type="getDiffStatusType(overview.diff?.diffStatus || 'PENDING')" size="small">
+            {{ getDiffStatusLabel(overview.diff?.diffStatus || 'PENDING') }}
+          </el-tag>
+        </div>
+      </template>
+      <div class="diff-summary-grid">
+        <div class="diff-summary-item">
+          <div class="diff-summary-label">
+            <el-icon class="label-icon new"><CirclePlus /></el-icon>
+            New Branches
+          </div>
+          <div class="diff-summary-value new">{{ overview.diff?.branchNew || 0 }}</div>
+        </div>
+        <div class="diff-summary-item">
+          <div class="diff-summary-label">
+            <el-icon class="label-icon deleted"><Remove /></el-icon>
+            Deleted
+          </div>
+          <div class="diff-summary-value deleted">{{ overview.diff?.branchDeleted || 0 }}</div>
+        </div>
+        <div class="diff-summary-item">
+          <div class="diff-summary-label">
+            <el-icon class="label-icon outdated"><Warning /></el-icon>
+            Outdated
+          </div>
+          <div class="diff-summary-value outdated">{{ overview.diff?.branchOutdated || 0 }}</div>
+        </div>
+        <div class="diff-summary-item">
+          <div class="diff-summary-label">
+            <el-icon class="label-icon ahead"><Top /></el-icon>
+            Ahead
+          </div>
+          <div class="diff-summary-value ahead">{{ overview.diff?.branchAhead || 0 }}</div>
+        </div>
+        <div class="diff-summary-item">
+          <div class="diff-summary-label">
+            <el-icon class="label-icon diverged"><Sort /></el-icon>
+            Diverged
+          </div>
+          <div class="diff-summary-value diverged">{{ overview.diff?.branchDiverged || 0 }}</div>
+        </div>
+        <div class="diff-summary-item">
+          <div class="diff-summary-label">
+            <el-icon class="label-icon commit"><DocumentCopy /></el-icon>
+            Commit Diff
+          </div>
+          <div class="diff-summary-value commit">{{ overview.diff?.commitDiff || 0 }}</div>
+        </div>
       </div>
     </el-card>
-
-    <!-- Diff Statistics -->
-    <el-row :gutter="16" class="diff-stats">
-      <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="hover" class="diff-card">
-          <div class="diff-item">
-            <div class="diff-label">New Branches</div>
-            <div class="diff-value new">+{{ overview.diff?.branchNew || 0 }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="hover" class="diff-card">
-          <div class="diff-item">
-            <div class="diff-label">Deleted Branches</div>
-            <div class="diff-value deleted">-{{ overview.diff?.branchDeleted || 0 }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="hover" class="diff-card">
-          <div class="diff-item">
-            <div class="diff-label">Outdated Branches</div>
-            <div class="diff-value outdated">~{{ overview.diff?.branchOutdated || 0 }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="hover" class="diff-card">
-          <div class="diff-item">
-            <div class="diff-label">Ahead Branches</div>
-            <div class="diff-value ahead">↑{{ overview.diff?.branchAhead || 0 }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="hover" class="diff-card">
-          <div class="diff-item">
-            <div class="diff-label">Diverged Branches</div>
-            <div class="diff-value diverged">⚡{{ overview.diff?.branchDiverged || 0 }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :sm="12" :md="6">
-        <el-card shadow="hover" class="diff-card">
-          <div class="diff-item">
-            <div class="diff-label">Commit Diff</div>
-            <div class="diff-value new">+{{ overview.diff?.commitDiff || 0 }}</div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
 
     <!-- Project Information -->
     <el-row :gutter="16" class="project-info-row">
@@ -134,8 +130,8 @@
             </div>
           </template>
           <el-descriptions :column="1" border>
-            <el-descriptions-item label="Project ID">
-              {{ overview.source?.id }}
+            <el-descriptions-item label="GitLab Project ID">
+              {{ overview.source?.gitlabProjectId }}
             </el-descriptions-item>
             <el-descriptions-item label="Name">
               {{ overview.source?.name }}
@@ -167,8 +163,8 @@
             </div>
           </template>
           <el-descriptions :column="1" border>
-            <el-descriptions-item label="Project ID">
-              {{ overview.target?.id }}
+            <el-descriptions-item label="GitLab Project ID">
+              {{ overview.target?.gitlabProjectId }}
             </el-descriptions-item>
             <el-descriptions-item label="Name">
               {{ overview.target?.name }}
@@ -442,7 +438,7 @@
 
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { SuccessFilled, WarningFilled, CircleCloseFilled, QuestionFilled } from '@element-plus/icons-vue'
+import { SuccessFilled, WarningFilled, CircleCloseFilled, QuestionFilled, CirclePlus, Remove, Warning, Top, Sort, DocumentCopy, Check, Close, Loading } from '@element-plus/icons-vue'
 import { syncApi } from '@/api/sync'
 import type { ProjectOverview } from '@/types'
 
@@ -555,14 +551,83 @@ const handleViewTaskLogs = async () => {
 
 const getStatusType = (status: string) => {
   const typeMap: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
+    'active': 'success',
     'synced': 'success',
-    'syncing': 'info',
+    'warning': 'warning',
     'outdated': 'warning',
     'paused': 'info',
     'failed': 'danger',
-    'pending': 'warning'
+    'missing': 'danger',
+    'error': 'danger',
+    'pending': 'warning',
+    'discovered': 'info',
+    'initializing': 'info',
+    'disabled': 'info',
+    'syncing': 'info'
   }
   return typeMap[status.toLowerCase()] || 'info'
+}
+
+const formatStatus = (status: string) => {
+  if (!status) return status
+  const statusLower = status.toLowerCase()
+  const statusMap: Record<string, string> = {
+    'discovered': 'Discovered',
+    'initializing': 'Initializing',
+    'active': 'Active',
+    'warning': 'Warning',
+    'error': 'Error',
+    'failed': 'Failed',
+    'missing': 'Missing',
+    'disabled': 'Disabled',
+    'deleted': 'Deleted',
+    'paused': 'Paused',
+    'pending': 'Pending',
+    'synced': 'Synced',
+    'syncing': 'Syncing',
+    'outdated': 'Outdated'
+  }
+  return statusMap[statusLower] || status
+}
+
+const getStatusIcon = (status: string) => {
+  const statusLower = status.toLowerCase()
+  if (statusLower === 'active' || statusLower === 'synced') return Check
+  if (statusLower === 'failed' || statusLower === 'error' || statusLower === 'missing') return Close
+  if (statusLower === 'syncing' || statusLower === 'initializing') return Loading
+  if (statusLower === 'warning' || statusLower === 'outdated' || statusLower === 'pending') return Warning
+  return QuestionFilled
+}
+
+const getStatusIconClass = (status: string) => {
+  const statusLower = status.toLowerCase()
+  if (statusLower === 'active' || statusLower === 'synced') return 'success'
+  if (statusLower === 'failed' || statusLower === 'error' || statusLower === 'missing') return 'danger'
+  if (statusLower === 'warning' || statusLower === 'outdated' || statusLower === 'pending') return 'warning'
+  return 'info'
+}
+
+const getDelayType = (delaySeconds: number) => {
+  if (delaySeconds < 3600) return 'success'
+  if (delaySeconds < 86400) return 'warning'
+  return 'danger'
+}
+
+const formatDelayReadable = (delaySeconds: number) => {
+  if (!delaySeconds || delaySeconds === 0) return '0s'
+
+  if (delaySeconds < 60) {
+    return `${delaySeconds}s`
+  } else if (delaySeconds < 3600) {
+    const minutes = Math.floor(delaySeconds / 60)
+    return `${minutes}m`
+  } else if (delaySeconds < 86400) {
+    const hours = Math.floor(delaySeconds / 3600)
+    return `${hours}h`
+  } else {
+    const days = Math.floor(delaySeconds / 86400)
+    return `${days}d`
+  }
 }
 
 const getDiffStatusType = (status: string) => {
@@ -678,13 +743,13 @@ const formatTaskStatus = (status: string) => {
 .overview-tab {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .status-cards,
 .diff-stats,
 .project-info-row {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .stat-item {
@@ -697,8 +762,8 @@ const formatTaskStatus = (status: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
 }
 
@@ -710,6 +775,11 @@ const formatTaskStatus = (status: string) => {
 .stat-icon.warning {
   background-color: #fffbe6;
   color: #faad14;
+}
+
+.stat-icon.danger {
+  background-color: #fff1f0;
+  color: #ff4d4f;
 }
 
 .stat-icon.info {
@@ -733,7 +803,7 @@ const formatTaskStatus = (status: string) => {
 }
 
 .stat-value {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: #333;
 }
@@ -742,8 +812,23 @@ const formatTaskStatus = (status: string) => {
   text-align: center;
 }
 
+.diff-card.compact :deep(.el-card__body) {
+  padding: 12px;
+}
+
 .diff-item {
   padding: 8px 0;
+}
+
+.diff-item-compact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.diff-stats-row2 {
+  margin-top: 0;
 }
 
 .diff-label {
@@ -752,41 +837,164 @@ const formatTaskStatus = (status: string) => {
   margin-bottom: 8px;
 }
 
+.diff-label-small {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
 .diff-value {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: bold;
 }
 
-.diff-value.new {
+.diff-value-small {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.diff-value.new,
+.diff-value-small.new {
   color: #52c41a;
 }
 
-.diff-value.deleted {
+.diff-value.deleted,
+.diff-value-small.deleted {
   color: #ff4d4f;
 }
 
-.diff-value.outdated {
+.diff-value.outdated,
+.diff-value-small.outdated {
   color: #faad14;
 }
 
-.diff-value.ahead {
+.diff-value.ahead,
+.diff-value-small.ahead {
   color: #fa8c16;
 }
 
-.diff-value.diverged {
+.diff-value.diverged,
+.diff-value-small.diverged {
+  color: #f5222d;
+}
+
+.diff-value-small.danger {
+  color: #ff4d4f;
+}
+
+.diff-summary-card {
+  margin-bottom: 12px;
+}
+
+.diff-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.diff-summary-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
+.diff-summary-grid {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 12px;
+  padding: 8px 0;
+  overflow-x: auto;
+}
+
+.diff-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background-color: #fafafa;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
+  flex-shrink: 0;
+  min-width: fit-content;
+}
+
+.diff-summary-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #666;
+  flex: 1;
+  min-width: 0;
+}
+
+.label-icon {
+  font-size: 16px;
+}
+
+.label-icon.new {
+  color: #52c41a;
+}
+
+.label-icon.deleted {
+  color: #ff4d4f;
+}
+
+.label-icon.outdated {
+  color: #faad14;
+}
+
+.label-icon.ahead {
+  color: #fa8c16;
+}
+
+.label-icon.diverged {
+  color: #f5222d;
+}
+
+.label-icon.commit {
+  color: #1890ff;
+}
+
+.diff-summary-value {
+  font-size: 20px;
+  font-weight: 700;
+  min-width: 32px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.diff-summary-value.new,
+.diff-summary-value.commit {
+  color: #52c41a;
+}
+
+.diff-summary-value.deleted {
+  color: #ff4d4f;
+}
+
+.diff-summary-value.outdated {
+  color: #faad14;
+}
+
+.diff-summary-value.ahead {
+  color: #fa8c16;
+}
+
+.diff-summary-value.diverged {
   color: #f5222d;
 }
 
 .diff-status-card {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .diff-status-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 8px 0;
+  gap: 8px;
+  padding: 4px 0;
 }
 
 .diff-status-label {

@@ -196,6 +196,7 @@ const handleUserCommand = async (command: string) => {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .header-actions {
