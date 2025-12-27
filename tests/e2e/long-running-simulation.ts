@@ -30,16 +30,16 @@ const CONFIG = {
   COMMIT_INTERVAL_MIN: 3,
   COMMIT_INTERVAL_MAX: 5,
 
-  BRANCH_INTERVAL_MIN: 10,
-  BRANCH_INTERVAL_MAX: 20,
+  BRANCH_INTERVAL_MIN: 30,
+  BRANCH_INTERVAL_MAX: 60,
 
-  TAG_INTERVAL_MIN: 10,
-  TAG_INTERVAL_MAX: 20,
+  TAG_INTERVAL_MIN: 30,
+  TAG_INTERVAL_MAX: 60,
 
-  MR_INTERVAL_MIN: 10,
-  MR_INTERVAL_MAX: 20,
+  MR_INTERVAL_MIN: 30,
+  MR_INTERVAL_MAX: 60,
 
-  CLEANUP_INTERVAL_MIN: 60,
+  CLEANUP_INTERVAL_MIN: 120,
   CLEANUP_INTERVAL_MAX: 240,
 
   // Cleanup rules
@@ -166,11 +166,12 @@ class LongRunningSimulation {
         : this.state.project.default_branch
 
       const fileIndex = this.state.operationCount
+      const timestamp = Date.now()
       const commit = await this.gitlab.createCommit(
         this.state.project.id,
         branch,
         `feat: add feature ${fileIndex}`,
-        `src/feature_${fileIndex}.ts`
+        `src/feature_${timestamp}.ts`
       )
 
       this.log(`✓ Created commit ${commit.short_id} on branch '${branch}'`)
