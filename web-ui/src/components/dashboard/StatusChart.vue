@@ -27,12 +27,34 @@ const chartRef = ref<HTMLElement>()
 const chartType = ref<'pie' | 'bar'>('pie')
 let chartInstance: echarts.ECharts | null = null
 
-const colors = {
-  synced: '#52c41a',
-  syncing: '#1890ff',
-  pending: '#faad14',
-  paused: '#8c8c8c',
-  failed: '#f5222d'
+// Dynamic color mapping for different statuses
+const getStatusColor = (status: string): string => {
+  const colorMap: Record<string, string> = {
+    'active': '#52c41a',
+    'pending': '#1890ff',
+    'missing': '#faad14',
+    'failed': '#f5222d',
+    'warning': '#faad14',
+    'deleted': '#8c8c8c',
+    'target_created': '#1890ff',
+    'mirror_configured': '#1890ff'
+  }
+  return colorMap[status] || '#8c8c8c'
+}
+
+// Format status name for display
+const formatStatusName = (status: string): string => {
+  const nameMap: Record<string, string> = {
+    'active': 'Active',
+    'pending': 'Pending',
+    'missing': 'Missing',
+    'failed': 'Failed',
+    'warning': 'Warning',
+    'deleted': 'Deleted',
+    'target_created': 'Target Created',
+    'mirror_configured': 'Mirror Configured'
+  }
+  return nameMap[status] || status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ')
 }
 
 const initChart = () => {
@@ -43,15 +65,14 @@ const initChart = () => {
 }
 
 const updateChart = () => {
-  if (!chartInstance || !props.data) return
+  if (!chartInstance || !props.data || !Array.isArray(props.data)) return
 
-  const chartData = [
-    { name: 'Synced', value: props.data.synced, itemStyle: { color: colors.synced } },
-    { name: 'Syncing', value: props.data.syncing, itemStyle: { color: colors.syncing } },
-    { name: 'Pending', value: props.data.pending, itemStyle: { color: colors.pending } },
-    { name: 'Paused', value: props.data.paused, itemStyle: { color: colors.paused } },
-    { name: 'Failed', value: props.data.failed, itemStyle: { color: colors.failed } }
-  ]
+  // Convert array data to chart format
+  const chartData = props.data.map(item => ({
+    name: formatStatusName(item.status),
+    value: item.count,
+    itemStyle: { color: getStatusColor(item.status) }
+  }))
 
   const option = chartType.value === 'pie' ? {
     tooltip: {

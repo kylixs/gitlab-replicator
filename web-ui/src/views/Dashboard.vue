@@ -24,6 +24,7 @@
 
     <!-- Statistics Cards -->
     <el-row :gutter="24" class="stat-cards">
+      <!-- Total Projects Card -->
       <el-col :xs="24" :sm="12" :md="8" :lg="24 / 5">
         <StatCard
           title="Total Projects"
@@ -33,40 +34,19 @@
           @click="navigateToProjects()"
         />
       </el-col>
-      <el-col :xs="24" :sm="12" :md="8" :lg="24 / 5">
+
+      <!-- Dynamic Status Cards -->
+      <el-col
+        v-for="statusItem in statusCards"
+        :key="statusItem.status"
+        :xs="24" :sm="12" :md="8" :lg="24 / 5"
+      >
         <StatCard
-          title="Synced"
-          :value="stats?.syncedProjects || 0"
-          icon="Check"
-          type="success"
-          @click="navigateToProjects('synced')"
-        />
-      </el-col>
-      <el-col :xs="24" :sm="12" :md="8" :lg="24 / 5">
-        <StatCard
-          title="Syncing"
-          :value="stats?.syncingProjects || 0"
-          icon="Loading"
-          type="primary"
-          @click="navigateToProjects('syncing')"
-        />
-      </el-col>
-      <el-col :xs="24" :sm="12" :md="8" :lg="24 / 5">
-        <StatCard
-          title="Paused"
-          :value="stats?.pausedProjects || 0"
-          icon="VideoPause"
-          type="info"
-          @click="navigateToProjects('paused')"
-        />
-      </el-col>
-      <el-col :xs="24" :sm="12" :md="8" :lg="24 / 5">
-        <StatCard
-          title="Failed"
-          :value="stats?.failedProjects || 0"
-          icon="Close"
-          type="danger"
-          @click="navigateToProjects('failed')"
+          :title="formatStatusName(statusItem.status)"
+          :value="statusItem.count"
+          :icon="getStatusIcon(statusItem.status)"
+          :type="getStatusType(statusItem.status)"
+          @click="navigateToProjects(statusItem.status)"
         />
       </el-col>
     </el-row>
@@ -95,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import StatCard from '@/components/dashboard/StatCard.vue'
@@ -119,6 +99,63 @@ const delayedProjects = ref<DelayedProject[] | null>(null)
 const recentEvents = ref<RecentEvent[] | null>(null)
 const scanningIncremental = ref(false)
 const scanningFull = ref(false)
+
+// Compute dynamic status cards from statusCounts
+const statusCards = computed(() => {
+  if (!stats.value?.statusCounts) return []
+
+  return Object.entries(stats.value.statusCounts)
+    .map(([status, count]) => ({
+      status,
+      count: Number(count)
+    }))
+    .sort((a, b) => b.count - a.count) // Sort by count descending
+})
+
+// Format status name for display
+const formatStatusName = (status: string): string => {
+  const nameMap: Record<string, string> = {
+    'active': 'Active',
+    'pending': 'Pending',
+    'missing': 'Missing',
+    'failed': 'Failed',
+    'warning': 'Warning',
+    'deleted': 'Deleted',
+    'target_created': 'Target Created',
+    'mirror_configured': 'Mirror Configured'
+  }
+  return nameMap[status] || status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ')
+}
+
+// Get icon for status
+const getStatusIcon = (status: string): string => {
+  const iconMap: Record<string, string> = {
+    'active': 'Check',
+    'pending': 'Clock',
+    'missing': 'QuestionFilled',
+    'failed': 'Close',
+    'warning': 'Warning',
+    'deleted': 'Delete',
+    'target_created': 'FolderAdd',
+    'mirror_configured': 'Setting'
+  }
+  return iconMap[status] || 'Document'
+}
+
+// Get card type (color) for status
+const getStatusType = (status: string): 'primary' | 'success' | 'warning' | 'danger' | 'info' => {
+  const typeMap: Record<string, 'primary' | 'success' | 'warning' | 'danger' | 'info'> = {
+    'active': 'success',
+    'pending': 'info',
+    'missing': 'warning',
+    'failed': 'danger',
+    'warning': 'warning',
+    'deleted': 'info',
+    'target_created': 'primary',
+    'mirror_configured': 'primary'
+  }
+  return typeMap[status] || 'info'
+}
 
 const loadData = async () => {
   try {

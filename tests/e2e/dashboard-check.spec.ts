@@ -11,8 +11,8 @@ test.describe('Dashboard Page Check', () => {
     await page.waitForTimeout(2000)
   })
 
-  test('should display dashboard statistics', async ({ page }) => {
-    console.log('\n=== Dashboard Statistics Check ===\n')
+  test('should display dashboard statistics with dynamic status cards', async ({ page }) => {
+    console.log('\n=== Dashboard Statistics Check (Dynamic) ===\n')
 
     // Check Total Projects card
     const totalProjectsCard = page.locator('text=Total Projects').locator('..')
@@ -20,31 +20,26 @@ test.describe('Dashboard Page Check', () => {
     const totalCount = await totalProjectsCard.locator('.stat-value').textContent()
     console.log(`Total Projects: ${totalCount}`)
 
-    // Check Synced card
-    const syncedCard = page.locator('text=Synced').locator('..')
-    await expect(syncedCard).toBeVisible()
-    const syncedCount = await syncedCard.locator('.stat-value').textContent()
-    console.log(`Synced: ${syncedCount}`)
+    // Wait for dynamic status cards to load
+    await page.waitForTimeout(1000)
 
-    // Check Syncing card
-    const syncingCard = page.locator('text=Syncing').locator('..')
-    await expect(syncingCard).toBeVisible()
-    const syncingCount = await syncingCard.locator('.stat-value').textContent()
-    console.log(`Syncing: ${syncingCount}`)
+    // Get all stat cards
+    const statCards = page.locator('.stat-card')
+    const cardCount = await statCards.count()
+    console.log(`\nFound ${cardCount} stat cards (including Total Projects)`)
 
-    // Check Paused card
-    const pausedCard = page.locator('text=Paused').locator('..')
-    await expect(pausedCard).toBeVisible()
-    const pausedCount = await pausedCard.locator('.stat-value').textContent()
-    console.log(`Paused: ${pausedCount}`)
+    // Check each dynamic status card
+    for (let i = 0; i < cardCount; i++) {
+      const card = statCards.nth(i)
+      const title = await card.locator('.stat-title').textContent()
+      const value = await card.locator('.stat-value').textContent()
+      console.log(`  - ${title}: ${value}`)
+    }
 
-    // Check Failed card
-    const failedCard = page.locator('text=Failed').locator('..')
-    await expect(failedCard).toBeVisible()
-    const failedCount = await failedCard.locator('.stat-value').textContent()
-    console.log(`Failed: ${failedCount}`)
+    // Verify we have at least Total Projects + some status cards
+    expect(cardCount).toBeGreaterThanOrEqual(2)
 
-    console.log('\n✅ All statistic cards are visible\n')
+    console.log('\n✅ All dynamic statistic cards are displayed\n')
   })
 
   test('should display status distribution chart', async ({ page }) => {
