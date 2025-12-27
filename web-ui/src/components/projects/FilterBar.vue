@@ -47,7 +47,9 @@
           style="width: 150px"
         >
           <el-option label="Waiting" value="waiting" />
+          <el-option label="Pending" value="pending" />
           <el-option label="Running" value="running" />
+          <el-option label="Blocked" value="blocked" />
           <el-option label="Disabled" value="disabled" />
           <el-option label="Failed" value="failed" />
         </el-select>

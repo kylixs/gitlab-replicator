@@ -499,7 +499,9 @@ const getTaskStatusType = (status: string) => {
   const statusLower = status.toLowerCase()
   const typeMap: Record<string, string> = {
     'waiting': 'info',
+    'pending': 'info',
     'running': 'warning',
+    'blocked': 'warning',
     'disabled': '',
     'failed': 'danger'
   }
@@ -511,7 +513,9 @@ const formatTaskStatus = (status: string) => {
   const statusLower = status.toLowerCase()
   const statusMap: Record<string, string> = {
     'waiting': 'Waiting',
+    'pending': 'Pending',
     'running': 'Running',
+    'blocked': 'Blocked',
     'disabled': 'Disabled',
     'failed': 'Failed'
   }
