@@ -29,19 +29,7 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="Statistics" width="180">
-        <template #default="{ row }">
-          <div v-if="row.statistics && hasStatistics(row.statistics)" style="font-size: 12px; line-height: 1.6;">
-            <span v-if="row.statistics.branchesCreated" style="color: #67c23a;">+{{ row.statistics.branchesCreated }} </span>
-            <span v-if="row.statistics.branchesUpdated" style="color: #409eff;">~{{ row.statistics.branchesUpdated }} </span>
-            <span v-if="row.statistics.branchesDeleted" style="color: #f56c6c;">-{{ row.statistics.branchesDeleted }} </span>
-            <span v-if="row.statistics.commitsPushed" style="color: #909399;">{{ row.statistics.commitsPushed }}C</span>
-          </div>
-          <span v-else style="color: #909399;">-</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column prop="message" label="Message" min-width="300">
+      <el-table-column prop="message" label="Message" min-width="450">
         <template #default="{ row }">
           <div class="message-container">
             <el-icon v-if="isSkippedSync(row.message)" :size="16" class="skip-icon"><CircleCheck /></el-icon>
