@@ -98,8 +98,13 @@ const initChart = () => {
 
   chartInstance = echarts.init(chartRef.value)
 
+  // Calculate total counts for each time point
+  const totalCounts = formatXAxisData.value.map((_, index) => {
+    return Object.values(currentData.value!).reduce((sum, counts) => sum + (counts[index] || 0), 0)
+  })
+
   // Build series from typeData
-  const series = Object.entries(currentData.value).map(([eventType, counts]) => ({
+  const series: any[] = Object.entries(currentData.value).map(([eventType, counts]) => ({
     name: eventTypeNames[eventType] || eventType,
     type: 'line',
     data: counts,
@@ -113,9 +118,30 @@ const initChart = () => {
     }
   }))
 
-  const legendData = Object.keys(currentData.value).map(
+  // Add total series as the first one with emphasis
+  series.unshift({
+    name: 'Total',
+    type: 'line',
+    data: totalCounts,
+    smooth: true,
+    lineStyle: {
+      width: 3,
+      color: '#409eff'
+    },
+    itemStyle: {
+      color: '#409eff'
+    },
+    areaStyle: {
+      color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        { offset: 0, color: 'rgba(64, 158, 255, 0.2)' },
+        { offset: 1, color: 'rgba(64, 158, 255, 0.05)' }
+      ])
+    }
+  })
+
+  const legendData = ['Total', ...Object.keys(currentData.value).map(
     eventType => eventTypeNames[eventType] || eventType
-  )
+  )]
 
   const option = {
     tooltip: {

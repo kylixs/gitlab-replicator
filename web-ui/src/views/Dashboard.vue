@@ -68,17 +68,6 @@
         <StatusChart :data="distribution" />
       </el-col>
       <el-col :xs="24" :lg="16">
-        <SyncTrendChart
-          :trend-data="trendData"
-          :trend-data24h="trendData24h"
-          @time-range-change="handleSyncTrendTimeRangeChange"
-        />
-      </el-col>
-    </el-row>
-
-    <!-- Event Type Trend Chart -->
-    <el-row :gutter="16" class="content-row">
-      <el-col :span="24">
         <EventTypeTrendChart
           :event-type-trend="eventTypeTrend"
           :event-type-trend24h="eventTypeTrend24h"
@@ -113,7 +102,6 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import StatCard from '@/components/dashboard/StatCard.vue'
 import StatusChart from '@/components/dashboard/StatusChart.vue'
-import SyncTrendChart from '@/components/dashboard/SyncTrendChart.vue'
 import EventTypeTrendChart from '@/components/dashboard/EventTypeTrendChart.vue'
 import DelayedTable from '@/components/dashboard/DelayedTable.vue'
 import ActivityTimeline from '@/components/dashboard/ActivityTimeline.vue'
@@ -133,28 +121,12 @@ interface TodaySyncStats {
   totalBranchChanges: number
 }
 
-interface TrendData {
-  dates: string[]
-  totalSyncs: number[]
-  successSyncs: number[]
-  failedSyncs: number[]
-}
-
-interface TrendData24h {
-  hours: string[]
-  totalSyncs: number[]
-  successSyncs: number[]
-  failedSyncs: number[]
-}
-
 const router = useRouter()
 const stats = ref<DashboardStats | null>(null)
 const distribution = ref<StatusDistribution | null>(null)
 const delayedProjects = ref<DelayedProject[] | null>(null)
 const recentEvents = ref<RecentEvent[] | null>(null)
 const todayStats = ref<TodaySyncStats | null>(null)
-const trendData = ref<TrendData | null>(null)
-const trendData24h = ref<TrendData24h | null>(null)
 const eventTypeTrend = ref<ApiEventTypeTrend | null>(null)
 const eventTypeTrend24h = ref<ApiEventTypeTrend | null>(null)
 
@@ -249,32 +221,6 @@ const loadTodayStats = async () => {
   }
 }
 
-const loadTrendData = async () => {
-  try {
-    const response = await dashboardApi.getTrend('7d')
-    trendData.value = response.data
-  } catch (error) {
-    console.error('Failed to load trend data:', error)
-    ElMessage.error('Failed to load trend data')
-  }
-}
-
-const loadTrendData24h = async () => {
-  try {
-    const response = await dashboardApi.getTrend('24h')
-    // Map to TrendData24h format (dates -> hours)
-    trendData24h.value = {
-      hours: response.data.dates,
-      totalSyncs: response.data.totalSyncs,
-      successSyncs: response.data.successSyncs,
-      failedSyncs: response.data.failedSyncs
-    }
-  } catch (error) {
-    console.error('Failed to load 24h trend data:', error)
-    ElMessage.error('Failed to load 24h trend data')
-  }
-}
-
 const loadEventTypeTrend = async () => {
   try {
     const response = await dashboardApi.getEventTypeTrend('7d')
@@ -292,14 +238,6 @@ const loadEventTypeTrend24h = async () => {
   } catch (error) {
     console.error('Failed to load 24h event type trend data:', error)
     ElMessage.error('Failed to load 24h event type trend data')
-  }
-}
-
-const handleSyncTrendTimeRangeChange = async (range: '24h' | '7d') => {
-  if (range === '24h' && !trendData24h.value) {
-    await loadTrendData24h()
-  } else if (range === '7d' && !trendData.value) {
-    await loadTrendData()
   }
 }
 

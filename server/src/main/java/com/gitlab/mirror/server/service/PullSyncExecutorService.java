@@ -890,7 +890,7 @@ public class PullSyncExecutorService {
         if (hasChanges || isFailure) {
             SyncEvent event = new SyncEvent();
             event.setSyncProjectId(project.getId());
-            event.setEventType(SyncEvent.EventType.SYNC_FINISHED);
+            event.setEventType(isFailure ? SyncEvent.EventType.SYNC_FAILED : SyncEvent.EventType.SYNC_FINISHED);
             event.setEventSource("pull_sync_executor");
             event.setStatus(isFailure ? SyncEvent.Status.FAILED : SyncEvent.Status.SUCCESS);
             event.setCommitSha(task.getSourceCommitSha());
