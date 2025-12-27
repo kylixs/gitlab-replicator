@@ -8,19 +8,15 @@ export interface ApiResponse<T> {
 // Dashboard
 export interface DashboardStats {
   totalProjects: number
-  syncedProjects: number
-  syncingProjects: number
-  pausedProjects: number
-  failedProjects: number
+  statusCounts: Record<string, number>  // Dynamic status counts
 }
 
-export interface StatusDistribution {
-  synced: number
-  syncing: number
-  pending: number
-  paused: number
-  failed: number
+export interface StatusItem {
+  status: string
+  count: number
 }
+
+export type StatusDistribution = StatusItem[]
 
 export interface DelayedProject {
   projectKey: string

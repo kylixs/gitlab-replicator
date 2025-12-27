@@ -42,31 +42,27 @@ public class DashboardController {
     }
 
     /**
-     * Get dashboard statistics
+     * Get dashboard statistics (dynamic status counts)
      *
      * GET /api/dashboard/stats
      */
     @GetMapping("/stats")
-    public ResponseEntity<ApiResponse<DashboardStats>> getStats() {
+    public ResponseEntity<ApiResponse<DynamicDashboardStats>> getStats() {
         log.info("Query dashboard stats");
 
         try {
             List<SyncProject> allProjects = syncProjectMapper.selectList(null);
 
-            DashboardStats stats = new DashboardStats();
+            // Group by status and count
+            java.util.Map<String, Long> statusCounts = allProjects.stream()
+                    .collect(Collectors.groupingBy(
+                            p -> p.getSyncStatus() != null ? p.getSyncStatus() : "unknown",
+                            Collectors.counting()
+                    ));
+
+            DynamicDashboardStats stats = new DynamicDashboardStats();
             stats.setTotalProjects(allProjects.size());
-            stats.setSyncedProjects((int) allProjects.stream()
-                    .filter(p -> "synced".equalsIgnoreCase(p.getSyncStatus()))
-                    .count());
-            stats.setSyncingProjects((int) allProjects.stream()
-                    .filter(p -> "syncing".equalsIgnoreCase(p.getSyncStatus()))
-                    .count());
-            stats.setPausedProjects((int) allProjects.stream()
-                    .filter(p -> "paused".equalsIgnoreCase(p.getSyncStatus()))
-                    .count());
-            stats.setFailedProjects((int) allProjects.stream()
-                    .filter(p -> "failed".equalsIgnoreCase(p.getSyncStatus()))
-                    .count());
+            stats.setStatusCounts(statusCounts);
 
             return ResponseEntity.ok(ApiResponse.success(stats));
         } catch (Exception e) {
@@ -76,33 +72,28 @@ public class DashboardController {
     }
 
     /**
-     * Get status distribution
+     * Get status distribution (dynamic, same as stats for simplicity)
      *
      * GET /api/dashboard/status-distribution
      */
     @GetMapping("/status-distribution")
-    public ResponseEntity<ApiResponse<StatusDistribution>> getStatusDistribution() {
+    public ResponseEntity<ApiResponse<java.util.List<StatusItem>>> getStatusDistribution() {
         log.info("Query status distribution");
 
         try {
             List<SyncProject> allProjects = syncProjectMapper.selectList(null);
 
-            StatusDistribution distribution = new StatusDistribution();
-            distribution.setSynced((int) allProjects.stream()
-                    .filter(p -> "synced".equalsIgnoreCase(p.getSyncStatus()))
-                    .count());
-            distribution.setSyncing((int) allProjects.stream()
-                    .filter(p -> "syncing".equalsIgnoreCase(p.getSyncStatus()))
-                    .count());
-            distribution.setPending((int) allProjects.stream()
-                    .filter(p -> "pending".equalsIgnoreCase(p.getSyncStatus()))
-                    .count());
-            distribution.setPaused((int) allProjects.stream()
-                    .filter(p -> "paused".equalsIgnoreCase(p.getSyncStatus()))
-                    .count());
-            distribution.setFailed((int) allProjects.stream()
-                    .filter(p -> "failed".equalsIgnoreCase(p.getSyncStatus()))
-                    .count());
+            // Group by status and count, convert to list for chart display
+            java.util.List<StatusItem> distribution = allProjects.stream()
+                    .collect(Collectors.groupingBy(
+                            p -> p.getSyncStatus() != null ? p.getSyncStatus() : "unknown",
+                            Collectors.counting()
+                    ))
+                    .entrySet()
+                    .stream()
+                    .map(entry -> new StatusItem(entry.getKey(), entry.getValue().intValue()))
+                    .sorted((a, b) -> Integer.compare(b.getCount(), a.getCount()))
+                    .collect(Collectors.toList());
 
             return ResponseEntity.ok(ApiResponse.success(distribution));
         } catch (Exception e) {
@@ -200,27 +191,22 @@ public class DashboardController {
     }
 
     /**
-     * Dashboard statistics
+     * Dynamic dashboard statistics
      */
     @Data
-    public static class DashboardStats {
+    public static class DynamicDashboardStats {
         private Integer totalProjects;
-        private Integer syncedProjects;
-        private Integer syncingProjects;
-        private Integer pausedProjects;
-        private Integer failedProjects;
+        private java.util.Map<String, Long> statusCounts;  // status -> count mapping
     }
 
     /**
-     * Status distribution
+     * Status item for distribution chart
      */
     @Data
-    public static class StatusDistribution {
-        private Integer synced;
-        private Integer syncing;
-        private Integer pending;
-        private Integer paused;
-        private Integer failed;
+    @lombok.AllArgsConstructor
+    public static class StatusItem {
+        private String status;
+        private Integer count;
     }
 
     /**
