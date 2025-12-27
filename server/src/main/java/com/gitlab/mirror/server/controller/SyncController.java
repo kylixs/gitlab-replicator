@@ -108,12 +108,13 @@ public class SyncController {
     /**
      * Get project list with enhanced filtering and sorting
      *
-     * GET /api/sync/projects?status=synced&syncMethod=pull_sync&group=ai&search=test&sortBy=delay&sortOrder=desc&page=1&size=20
+     * GET /api/sync/projects?status=synced&taskStatus=running&diffStatus=OUTDATED&group=ai&search=test&sortBy=delay&sortOrder=desc&page=1&size=20
      */
     @GetMapping("/projects")
     public ResponseEntity<ApiResponse<PageResult<ProjectListDTO>>> getProjects(
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String syncMethod,
+            @RequestParam(required = false) String taskStatus,
+            @RequestParam(required = false) String diffStatus,
             @RequestParam(required = false) String group,
             @RequestParam(required = false) String delayRange,
             @RequestParam(required = false) String search,
@@ -121,8 +122,8 @@ public class SyncController {
             @RequestParam(required = false, defaultValue = "asc") String sortOrder,
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "20") Integer size) {
-        log.info("Query projects - status: {}, syncMethod: {}, group: {}, search: {}, sortBy: {}, page: {}, size: {}",
-                status, syncMethod, group, search, sortBy, page, size);
+        log.info("Query projects - status: {}, taskStatus: {}, diffStatus: {}, group: {}, search: {}, sortBy: {}, page: {}, size: {}",
+                status, taskStatus, diffStatus, group, search, sortBy, page, size);
 
         try {
             QueryWrapper<SyncProject> queryWrapper = new QueryWrapper<>();
@@ -130,11 +131,6 @@ public class SyncController {
             // Filter by status
             if (status != null && !status.isEmpty()) {
                 queryWrapper.eq("sync_status", status);
-            }
-
-            // Filter by sync method
-            if (syncMethod != null && !syncMethod.isEmpty()) {
-                queryWrapper.eq("sync_method", syncMethod);
             }
 
             // Filter by group (need to join with source_project_info)
@@ -157,8 +153,10 @@ public class SyncController {
                 queryWrapper.like("project_key", search);
             }
 
-            // Determine if we need full query (for calculated field sorting/filtering)
-            boolean needsFullQuery = (delayRange != null && !delayRange.isEmpty()) ||
+            // Determine if we need full query (for calculated field filtering/sorting)
+            boolean needsFullQuery = (taskStatus != null && !taskStatus.isEmpty()) ||
+                                   (diffStatus != null && !diffStatus.isEmpty()) ||
+                                   (delayRange != null && !delayRange.isEmpty()) ||
                                    (sortBy != null && !sortBy.isEmpty() &&
                                     isCalculatedField(sortBy));
 
@@ -166,14 +164,29 @@ public class SyncController {
             long total;
 
             if (needsFullQuery) {
-                // Query all matching records for calculated field sorting
+                // Query all matching records for calculated field sorting/filtering
                 List<SyncProject> allProjects = syncProjectMapper.selectList(queryWrapper);
                 total = allProjects.size();
 
-                // Build all DTOs
-                dtos = allProjects.stream()
-                        .map(projectListService::buildProjectListDTO)
-                        .collect(Collectors.toList());
+                // Build all DTOs using batch query for better performance
+                dtos = projectListService.buildProjectListDTOsBatch(allProjects);
+
+                // Apply task status filter
+                if (taskStatus != null && !taskStatus.isEmpty()) {
+                    dtos = dtos.stream()
+                            .filter(dto -> taskStatus.equals(dto.getTaskStatus()))
+                            .collect(Collectors.toList());
+                    total = dtos.size();
+                }
+
+                // Apply diff status filter
+                if (diffStatus != null && !diffStatus.isEmpty()) {
+                    dtos = dtos.stream()
+                            .filter(dto -> dto.getDiff() != null &&
+                                         diffStatus.equals(dto.getDiff().getDiffStatus()))
+                            .collect(Collectors.toList());
+                    total = dtos.size();
+                }
 
                 // Apply delay range filter
                 if (delayRange != null && !delayRange.isEmpty()) {
@@ -201,10 +214,8 @@ public class SyncController {
                 Page<SyncProject> result = syncProjectMapper.selectPage(pageQuery, queryWrapper);
                 total = result.getTotal();
 
-                // Build DTOs
-                dtos = result.getRecords().stream()
-                        .map(projectListService::buildProjectListDTO)
-                        .collect(Collectors.toList());
+                // Build DTOs using batch query for better performance
+                dtos = projectListService.buildProjectListDTOsBatch(result.getRecords());
             }
 
             PageResult<ProjectListDTO> pageResult = new PageResult<>();
@@ -249,7 +260,8 @@ public class SyncController {
      * Check if field is calculated (not a database field)
      */
     private boolean isCalculatedField(String field) {
-        return "delay".equals(field) || "lastCommitTime".equals(field);
+        return "delay".equals(field) || "lastCommitTime".equals(field) ||
+               "taskStatus".equals(field) || "lastCheckAt".equals(field);
     }
 
     /**
@@ -334,6 +346,10 @@ public class SyncController {
             case "lastCommitTime" -> Comparator.comparing(ProjectListDTO::getLastCommitTime,
                     Comparator.nullsLast(Comparator.naturalOrder()));
             case "lastSyncAt" -> Comparator.comparing(ProjectListDTO::getLastSyncAt,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "lastCheckAt" -> Comparator.comparing(ProjectListDTO::getLastCheckAt,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "taskStatus" -> Comparator.comparing(ProjectListDTO::getTaskStatus,
                     Comparator.nullsLast(Comparator.naturalOrder()));
             case "projectKey" -> Comparator.comparing(ProjectListDTO::getProjectKey);
             default -> Comparator.comparing(ProjectListDTO::getId);

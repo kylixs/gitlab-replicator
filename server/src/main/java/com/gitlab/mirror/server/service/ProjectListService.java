@@ -77,6 +77,53 @@ public class ProjectListService {
      * Build project list DTO from sync project
      */
     public ProjectListDTO buildProjectListDTO(SyncProject project) {
+        return buildProjectListDTO(project, null, null, null);
+    }
+
+    /**
+     * Build project list DTOs in batch (optimized for performance)
+     * This method fetches all related data in batch queries instead of one-by-one
+     */
+    public List<ProjectListDTO> buildProjectListDTOsBatch(List<SyncProject> projects) {
+        if (projects.isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+
+        // Collect all project IDs
+        List<Long> projectIds = projects.stream()
+                .map(SyncProject::getId)
+                .collect(Collectors.toList());
+
+        // Batch query source project info
+        List<SourceProjectInfo> sourceInfos = sourceProjectInfoMapper.selectList(
+                new QueryWrapper<SourceProjectInfo>().in("sync_project_id", projectIds));
+        Map<Long, SourceProjectInfo> sourceInfoMap = sourceInfos.stream()
+                .collect(Collectors.toMap(SourceProjectInfo::getSyncProjectId, info -> info));
+
+        // Batch query sync tasks
+        List<SyncTask> tasks = syncTaskService.getTasksBySyncProjectIds(projectIds);
+        Map<Long, SyncTask> taskMap = tasks.stream()
+                .collect(Collectors.toMap(SyncTask::getSyncProjectId, task -> task));
+
+        // Batch query sync results
+        List<SyncResult> syncResults = syncResultMapper.selectBySyncProjectIds(projectIds);
+        Map<Long, SyncResult> syncResultMap = syncResults.stream()
+                .collect(Collectors.toMap(SyncResult::getSyncProjectId, result -> result));
+
+        // Build DTOs with pre-fetched data
+        return projects.stream()
+                .map(project -> buildProjectListDTO(project, sourceInfoMap, taskMap, syncResultMap))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Build project list DTO with pre-fetched related data
+     * This method is optimized for batch operations
+     */
+    public ProjectListDTO buildProjectListDTO(SyncProject project,
+                                             Map<Long, SourceProjectInfo> sourceInfoMap,
+                                             Map<Long, SyncTask> taskMap,
+                                             Map<Long, SyncResult> syncResultMap) {
         ProjectListDTO dto = new ProjectListDTO();
         dto.setId(project.getId());
         dto.setProjectKey(project.getProjectKey());
@@ -85,24 +132,49 @@ public class ProjectListService {
         dto.setLastSyncAt(project.getLastSyncAt());
 
         // Get group path and last commit time from source project info
-        QueryWrapper<SourceProjectInfo> sourceQuery = new QueryWrapper<>();
-        sourceQuery.eq("sync_project_id", project.getId());
-        SourceProjectInfo sourceInfo = sourceProjectInfoMapper.selectOne(sourceQuery);
+        SourceProjectInfo sourceInfo = null;
+        if (sourceInfoMap != null) {
+            sourceInfo = sourceInfoMap.get(project.getId());
+        } else {
+            QueryWrapper<SourceProjectInfo> sourceQuery = new QueryWrapper<>();
+            sourceQuery.eq("sync_project_id", project.getId());
+            sourceInfo = sourceProjectInfoMapper.selectOne(sourceQuery);
+        }
         if (sourceInfo != null) {
             dto.setGroupPath(sourceInfo.getGroupPath());
             dto.setLastCommitTime(sourceInfo.getLastActivityAt());
         }
 
         // Get consecutive failures from task
-        SyncTask task = syncTaskService.getTaskBySyncProjectId(project.getId());
+        SyncTask task = null;
+        if (taskMap != null) {
+            task = taskMap.get(project.getId());
+        } else {
+            task = syncTaskService.getTaskBySyncProjectId(project.getId());
+        }
         if (task != null) {
             dto.setConsecutiveFailures(task.getConsecutiveFailures());
+            dto.setTaskStatus(task.getTaskStatus());
+            // Convert Instant to LocalDateTime for last check time
+            if (task.getLastRunAt() != null) {
+                dto.setLastCheckAt(LocalDateTime.ofInstant(
+                    task.getLastRunAt(),
+                    java.time.ZoneId.systemDefault()
+                ));
+            }
         } else {
             dto.setConsecutiveFailures(0);
+            dto.setTaskStatus(null);
+            dto.setLastCheckAt(null);
         }
 
         // Get last sync status, summary and error message from sync result
-        SyncResult syncResult = syncResultMapper.selectBySyncProjectId(project.getId());
+        SyncResult syncResult = null;
+        if (syncResultMap != null) {
+            syncResult = syncResultMap.get(project.getId());
+        } else {
+            syncResult = syncResultMapper.selectBySyncProjectId(project.getId());
+        }
         if (syncResult != null) {
             dto.setLastSyncStatus(syncResult.getSyncStatus());
             dto.setLastSyncSummary(syncResult.getSummary());

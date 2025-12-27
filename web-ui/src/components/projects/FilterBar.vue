@@ -39,15 +39,33 @@
         </el-select>
       </el-form-item>
 
-      <el-form-item label="Sync Method">
+      <el-form-item label="Task Status">
         <el-select
-          v-model="filters.syncMethod"
-          placeholder="All Methods"
+          v-model="filters.taskStatus"
+          placeholder="All Task Status"
           clearable
           style="width: 150px"
         >
-          <el-option label="Push Mirror" value="push_mirror" />
-          <el-option label="Pull Sync" value="pull_sync" />
+          <el-option label="Waiting" value="waiting" />
+          <el-option label="Running" value="running" />
+          <el-option label="Disabled" value="disabled" />
+          <el-option label="Failed" value="failed" />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="Diff Status">
+        <el-select
+          v-model="filters.diffStatus"
+          placeholder="All Diff Status"
+          clearable
+          style="width: 150px"
+        >
+          <el-option label="Synced" value="SYNCED" />
+          <el-option label="Outdated" value="OUTDATED" />
+          <el-option label="Ahead" value="AHEAD" />
+          <el-option label="Diverged" value="DIVERGED" />
+          <el-option label="Source Missing" value="SOURCE_MISSING" />
+          <el-option label="Pending" value="PENDING" />
         </el-select>
       </el-form-item>
 
@@ -97,7 +115,8 @@ import { reactive, watch } from 'vue'
 interface Filters {
   group: string
   status: string
-  syncMethod: string
+  taskStatus: string
+  diffStatus: string
   delayRange: string
   search: string
 }
@@ -117,7 +136,8 @@ const emit = defineEmits<{
 const filters = reactive<Filters>({
   group: props.modelValue.group || '',
   status: props.modelValue.status || '',
-  syncMethod: props.modelValue.syncMethod || '',
+  taskStatus: props.modelValue.taskStatus || '',
+  diffStatus: props.modelValue.diffStatus || '',
   delayRange: props.modelValue.delayRange || '',
   search: props.modelValue.search || ''
 })
@@ -133,7 +153,8 @@ const handleSearch = () => {
 const handleReset = () => {
   filters.group = ''
   filters.status = ''
-  filters.syncMethod = ''
+  filters.taskStatus = ''
+  filters.diffStatus = ''
   filters.delayRange = ''
   filters.search = ''
   emit('search')

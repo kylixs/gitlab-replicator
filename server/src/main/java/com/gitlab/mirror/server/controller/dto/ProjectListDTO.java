@@ -85,6 +85,16 @@ public class ProjectListDTO {
     private String groupPath;
 
     /**
+     * Task status (waiting/running/disabled/failed)
+     */
+    private String taskStatus;
+
+    /**
+     * Last check time (task last run time)
+     */
+    private LocalDateTime lastCheckAt;
+
+    /**
      * Diff info
      */
     @Data

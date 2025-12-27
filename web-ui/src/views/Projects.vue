@@ -118,6 +118,21 @@
           </template>
         </el-table-column>
 
+        <el-table-column label="Task" width="100" sortable="custom" prop="taskStatus">
+          <template #default="{ row }">
+            <el-tag v-if="row.taskStatus" :type="getTaskStatusType(row.taskStatus)" size="small">
+              {{ formatTaskStatus(row.taskStatus) }}
+            </el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="lastCheckAt" label="Last Check" width="140" sortable="custom">
+          <template #default="{ row }">
+            {{ formatTime(row.lastCheckAt) }}
+          </template>
+        </el-table-column>
+
         <el-table-column label="Actions" width="200" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleViewDetail(row)">Detail</el-button>
@@ -198,7 +213,8 @@ const selectedProject = ref<ProjectListItem | null>(null)
 const filters = reactive({
   group: (route.query.group as string) || '',
   status: (route.query.status as string) || '',
-  syncMethod: '',
+  taskStatus: '',
+  diffStatus: '',
   delayRange: '',
   search: ''
 })
@@ -474,6 +490,30 @@ const formatLastSyncStatus = (status: string) => {
     'success': 'Success',
     'failed': 'Failed',
     'skipped': 'Skipped'
+  }
+  return statusMap[statusLower] || status
+}
+
+const getTaskStatusType = (status: string) => {
+  if (!status) return 'info'
+  const statusLower = status.toLowerCase()
+  const typeMap: Record<string, string> = {
+    'waiting': 'info',
+    'running': 'warning',
+    'disabled': '',
+    'failed': 'danger'
+  }
+  return typeMap[statusLower] || 'info'
+}
+
+const formatTaskStatus = (status: string) => {
+  if (!status) return '-'
+  const statusLower = status.toLowerCase()
+  const statusMap: Record<string, string> = {
+    'waiting': 'Waiting',
+    'running': 'Running',
+    'disabled': 'Disabled',
+    'failed': 'Failed'
   }
   return statusMap[statusLower] || status
 }

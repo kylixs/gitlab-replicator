@@ -252,7 +252,7 @@ class SyncControllerTest {
 
         // When
         ResponseEntity<SyncController.ApiResponse<SyncController.PageResult<com.gitlab.mirror.server.controller.dto.ProjectListDTO>>> response =
-                syncController.getProjects(null, null, null, null, null, null, "asc", 1, 20);
+                syncController.getProjects(null, null, null, null, null, null, null, "asc", 1, 20);
 
         // Then
         assertNotNull(response);

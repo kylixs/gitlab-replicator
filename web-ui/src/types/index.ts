@@ -52,6 +52,9 @@ export interface ProjectListItem {
   lastSyncSummary?: string
   lastSyncErrorMessage?: string
   groupPath?: string
+  taskStatus?: string
+  lastCheckAt?: string
+  lastCommitTime?: string
   diff: {
     diffStatus?: string
     branchNew: number

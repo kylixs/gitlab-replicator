@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Sync Task Service
@@ -71,6 +73,21 @@ public class SyncTaskService {
         LambdaQueryWrapper<SyncTask> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(SyncTask::getSyncProjectId, syncProjectId);
         return syncTaskMapper.selectOne(queryWrapper);
+    }
+
+    /**
+     * Get tasks by sync project IDs (batch query for performance)
+     *
+     * @param syncProjectIds List of sync project IDs
+     * @return List of tasks
+     */
+    public List<SyncTask> getTasksBySyncProjectIds(List<Long> syncProjectIds) {
+        if (syncProjectIds == null || syncProjectIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        LambdaQueryWrapper<SyncTask> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.in(SyncTask::getSyncProjectId, syncProjectIds);
+        return syncTaskMapper.selectList(queryWrapper);
     }
 
     /**
