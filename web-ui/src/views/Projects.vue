@@ -99,8 +99,8 @@
 
         <el-table-column label="Delay" width="90" sortable="custom" prop="delaySeconds">
           <template #default="{ row }">
-            <el-tag v-if="row.delaySeconds != null" :type="getDelayType(row.delaySeconds)" size="small">
-              {{ formatDelayReadable(row.delaySeconds) }}
+            <el-tag v-if="row.delayFormatted" :type="getDelayType(row.delaySeconds)" size="small">
+              {{ row.delayFormatted }}
             </el-tag>
             <span v-else>-</span>
           </template>
@@ -478,22 +478,6 @@ const formatLastSyncStatus = (status: string) => {
   return statusMap[statusLower] || status
 }
 
-const formatDelayReadable = (delaySeconds: number) => {
-  if (!delaySeconds || delaySeconds === 0) return '0s'
-
-  if (delaySeconds < 60) {
-    return `${delaySeconds}s`
-  } else if (delaySeconds < 3600) {
-    const minutes = Math.floor(delaySeconds / 60)
-    return `${minutes}m`
-  } else if (delaySeconds < 86400) {
-    const hours = Math.floor(delaySeconds / 3600)
-    return `${hours}h`
-  } else {
-    const days = Math.floor(delaySeconds / 86400)
-    return `${days}d`
-  }
-}
 
 const handleExport = () => {
   try {

@@ -282,20 +282,20 @@ public class ProjectListService {
         }
 
         if (seconds < 0) {
-            return "未知";
+            return "0s";
         }
 
         if (seconds < 60) {
-            return "刚刚";
+            return seconds + "s";
         } else if (seconds < 3600) {
             long minutes = seconds / 60;
-            return minutes + "分钟";
+            return minutes + "m";
         } else if (seconds < 86400) {
             long hours = seconds / 3600;
-            return hours + "小时";
+            return hours + "h";
         } else {
             long days = seconds / 86400;
-            return days + "天";
+            return days + "d";
         }
     }
 

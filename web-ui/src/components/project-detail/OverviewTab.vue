@@ -27,8 +27,8 @@
             </div>
             <div class="stat-info">
               <div class="stat-label">Delay</div>
-              <el-tag v-if="overview.delay?.seconds != null" :type="getDelayType(overview.delay.seconds)" size="default">
-                {{ formatDelayReadable(overview.delay.seconds) }}
+              <el-tag v-if="overview.delay?.formatted" :type="getDelayType(overview.delay.seconds)" size="default">
+                {{ overview.delay.formatted }}
               </el-tag>
               <span v-else>-</span>
             </div>
@@ -613,23 +613,6 @@ const getDelayType = (delaySeconds: number) => {
   return 'danger'
 }
 
-const formatDelayReadable = (delaySeconds: number) => {
-  if (!delaySeconds || delaySeconds === 0) return '0s'
-
-  if (delaySeconds < 60) {
-    return `${delaySeconds}s`
-  } else if (delaySeconds < 3600) {
-    const minutes = Math.floor(delaySeconds / 60)
-    return `${minutes}m`
-  } else if (delaySeconds < 86400) {
-    const hours = Math.floor(delaySeconds / 3600)
-    return `${hours}h`
-  } else {
-    const days = Math.floor(delaySeconds / 86400)
-    return `${days}d`
-  }
-}
-
 const getDiffStatusType = (status: string) => {
   const typeMap: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
     'SYNCED': 'success',
@@ -654,19 +637,6 @@ const getDiffStatusLabel = (status: string) => {
     'MISSING': 'Missing'
   }
   return labelMap[status] || status
-}
-
-const getDiffStatusIcon = (status: string) => {
-  const iconMap: Record<string, any> = {
-    'SYNCED': SuccessFilled,
-    'OUTDATED': WarningFilled,
-    'AHEAD': WarningFilled,
-    'DIVERGED': CircleCloseFilled,
-    'INCONSISTENT': CircleCloseFilled,
-    'PENDING': QuestionFilled,
-    'MISSING': CircleCloseFilled
-  }
-  return iconMap[status] || QuestionFilled
 }
 
 const formatTime = (time: string | null | undefined) => {
