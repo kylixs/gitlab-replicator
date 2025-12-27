@@ -20,6 +20,12 @@ import java.util.Map;
 public interface SyncProjectMapper extends BaseMapper<SyncProject> {
 
     /**
+     * Query project by project key (unique)
+     */
+    @Select("SELECT * FROM sync_project WHERE project_key = #{projectKey}")
+    SyncProject selectByProjectKey(@Param("projectKey") String projectKey);
+
+    /**
      * Query projects by sync status
      */
     @Select("SELECT * FROM sync_project WHERE sync_status = #{status} ORDER BY created_at DESC")

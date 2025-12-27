@@ -128,6 +128,18 @@ public class SyncTask {
     private Boolean forceSync;
 
     /**
+     * Trigger source: scheduled/webhook/manual/api
+     */
+    @TableField("trigger_source")
+    private String triggerSource;
+
+    /**
+     * Reference to webhook_event.id (null if not webhook-triggered)
+     */
+    @TableField("webhook_event_id")
+    private Long webhookEventId;
+
+    /**
      * Created time (auto-fill on insert)
      */
     @TableField(value = "created_at", fill = FieldFill.INSERT)
@@ -162,5 +174,15 @@ public class SyncTask {
     public static class SyncStatus {
         public static final String SUCCESS = "success";
         public static final String FAILED = "failed";
+    }
+
+    /**
+     * Trigger source constants
+     */
+    public static class TriggerSource {
+        public static final String SCHEDULED = "scheduled";
+        public static final String WEBHOOK = "webhook";
+        public static final String MANUAL = "manual";
+        public static final String API = "api";
     }
 }

@@ -10,12 +10,16 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:debug": "playwright test --debug"
+    "test:e2e": "playwright test -c ../tests/playwright.e2e.config.ts",
+    "test:e2e:ui": "playwright test -c ../tests/playwright.e2e.config.ts --ui",
+    "test:e2e:debug": "playwright test -c ../tests/playwright.e2e.config.ts --debug",
+    "test:integration": "playwright test -c ../tests/playwright.integration.config.ts",
+    "test:integration:ui": "playwright test -c ../tests/playwright.integration.config.ts --ui",
+    "test:integration:debug": "playwright test -c ../tests/playwright.integration.config.ts --debug"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
+    "@playwright/test": "^1.57.0",
     "axios": "^1.13.2",
     "crypto-js": "^4.2.0",
     "echarts": "^6.0.0",

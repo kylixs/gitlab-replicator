@@ -43,10 +43,10 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
 
-        // Skip authentication for health check, public endpoints, and auth APIs
+        // Skip authentication for health check, public endpoints, auth APIs, and webhooks
         if (path.startsWith("/actuator") || path.startsWith("/swagger") ||
             path.startsWith("/v3/api-docs") || path.startsWith("/api/status") ||
-            path.startsWith("/api/auth/")) {
+            path.startsWith("/api/auth/") || path.startsWith("/api/webhooks/")) {
             filterChain.doFilter(request, response);
             return;
         }

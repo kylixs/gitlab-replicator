@@ -48,35 +48,45 @@ tests/integration/
 
 ### Run All Integration Tests
 ```bash
+# From web-ui directory
 cd web-ui
-npx playwright test tests/integration/
+npm run test:integration
+
+# Or from tests directory
+cd tests
+npx playwright test -c playwright.integration.config.ts
 ```
 
 ### Run Specific Test Suite
 ```bash
-# Commit sync tests
-npx playwright test tests/integration/commit-sync.spec.ts
+# From web-ui directory
+cd web-ui
+npx playwright test -c ../tests/playwright.integration.config.ts ../tests/integration/commit-sync.spec.ts
 
-# Branch sync tests
-npx playwright test tests/integration/branch-sync.spec.ts
-
-# Project sync tests
-npx playwright test tests/integration/project-sync.spec.ts
+# Or from tests directory
+cd tests
+npx playwright test -c playwright.integration.config.ts integration/commit-sync.spec.ts
+npx playwright test -c playwright.integration.config.ts integration/branch-sync.spec.ts
+npx playwright test -c playwright.integration.config.ts integration/project-sync.spec.ts
+npx playwright test -c playwright.integration.config.ts integration/webhook-sync.spec.ts
 ```
 
 ### Run Tests with UI
 ```bash
-npx playwright test tests/integration/ --headed
+cd web-ui
+npm run test:integration:ui
 ```
 
 ### Run Tests in Debug Mode
 ```bash
-npx playwright test tests/integration/ --debug
+cd web-ui
+npm run test:integration:debug
 ```
 
 ### Run Specific Test
 ```bash
-npx playwright test tests/integration/commit-sync.spec.ts -g "should sync new commit in ai group"
+cd tests
+npx playwright test -c playwright.integration.config.ts -g "should sync new commit in ai group"
 ```
 
 ## Test Scenarios

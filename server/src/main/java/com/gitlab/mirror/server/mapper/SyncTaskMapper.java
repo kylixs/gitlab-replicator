@@ -43,7 +43,13 @@ public interface SyncTaskMapper extends BaseMapper<SyncTask> {
     );
 
     /**
-     * Query Pull tasks with priority ordering
+     * Query Pull tasks with priority ordering (webhook-triggered tasks first)
+     * <p>
+     * Priority order:
+     * 1. trigger_source = 'webhook' (highest priority, execute within 10s)
+     * 2. trigger_source = 'manual' or 'api'
+     * 3. pull_sync_config.priority (critical > high > normal > low)
+     * 4. next_run_at (FIFO within same priority)
      *
      * @param currentTime Current time
      * @param maxFailures Maximum consecutive failures
@@ -60,11 +66,18 @@ public interface SyncTaskMapper extends BaseMapper<SyncTask> {
             "AND p.enabled = true " +
             "AND t.consecutive_failures < #{maxFailures} " +
             "ORDER BY " +
+            "CASE t.trigger_source " +
+            "  WHEN 'webhook' THEN 0 " +
+            "  WHEN 'manual' THEN 1 " +
+            "  WHEN 'api' THEN 1 " +
+            "  ELSE 2 " +
+            "END, " +
             "CASE c.priority " +
             "  WHEN 'critical' THEN 1 " +
             "  WHEN 'high' THEN 2 " +
             "  WHEN 'normal' THEN 3 " +
             "  WHEN 'low' THEN 4 " +
+            "  ELSE 3 " +
             "END, " +
             "t.next_run_at ASC " +
             "LIMIT #{limit}")

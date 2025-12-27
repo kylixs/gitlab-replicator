@@ -51,9 +51,9 @@ public class UnifiedSyncScheduler {
     }
 
     /**
-     * Schedule pull sync tasks every 10 seconds
+     * Schedule pull sync tasks every 5 seconds (optimized for webhook fast sync)
      */
-    @Scheduled(cron = "*/10 * * * * ?")
+    @Scheduled(cron = "*/5 * * * * ?")
     public void schedulePullTasks() {
         long startTime = System.currentTimeMillis();
 
