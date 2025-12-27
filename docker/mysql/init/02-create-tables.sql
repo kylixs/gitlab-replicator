@@ -7,7 +7,7 @@ USE gitlab_mirror;
 CREATE TABLE IF NOT EXISTS sync_project (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
     project_key VARCHAR(500) NOT NULL UNIQUE COMMENT '项目唯一标识(源路径)',
-    sync_method VARCHAR(50) NOT NULL DEFAULT 'push_mirror' COMMENT '同步方式: push_mirror/pull_mirror/clone_push',
+    sync_method VARCHAR(50) NOT NULL DEFAULT 'push_mirror' COMMENT '同步方式: push_mirror/pull_sync',
     sync_status VARCHAR(50) NOT NULL DEFAULT 'pending' COMMENT '同步状态: pending/target_created/mirror_configured/active/failed',
     enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用同步',
     error_message TEXT COMMENT '错误信息',

@@ -103,7 +103,7 @@ public class ProjectInitializationService {
         // Step 1: Create sync_project record
         SyncProject syncProject = new SyncProject();
         syncProject.setProjectKey(projectKey);
-        syncProject.setSyncMethod(SyncProject.SyncMethod.PULL_MIRROR);
+        syncProject.setSyncMethod(SyncProject.SyncMethod.PULL_SYNC);
         syncProject.setSyncStatus(SyncProject.SyncStatus.PENDING);
         syncProject.setEnabled(true);
         syncProject.setCreatedAt(LocalDateTime.now());

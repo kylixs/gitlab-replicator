@@ -31,7 +31,7 @@ public class SyncProject {
 
     /**
      * Sync method
-     * Values: push_mirror, pull_mirror, clone_push
+     * Values: push_mirror, pull_sync
      */
     @TableField("sync_method")
     private String syncMethod;
@@ -78,8 +78,7 @@ public class SyncProject {
      */
     public static class SyncMethod {
         public static final String PUSH_MIRROR = "push_mirror";
-        public static final String PULL_MIRROR = "pull_mirror";
-        public static final String CLONE_PUSH = "clone_push";
+        public static final String PULL_SYNC = "pull_sync";
     }
 
     /**

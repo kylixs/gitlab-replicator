@@ -94,7 +94,7 @@ SYNC_PROJECT (核心表，无依赖)
 **字段**:
 - id (PK)
 - project_key (UK) - 项目唯一标识
-- sync_method - 同步方式（push_mirror/pull_mirror）
+- sync_method - 同步方式（push_mirror/pull_sync）
 - sync_status - 同步状态
 - enabled - 是否启用
 - error_message

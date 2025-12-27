@@ -53,7 +53,7 @@ class WebhookControllerTest {
         mockSyncProject = new SyncProject();
         mockSyncProject.setId(984L);
         mockSyncProject.setProjectKey("ai/test-rails-5");
-        mockSyncProject.setSyncMethod(SyncProject.SyncMethod.PULL_MIRROR);
+        mockSyncProject.setSyncMethod(SyncProject.SyncMethod.PULL_SYNC);
         mockSyncProject.setSyncStatus(SyncProject.SyncStatus.ACTIVE);
         mockSyncProject.setEnabled(true);
 

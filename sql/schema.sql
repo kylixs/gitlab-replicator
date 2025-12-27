@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS `sync_project` (
   `project_key` VARCHAR(255) NOT NULL COMMENT 'Project unique key (source path)',
   `source_project_id` BIGINT(20) DEFAULT NULL COMMENT 'Source GitLab project ID',
   `target_project_id` BIGINT(20) DEFAULT NULL COMMENT 'Target GitLab project ID',
-  `sync_method` VARCHAR(50) DEFAULT 'push_mirror' COMMENT 'Sync method: push_mirror/pull_mirror/clone_push',
+  `sync_method` VARCHAR(50) DEFAULT 'pull_sync' COMMENT 'Sync method: push_mirror/pull_sync',
   `sync_status` VARCHAR(50) DEFAULT 'pending' COMMENT 'Sync status: pending/active/failed/paused',
   `enabled` TINYINT(1) DEFAULT 1 COMMENT 'Enable flag: 1=enabled, 0=disabled',
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT 'Creation time',

@@ -76,7 +76,7 @@ public class ProjectDiscoveryService {
                 // Create new sync project record
                 SyncProject syncProject = new SyncProject();
                 syncProject.setProjectKey(diff.getProjectKey());
-                syncProject.setSyncMethod("pull_mirror");
+                syncProject.setSyncMethod("pull_sync");
                 syncProject.setSyncStatus(SyncProject.SyncStatus.PENDING);
                 syncProject.setEnabled(true);
                 syncProject.setCreatedAt(LocalDateTime.now());

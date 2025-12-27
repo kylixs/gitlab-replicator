@@ -119,7 +119,7 @@ Five main entities (all depend on `SYNC_PROJECT`):
 
 1. **SYNC_PROJECT** (主表): Core sync configuration
    - `project_key` (UK): Unique identifier (source project path)
-   - `sync_method`: push_mirror/pull_mirror/clone_push
+   - `sync_method`: push_mirror/pull_sync
    - `sync_status`: pending/target_created/mirror_configured/active/failed
 
 2. **SOURCE_PROJECT_INFO**: Source GitLab project metadata
