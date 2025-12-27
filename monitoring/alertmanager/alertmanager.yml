@@ -1,0 +1,99 @@
+# Alertmanager Configuration for GitLab Mirror
+
+global:
+  resolve_timeout: 5m
+  # SMTP configuration (optional)
+  # smtp_smarthost: 'smtp.gmail.com:587'
+  # smtp_from: 'gitlab-mirror-alerts@example.com'
+  # smtp_auth_username: 'your-email@example.com'
+  # smtp_auth_password: 'your-app-password'
+
+# Alert routing
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'severity', 'component']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical'
+      group_wait: 5s
+      repeat_interval: 4h
+
+    # Warning alerts - regular notification
+    - match:
+        severity: warning
+      receiver: 'warning'
+      group_wait: 30s
+      repeat_interval: 12h
+
+    # Info alerts - daily digest
+    - match:
+        severity: info
+      receiver: 'info'
+      group_wait: 5m
+      repeat_interval: 24h
+
+# Alert receivers
+receivers:
+  - name: 'default'
+    webhook_configs:
+      - url: 'http://localhost:8080/webhook/alerts'
+        send_resolved: true
+
+  - name: 'critical'
+    # Email notification
+    # email_configs:
+    #   - to: 'oncall@example.com'
+    #     headers:
+    #       Subject: '[CRITICAL] GitLab Mirror Alert - {{ .GroupLabels.alertname }}'
+
+    # Slack notification
+    # slack_configs:
+    #   - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+    #     channel: '#alerts-critical'
+    #     title: '[CRITICAL] {{ .GroupLabels.alertname }}'
+    #     text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+    #     send_resolved: true
+
+    # Webhook notification (can integrate with custom alert systems)
+    webhook_configs:
+      - url: 'http://localhost:8080/webhook/alerts/critical'
+        send_resolved: true
+
+  - name: 'warning'
+    # Slack notification
+    # slack_configs:
+    #   - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+    #     channel: '#alerts-warning'
+    #     title: '[WARNING] {{ .GroupLabels.alertname }}'
+    #     text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+    webhook_configs:
+      - url: 'http://localhost:8080/webhook/alerts/warning'
+        send_resolved: true
+
+  - name: 'info'
+    webhook_configs:
+      - url: 'http://localhost:8080/webhook/alerts/info'
+        send_resolved: true
+
+# Inhibition rules - suppress alerts based on other alerts
+inhibit_rules:
+  # Suppress warning if critical alert is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'component']
+
+  # Suppress info if warning alert is firing
+  - source_match:
+      severity: 'warning'
+    target_match:
+      severity: 'info'
+    equal: ['alertname', 'component']

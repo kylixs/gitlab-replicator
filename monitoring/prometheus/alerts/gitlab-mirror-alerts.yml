@@ -1,0 +1,220 @@
+groups:
+  - name: gitlab_mirror_critical
+    interval: 30s
+    rules:
+      # 1. 同步失败率过高
+      - alert: HighSyncFailureRate
+        expr: |
+          (
+            rate(gitlab_mirror_sync_events_total{status="failed"}[1h])
+            /
+            rate(gitlab_mirror_sync_events_total[1h])
+          ) > 0.3
+        for: 10m
+        labels:
+          severity: critical
+          component: sync
+        annotations:
+          summary: "同步失败率过高"
+          description: "最近1小时同步失败率 {{ $value | humanizePercentage }}，超过30%阈值"
+
+      # 2. 大量项目延时超过1天
+      - alert: ManyDelayedProjects
+        expr: gitlab_mirror_delayed_projects{delay_level="1d"} > 10
+        for: 30m
+        labels:
+          severity: critical
+          component: sync
+        annotations:
+          summary: "大量项目同步延时超过1天"
+          description: "{{ $value }}个项目延时超过1天"
+
+      # 3. 系统级同步停滞
+      - alert: NoSyncActivity
+        expr: |
+          rate(gitlab_mirror_sync_events_total[30m]) == 0
+        for: 1h
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "系统停止同步活动"
+          description: "最近30分钟没有任何同步事件，系统可能停滞"
+
+      # 4. 大量项目失败状态
+      - alert: ManyFailedProjects
+        expr: gitlab_mirror_projects_by_status{status="failed"} > 5
+        for: 30m
+        labels:
+          severity: critical
+          component: sync
+        annotations:
+          summary: "大量项目处于失败状态"
+          description: "{{ $value }}个项目处于failed状态"
+
+  - name: gitlab_mirror_warning
+    interval: 1m
+    rules:
+      # 1. 同步性能下降
+      - alert: SyncPerformanceDegradation
+        expr: |
+          histogram_quantile(0.95,
+            rate(gitlab_mirror_sync_duration_seconds_bucket[1h])
+          ) > 300
+        for: 30m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "同步性能下降"
+          description: "P95同步耗时 {{ $value | humanizeDuration }}，超过5分钟"
+
+      # 2. Missing项目增加
+      - alert: IncreasedMissingProjects
+        expr: |
+          increase(gitlab_mirror_projects_by_status{status="missing"}[1h]) > 5
+        labels:
+          severity: warning
+          component: sync
+        annotations:
+          summary: "Missing状态项目增加"
+          description: "最近1小时新增 {{ $value }} 个missing项目"
+
+      # 3. 任务频繁阻塞
+      - alert: FrequentTaskBlocking
+        expr: |
+          rate(gitlab_mirror_sync_events_total{event_type="task_blocked"}[1h]) > 0.1
+        for: 15m
+        labels:
+          severity: warning
+          component: sync
+        annotations:
+          summary: "同步任务频繁阻塞"
+          description: "最近1小时task_blocked事件频率: {{ $value | humanize }}/s"
+
+      # 4. 连续失败项目
+      - alert: ConsecutiveFailures
+        expr: gitlab_mirror_consecutive_failures >= 5
+        labels:
+          severity: warning
+          component: sync
+        annotations:
+          summary: "项目 {{ $labels.project_key }} 连续失败"
+          description: "连续失败次数: {{ $value }}"
+
+      # 5. 延时项目增加
+      - alert: IncreasedDelayedProjects
+        expr: |
+          (
+            gitlab_mirror_delayed_projects{delay_level="6h"}
+            >
+            gitlab_mirror_delayed_projects{delay_level="6h"} offset 1h
+          )
+          and
+          gitlab_mirror_delayed_projects{delay_level="6h"} > 5
+        labels:
+          severity: warning
+          component: sync
+        annotations:
+          summary: "延时超过6小时的项目数量增加"
+          description: "当前{{ $value }}个项目延时超过6小时"
+
+  - name: gitlab_mirror_project_level
+    interval: 1m
+    rules:
+      # 1. 项目同步失败率高
+      - alert: ProjectHighFailureRate
+        expr: |
+          (
+            rate(gitlab_mirror_project_sync_events_total{status="failed"}[1h])
+            /
+            rate(gitlab_mirror_project_sync_events_total[1h])
+          ) > 0.5
+        for: 15m
+        labels:
+          severity: warning
+          component: project-sync
+        annotations:
+          summary: "项目 {{ $labels.project_key }} 同步失败率高"
+          description: "项目失败率 {{ $value | humanizePercentage }}，超过50%"
+
+      # 2. 项目延时过大
+      - alert: ProjectHighDelay
+        expr: gitlab_mirror_project_delay_seconds > 86400
+        for: 30m
+        labels:
+          severity: warning
+          component: project-sync
+        annotations:
+          summary: "项目 {{ $labels.project_key }} 延时超过1天"
+          description: "当前延时 {{ $value | humanizeDuration }}"
+
+      # 3. 项目Pull任务持续失败
+      - alert: ProjectPullTasksFailing
+        expr: |
+          increase(gitlab_mirror_project_sync_tasks_total{task_type="pull",status="failed"}[1h]) > 3
+          and
+          increase(gitlab_mirror_project_sync_tasks_total{task_type="pull",status="success"}[1h]) == 0
+        labels:
+          severity: warning
+          component: project-sync
+        annotations:
+          summary: "项目 {{ $labels.project_key }} Pull任务持续失败"
+          description: "最近1小时Pull任务全部失败"
+
+      # 4. 项目没有分支变更但有频繁同步
+      - alert: ProjectNoChangesButFrequentSync
+        expr: |
+          rate(gitlab_mirror_project_sync_events_total[1h]) > 0.1
+          and
+          increase(gitlab_mirror_project_branch_changes_total[24h]) == 0
+          and
+          increase(gitlab_mirror_project_commit_changes_total[24h]) == 0
+        for: 2h
+        labels:
+          severity: info
+          component: project-sync
+        annotations:
+          summary: "项目 {{ $labels.project_key }} 频繁同步但无变更"
+          description: "可能存在配置问题或无效触发"
+
+      # 5. 项目分支大量删除
+      - alert: ProjectMassiveBranchDeletion
+        expr: |
+          increase(gitlab_mirror_project_branch_changes_total{operation="deleted"}[1h]) > 10
+        labels:
+          severity: warning
+          component: project-sync
+        annotations:
+          summary: "项目 {{ $labels.project_key }} 大量分支被删除"
+          description: "最近1小时删除了 {{ $value }} 个分支"
+
+  - name: gitlab_mirror_info
+    interval: 5m
+    rules:
+      # 1. 大量分支变化
+      - alert: HighBranchChangeRate
+        expr: |
+          rate(gitlab_mirror_branch_changes_total[1h]) > 100
+        for: 30m
+        labels:
+          severity: info
+          component: sync
+        annotations:
+          summary: "分支变化率较高"
+          description: "最近1小时分支变化率: {{ $value }}/s"
+
+      # 2. 项目状态分布异常
+      - alert: UnbalancedProjectStatus
+        expr: |
+          (
+            gitlab_mirror_projects_by_status{status="failed"}
+            /
+            sum(gitlab_mirror_projects_by_status)
+          ) > 0.1
+        labels:
+          severity: info
+          component: sync
+        annotations:
+          summary: "失败状态项目占比较高"
+          description: "失败项目占比: {{ $value | humanizePercentage }}"

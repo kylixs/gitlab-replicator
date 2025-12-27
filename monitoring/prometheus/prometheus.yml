@@ -1,0 +1,29 @@
+# Prometheus Configuration for GitLab Mirror Monitoring
+
+global:
+  scrape_interval: 15s      # Scrape targets every 15 seconds
+  evaluation_interval: 15s  # Evaluate rules every 15 seconds
+  external_labels:
+    cluster: 'gitlab-mirror'
+    environment: 'production'
+
+# Scrape configurations
+scrape_configs:
+  # GitLab Mirror Service
+  - job_name: 'gitlab-mirror'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:9999']
+        labels:
+          service: 'gitlab-mirror'
+          instance: 'main'
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+# Rule files
+rule_files:
+  - '/etc/prometheus/alerts/*.yml'

@@ -121,9 +121,9 @@ public class DashboardController {
                     .map(projectListService::buildProjectListDTO)
                     .collect(Collectors.toList());
 
-            // Sort by delay and take top N
+            // Sort by delay and take top N (include projects with 0 delay, only filter null)
             List<DelayedProject> topDelayed = projectDTOs.stream()
-                    .filter(dto -> dto.getDelaySeconds() != null && dto.getDelaySeconds() > 0)
+                    .filter(dto -> dto.getDelaySeconds() != null)
                     .sorted((a, b) -> Long.compare(b.getDelaySeconds(), a.getDelaySeconds()))
                     .limit(limit)
                     .map(dto -> {
