@@ -91,4 +91,89 @@ public interface SyncEventMapper extends BaseMapper<SyncEvent> {
      */
     @Select("SELECT AVG(duration_seconds) as avg_delay FROM sync_event WHERE event_type = 'sync_finished' AND duration_seconds IS NOT NULL")
     Double getAverageSyncDelay();
+
+    /**
+     * Get hourly trend statistics for last 24 hours
+     * Returns hour, total count, success count, and failed count for each hour window
+     */
+    @Select("SELECT " +
+            "HOUR(hour_start) as hour, " +
+            "COALESCE(COUNT(e.id), 0) as total, " +
+            "COALESCE(SUM(CASE WHEN e.status = 'success' THEN 1 ELSE 0 END), 0) as success, " +
+            "COALESCE(SUM(CASE WHEN e.status = 'failed' THEN 1 ELSE 0 END), 0) as failed " +
+            "FROM (" +
+            "  SELECT DATE_ADD(DATE_FORMAT(#{currentHour}, '%Y-%m-%d %H:00:00'), INTERVAL -n HOUR) as hour_start " +
+            "  FROM (SELECT 0 n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 " +
+            "        UNION SELECT 6 UNION SELECT 7 UNION SELECT 8 UNION SELECT 9 UNION SELECT 10 UNION SELECT 11 " +
+            "        UNION SELECT 12 UNION SELECT 13 UNION SELECT 14 UNION SELECT 15 UNION SELECT 16 UNION SELECT 17 " +
+            "        UNION SELECT 18 UNION SELECT 19 UNION SELECT 20 UNION SELECT 21 UNION SELECT 22 UNION SELECT 23) hours " +
+            ") h " +
+            "LEFT JOIN sync_event e ON e.event_time >= h.hour_start AND e.event_time < DATE_ADD(h.hour_start, INTERVAL 1 HOUR) " +
+            "GROUP BY hour_start " +
+            "ORDER BY hour_start ASC")
+    List<Map<String, Object>> getHourlyTrend24h(@Param("currentHour") LocalDateTime currentHour);
+
+    /**
+     * Get hourly event type trend for last 24 hours
+     * Returns hour, event_type, and count for each combination
+     */
+    @Select("SELECT " +
+            "HOUR(hour_start) as hour, " +
+            "COALESCE(e.event_type, '') as event_type, " +
+            "COALESCE(COUNT(e.id), 0) as count " +
+            "FROM (" +
+            "  SELECT DATE_ADD(DATE_FORMAT(#{currentHour}, '%Y-%m-%d %H:00:00'), INTERVAL -n HOUR) as hour_start " +
+            "  FROM (SELECT 0 n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 " +
+            "        UNION SELECT 6 UNION SELECT 7 UNION SELECT 8 UNION SELECT 9 UNION SELECT 10 UNION SELECT 11 " +
+            "        UNION SELECT 12 UNION SELECT 13 UNION SELECT 14 UNION SELECT 15 UNION SELECT 16 UNION SELECT 17 " +
+            "        UNION SELECT 18 UNION SELECT 19 UNION SELECT 20 UNION SELECT 21 UNION SELECT 22 UNION SELECT 23) hours " +
+            ") h " +
+            "LEFT JOIN sync_event e ON e.event_time >= h.hour_start AND e.event_time < DATE_ADD(h.hour_start, INTERVAL 1 HOUR) " +
+            "WHERE e.event_type IS NULL OR e.event_type IN (" +
+            "  SELECT DISTINCT event_type FROM sync_event WHERE event_time >= DATE_ADD(#{currentHour}, INTERVAL -24 HOUR)" +
+            ") " +
+            "GROUP BY hour_start, e.event_type " +
+            "ORDER BY hour_start ASC, e.event_type ASC")
+    List<Map<String, Object>> getHourlyEventTypeTrend24h(@Param("currentHour") LocalDateTime currentHour);
+
+    /**
+     * Get daily trend statistics for last 7 days
+     * Returns date, total count, success count, and failed count for each day
+     */
+    @Select("SELECT " +
+            "DATE(day_start) as date, " +
+            "COALESCE(COUNT(e.id), 0) as total, " +
+            "COALESCE(SUM(CASE WHEN e.status = 'success' THEN 1 ELSE 0 END), 0) as success, " +
+            "COALESCE(SUM(CASE WHEN e.status = 'failed' THEN 1 ELSE 0 END), 0) as failed " +
+            "FROM (" +
+            "  SELECT DATE_ADD(CURDATE(), INTERVAL -n DAY) as day_start " +
+            "  FROM (SELECT 0 n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 " +
+            "        UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) days " +
+            ") d " +
+            "LEFT JOIN sync_event e ON DATE(e.event_time) = d.day_start " +
+            "GROUP BY day_start " +
+            "ORDER BY day_start ASC")
+    List<Map<String, Object>> getDailyTrend7d();
+
+    /**
+     * Get daily event type trend for last 7 days
+     * Returns date, event_type, and count for each combination
+     */
+    @Select("SELECT " +
+            "DATE(d.day_start) as date, " +
+            "et.event_type, " +
+            "COALESCE(COUNT(e.id), 0) as count " +
+            "FROM (" +
+            "  SELECT DATE_ADD(CURDATE(), INTERVAL -n DAY) as day_start " +
+            "  FROM (SELECT 0 n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 " +
+            "        UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) days " +
+            ") d " +
+            "CROSS JOIN (" +
+            "  SELECT DISTINCT event_type FROM sync_event " +
+            "  WHERE event_time >= DATE_ADD(CURDATE(), INTERVAL -7 DAY)" +
+            ") et " +
+            "LEFT JOIN sync_event e ON DATE(e.event_time) = d.day_start AND e.event_type = et.event_type " +
+            "GROUP BY d.day_start, et.event_type " +
+            "ORDER BY d.day_start ASC, et.event_type ASC")
+    List<Map<String, Object>> getDailyEventTypeTrend7d();
 }

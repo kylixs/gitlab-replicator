@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -221,37 +222,24 @@ public class DashboardController {
     }
 
     private TrendData getTrend7d() {
-        LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
+        // Use SQL aggregation to get daily statistics
+        List<Map<String, Object>> dailyStats = syncEventMapper.getDailyTrend7d();
 
-        QueryWrapper<SyncEvent> queryWrapper = new QueryWrapper<>();
-        queryWrapper.ge("event_time", sevenDaysAgo);
-        queryWrapper.eq("event_type", "sync_finished");
-
-        List<SyncEvent> events = syncEventMapper.selectList(queryWrapper);
-
-        // Group by date
-        java.util.Map<String, java.util.List<SyncEvent>> eventsByDate = events.stream()
-                .collect(Collectors.groupingBy(e -> e.getEventTime().toLocalDate().toString()));
-
-        // Build trend data for last 7 days
         java.util.List<String> dates = new java.util.ArrayList<>();
         java.util.List<Integer> totalSyncs = new java.util.ArrayList<>();
         java.util.List<Integer> successSyncs = new java.util.ArrayList<>();
         java.util.List<Integer> failedSyncs = new java.util.ArrayList<>();
 
-        for (int i = 6; i >= 0; i--) {
-            LocalDateTime date = LocalDateTime.now().minusDays(i);
-            String dateStr = date.toLocalDate().toString();
-            dates.add(dateStr);
+        for (Map<String, Object> stat : dailyStats) {
+            java.sql.Date date = (java.sql.Date) stat.get("date");
+            Number total = (Number) stat.get("total");
+            Number success = (Number) stat.get("success");
+            Number failed = (Number) stat.get("failed");
 
-            java.util.List<SyncEvent> dayEvents = eventsByDate.getOrDefault(dateStr, new java.util.ArrayList<>());
-            int total = dayEvents.size();
-            int success = (int) dayEvents.stream().filter(e -> "success".equalsIgnoreCase(e.getStatus())).count();
-            int failed = (int) dayEvents.stream().filter(e -> "failed".equalsIgnoreCase(e.getStatus())).count();
-
-            totalSyncs.add(total);
-            successSyncs.add(success);
-            failedSyncs.add(failed);
+            dates.add(date.toString());
+            totalSyncs.add(total != null ? total.intValue() : 0);
+            successSyncs.add(success != null ? success.intValue() : 0);
+            failedSyncs.add(failed != null ? failed.intValue() : 0);
         }
 
         TrendData trendData = new TrendData();
@@ -264,47 +252,31 @@ public class DashboardController {
     }
 
     private TrendData getTrend24h() {
-        LocalDateTime twentyFourHoursAgo = LocalDateTime.now().minusHours(24);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime currentHourStart = now.withMinute(0).withSecond(0).withNano(0);
 
-        QueryWrapper<SyncEvent> queryWrapper = new QueryWrapper<>();
-        queryWrapper.ge("event_time", twentyFourHoursAgo);
-        queryWrapper.eq("event_type", "sync_finished");
+        // Use SQL aggregation to get hourly statistics
+        List<Map<String, Object>> hourlyStats = syncEventMapper.getHourlyTrend24h(currentHourStart);
 
-        List<SyncEvent> events = syncEventMapper.selectList(queryWrapper);
-
-        // Group by hour
-        java.util.Map<Integer, java.util.List<SyncEvent>> eventsByHour = events.stream()
-                .collect(Collectors.groupingBy(e -> e.getEventTime().getHour()));
-
-        // Build trend data for last 24 hours
         java.util.List<String> hours = new java.util.ArrayList<>();
         java.util.List<Integer> totalSyncs = new java.util.ArrayList<>();
         java.util.List<Integer> successSyncs = new java.util.ArrayList<>();
         java.util.List<Integer> failedSyncs = new java.util.ArrayList<>();
 
-        for (int i = 23; i >= 0; i--) {
-            LocalDateTime hourTime = LocalDateTime.now().minusHours(i);
-            int hour = hourTime.getHour();
+        for (Map<String, Object> stat : hourlyStats) {
+            Integer hour = (Integer) stat.get("hour");
+            Number total = (Number) stat.get("total");
+            Number success = (Number) stat.get("success");
+            Number failed = (Number) stat.get("failed");
+
             hours.add(String.valueOf(hour));
-
-            java.util.List<SyncEvent> hourEvents = eventsByHour.getOrDefault(hour, new java.util.ArrayList<>());
-            // Filter events to only those within this specific hour of the last 24h
-            hourEvents = hourEvents.stream()
-                    .filter(e -> e.getEventTime().isAfter(hourTime.minusMinutes(30)) &&
-                                 e.getEventTime().isBefore(hourTime.plusMinutes(30)))
-                    .collect(Collectors.toList());
-
-            int total = hourEvents.size();
-            int success = (int) hourEvents.stream().filter(e -> "success".equalsIgnoreCase(e.getStatus())).count();
-            int failed = (int) hourEvents.stream().filter(e -> "failed".equalsIgnoreCase(e.getStatus())).count();
-
-            totalSyncs.add(total);
-            successSyncs.add(success);
-            failedSyncs.add(failed);
+            totalSyncs.add(total != null ? total.intValue() : 0);
+            successSyncs.add(success != null ? success.intValue() : 0);
+            failedSyncs.add(failed != null ? failed.intValue() : 0);
         }
 
         TrendData trendData = new TrendData();
-        trendData.setDates(hours);  // Reuse dates field for hours
+        trendData.setDates(hours);
         trendData.setTotalSyncs(totalSyncs);
         trendData.setSuccessSyncs(successSyncs);
         trendData.setFailedSyncs(failedSyncs);
@@ -335,48 +307,53 @@ public class DashboardController {
     }
 
     private EventTypeTrend getEventTypeTrend7d() {
-        LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
+        // Use SQL aggregation to get daily event type statistics
+        List<Map<String, Object>> dailyTypeStats = syncEventMapper.getDailyEventTypeTrend7d();
 
-        QueryWrapper<SyncEvent> queryWrapper = new QueryWrapper<>();
-        queryWrapper.ge("event_time", sevenDaysAgo);
-
-        List<SyncEvent> events = syncEventMapper.selectList(queryWrapper);
-
-        // Group by date and event type
-        java.util.Map<String, java.util.Map<String, Long>> eventsByDateAndType = events.stream()
-                .collect(Collectors.groupingBy(
-                        e -> e.getEventTime().toLocalDate().toString(),
-                        Collectors.groupingBy(
-                                SyncEvent::getEventType,
-                                Collectors.counting()
-                        )
-                ));
-
-        // Collect all event types from all 7 days
-        java.util.Set<String> allEventTypes = eventsByDateAndType.values().stream()
-                .flatMap(m -> m.keySet().stream())
-                .collect(Collectors.toSet());
-
-        // Build trend data for last 7 days
         java.util.List<String> dates = new java.util.ArrayList<>();
         java.util.Map<String, java.util.List<Integer>> typeData = new java.util.HashMap<>();
 
-        // Initialize typeData for all event types
-        for (String eventType : allEventTypes) {
-            typeData.put(eventType, new java.util.ArrayList<>());
+        // First pass: collect all unique dates and event types
+        java.util.Set<String> uniqueDates = new java.util.LinkedHashSet<>();
+        java.util.Set<String> uniqueTypes = new java.util.LinkedHashSet<>();
+
+        for (Map<String, Object> stat : dailyTypeStats) {
+            java.sql.Date date = (java.sql.Date) stat.get("date");
+            String eventType = (String) stat.get("event_type");
+
+            if (date != null) {
+                uniqueDates.add(date.toString());
+            }
+            if (eventType != null && !eventType.isEmpty()) {
+                uniqueTypes.add(eventType);
+            }
         }
 
-        // Fill in data for each day
-        for (int i = 6; i >= 0; i--) {
-            LocalDateTime date = LocalDateTime.now().minusDays(i);
-            String dateStr = date.toLocalDate().toString();
-            dates.add(dateStr);
+        // Initialize typeData for all event types
+        for (String type : uniqueTypes) {
+            typeData.put(type, new java.util.ArrayList<>());
+        }
 
-            java.util.Map<String, Long> dayTypeCount = eventsByDateAndType.getOrDefault(dateStr, new java.util.HashMap<>());
+        // Build date-type-count map from query results
+        java.util.Map<String, Integer> dateTypeCountMap = new java.util.HashMap<>();
+        for (Map<String, Object> stat : dailyTypeStats) {
+            java.sql.Date date = (java.sql.Date) stat.get("date");
+            String eventType = (String) stat.get("event_type");
+            Number count = (Number) stat.get("count");
 
-            // Fill in counts for this day for all event types
-            for (String eventType : allEventTypes) {
-                int count = dayTypeCount.getOrDefault(eventType, 0L).intValue();
+            if (date != null && eventType != null && !eventType.isEmpty()) {
+                String key = date.toString() + ":" + eventType;
+                dateTypeCountMap.put(key, count != null ? count.intValue() : 0);
+            }
+        }
+
+        // Fill data for each date in order
+        for (String date : uniqueDates) {
+            dates.add(date);
+
+            for (String eventType : uniqueTypes) {
+                String key = date + ":" + eventType;
+                int count = dateTypeCountMap.getOrDefault(key, 0);
                 typeData.get(eventType).add(count);
             }
         }
@@ -389,52 +366,62 @@ public class DashboardController {
     }
 
     private EventTypeTrend getEventTypeTrend24h() {
-        LocalDateTime twentyFourHoursAgo = LocalDateTime.now().minusHours(24);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime currentHourStart = now.withMinute(0).withSecond(0).withNano(0);
 
-        QueryWrapper<SyncEvent> queryWrapper = new QueryWrapper<>();
-        queryWrapper.ge("event_time", twentyFourHoursAgo);
+        // Use SQL aggregation to get hourly event type statistics
+        List<Map<String, Object>> hourlyTypeStats = syncEventMapper.getHourlyEventTypeTrend24h(currentHourStart);
 
-        List<SyncEvent> events = syncEventMapper.selectList(queryWrapper);
-
-        // Group by hour and event type
-        java.util.Map<Integer, java.util.Map<String, Long>> eventsByHourAndType = new java.util.HashMap<>();
-
-        for (SyncEvent event : events) {
-            int hour = event.getEventTime().getHour();
-            eventsByHourAndType.putIfAbsent(hour, new java.util.HashMap<>());
-            String eventType = event.getEventType();
-            eventsByHourAndType.get(hour).merge(eventType, 1L, Long::sum);
-        }
-
-        // Build trend data for last 24 hours
         java.util.List<String> hours = new java.util.ArrayList<>();
         java.util.Map<String, java.util.List<Integer>> typeData = new java.util.HashMap<>();
 
-        // Collect all event types
-        java.util.Set<String> allTypes = eventsByHourAndType.values().stream()
-                .flatMap(m -> m.keySet().stream())
-                .collect(Collectors.toSet());
+        // First pass: collect all unique hours and event types
+        java.util.Set<Integer> uniqueHours = new java.util.LinkedHashSet<>();
+        java.util.Set<String> uniqueTypes = new java.util.LinkedHashSet<>();
 
-        for (String type : allTypes) {
+        for (Map<String, Object> stat : hourlyTypeStats) {
+            Integer hour = (Integer) stat.get("hour");
+            String eventType = (String) stat.get("event_type");
+
+            if (hour != null) {
+                uniqueHours.add(hour);
+            }
+            if (eventType != null && !eventType.isEmpty()) {
+                uniqueTypes.add(eventType);
+            }
+        }
+
+        // Initialize typeData for all event types
+        for (String type : uniqueTypes) {
             typeData.put(type, new java.util.ArrayList<>());
         }
 
-        for (int i = 23; i >= 0; i--) {
-            LocalDateTime hourTime = LocalDateTime.now().minusHours(i);
-            int hour = hourTime.getHour();
+        // Build hour-type-count map from query results
+        java.util.Map<String, Integer> hourTypeCountMap = new java.util.HashMap<>();
+        for (Map<String, Object> stat : hourlyTypeStats) {
+            Integer hour = (Integer) stat.get("hour");
+            String eventType = (String) stat.get("event_type");
+            Number count = (Number) stat.get("count");
+
+            if (hour != null && eventType != null && !eventType.isEmpty()) {
+                String key = hour + ":" + eventType;
+                hourTypeCountMap.put(key, count != null ? count.intValue() : 0);
+            }
+        }
+
+        // Fill data for each hour in order
+        for (Integer hour : uniqueHours) {
             hours.add(String.valueOf(hour));
 
-            java.util.Map<String, Long> hourTypeCount = eventsByHourAndType.getOrDefault(hour, new java.util.HashMap<>());
-
-            // Fill in counts for this hour
-            for (String eventType : typeData.keySet()) {
-                int count = hourTypeCount.getOrDefault(eventType, 0L).intValue();
+            for (String eventType : uniqueTypes) {
+                String key = hour + ":" + eventType;
+                int count = hourTypeCountMap.getOrDefault(key, 0);
                 typeData.get(eventType).add(count);
             }
         }
 
         EventTypeTrend trend = new EventTypeTrend();
-        trend.setDates(hours);  // Reuse dates field for hours
+        trend.setDates(hours);
         trend.setTypeData(typeData);
 
         return trend;
