@@ -83,13 +83,22 @@ case "$COMMAND" in
 
         log "Collecting branch statistics before sync"
 
+        # Detect if this is a bare repository
+        IS_BARE=$(git rev-parse --is-bare-repository)
+
         # Collect branch information BEFORE fetch
         # Use temp file instead of associative array for sh compatibility
         BEFORE_BRANCHES_FILE=$(mktemp)
-        git for-each-ref --format='%(refname:short) %(objectname)' refs/remotes/origin/ | sed 's|origin/||' > "$BEFORE_BRANCHES_FILE"
+        if [ "$IS_BARE" = "true" ]; then
+            # Bare repository: branches are in refs/heads/
+            git for-each-ref --format='%(refname:short) %(objectname)' refs/heads/ > "$BEFORE_BRANCHES_FILE"
+        else
+            # Normal repository: use remote tracking branches
+            git for-each-ref --format='%(refname:short) %(objectname)' refs/remotes/origin/ | sed 's|origin/||' > "$BEFORE_BRANCHES_FILE"
+        fi
 
         BEFORE_BRANCH_COUNT=$(wc -l < "$BEFORE_BRANCHES_FILE" | tr -d ' ')
-        log "Before sync: $BEFORE_BRANCH_COUNT branches"
+        log "Before sync: $BEFORE_BRANCH_COUNT branches (bare=$IS_BARE)"
 
         log "Updating from source: $(mask_url "$SOURCE_URL")"
 
@@ -107,10 +116,22 @@ case "$COMMAND" in
 
         # Use temp file for after branches
         AFTER_BRANCHES_FILE=$(mktemp)
-        git for-each-ref --format='%(refname:short) %(objectname)' refs/remotes/origin/ | sed 's|origin/||' > "$AFTER_BRANCHES_FILE"
+        if [ "$IS_BARE" = "true" ]; then
+            # Bare repository: branches are in refs/heads/
+            git for-each-ref --format='%(refname:short) %(objectname)' refs/heads/ > "$AFTER_BRANCHES_FILE"
+        else
+            # Normal repository: use remote tracking branches
+            git for-each-ref --format='%(refname:short) %(objectname)' refs/remotes/origin/ | sed 's|origin/||' > "$AFTER_BRANCHES_FILE"
+        fi
+
+        # Temp file to track changed branches with details (for reporting)
+        CHANGED_BRANCHES_FILE=$(mktemp)
 
         # Calculate new and updated branches
         while IFS=' ' read -r branch sha; do
+            # Skip empty lines
+            [ -z "$branch" ] || [ -z "$sha" ] && continue
+
             # Find old SHA for this branch
             old_sha=$(grep "^${branch} " "$BEFORE_BRANCHES_FILE" 2>/dev/null | awk '{print $2}')
 
@@ -120,21 +141,52 @@ case "$COMMAND" in
                 # Count commits in new branch
                 commit_count=$(git rev-list --count "$sha" 2>/dev/null || echo 0)
                 COMMITS_PUSHED=$((COMMITS_PUSHED + commit_count))
+
+                # Get commit details (time, title, author) with error handling
+                commit_time=$(git log -1 --format='%ci' "$sha" 2>/dev/null || echo "")
+                commit_title=$(git log -1 --format='%s' "$sha" 2>/dev/null || echo "")
+                commit_title=$(echo "$commit_title" | tr '|' ' ' | tr -d '\n\r')
+                commit_author=$(git log -1 --format='%an' "$sha" 2>/dev/null || echo "")
+                commit_author=$(echo "$commit_author" | tr '|' ' ' | tr -d '\n\r')
+
+                # Only record if we have valid data
+                if [ -n "$branch" ] && [ -n "$sha" ]; then
+                    echo "$branch|$sha|$commit_time|$commit_title|$commit_author|created" >> "$CHANGED_BRANCHES_FILE"
+                fi
             elif [ "$old_sha" != "$sha" ]; then
                 # Updated branch
                 BRANCHES_UPDATED=$((BRANCHES_UPDATED + 1))
                 # Count new commits
                 commit_count=$(git rev-list --count "$old_sha..$sha" 2>/dev/null || echo 0)
                 COMMITS_PUSHED=$((COMMITS_PUSHED + commit_count))
+
+                # Get commit details (time, title, author) with error handling
+                commit_time=$(git log -1 --format='%ci' "$sha" 2>/dev/null || echo "")
+                commit_title=$(git log -1 --format='%s' "$sha" 2>/dev/null || echo "")
+                commit_title=$(echo "$commit_title" | tr '|' ' ' | tr -d '\n\r')
+                commit_author=$(git log -1 --format='%an' "$sha" 2>/dev/null || echo "")
+                commit_author=$(echo "$commit_author" | tr '|' ' ' | tr -d '\n\r')
+
+                # Only record if we have valid data
+                if [ -n "$branch" ] && [ -n "$sha" ]; then
+                    echo "$branch|$sha|$commit_time|$commit_title|$commit_author|updated" >> "$CHANGED_BRANCHES_FILE"
+                fi
             fi
-        done < "$AFTER_BRANCHES_FILE"
+        done < "$AFTER_BRANCHES_FILE" || true
 
         # Check for deleted branches
         while IFS=' ' read -r branch sha; do
+            # Skip empty lines
+            [ -z "$branch" ] || [ -z "$sha" ] && continue
+
             if ! grep -q "^${branch} " "$AFTER_BRANCHES_FILE" 2>/dev/null; then
                 BRANCHES_DELETED=$((BRANCHES_DELETED + 1))
+                # Record deleted branch (no commit details available)
+                if [ -n "$branch" ] && [ -n "$sha" ]; then
+                    echo "$branch|$sha||||deleted" >> "$CHANGED_BRANCHES_FILE"
+                fi
             fi
-        done < "$BEFORE_BRANCHES_FILE"
+        done < "$BEFORE_BRANCHES_FILE" || true
 
         AFTER_BRANCH_COUNT=$(wc -l < "$AFTER_BRANCHES_FILE" | tr -d ' ')
         log "After sync: $AFTER_BRANCH_COUNT branches (created: $BRANCHES_CREATED, updated: $BRANCHES_UPDATED, deleted: $BRANCHES_DELETED, commits: $COMMITS_PUSHED)"
@@ -157,8 +209,16 @@ case "$COMMAND" in
         git push --all origin --force
         git push --tags origin --force
 
-        # Get final SHA
-        FINAL_SHA=$(git rev-parse HEAD)
+        # Get final SHA - use the most recent commit across all branches
+        if [ "$IS_BARE" = "true" ]; then
+            FINAL_SHA=$(git for-each-ref --sort=-committerdate --format='%(objectname)' refs/heads/ | head -1)
+        else
+            FINAL_SHA=$(git for-each-ref --sort=-committerdate --format='%(objectname)' refs/remotes/origin/ | head -1)
+        fi
+        # Fallback to HEAD if no branches
+        if [ -z "$FINAL_SHA" ]; then
+            FINAL_SHA=$(git rev-parse HEAD)
+        fi
         echo "FINAL_SHA=$FINAL_SHA"
 
         # Output statistics
@@ -166,6 +226,32 @@ case "$COMMAND" in
         echo "BRANCHES_UPDATED=$BRANCHES_UPDATED"
         echo "BRANCHES_DELETED=$BRANCHES_DELETED"
         echo "COMMITS_PUSHED=$COMMITS_PUSHED"
+
+        # Output changed branches (last 5, sorted by commit time desc)
+        # Format: CHANGED_BRANCH_N=branch_name|commit_sha|commit_time|commit_title|commit_author|change_type
+        if [ -f "$CHANGED_BRANCHES_FILE" ] && [ -s "$CHANGED_BRANCHES_FILE" ]; then
+            # Sort by commit time (descending) and take top 5, with error handling
+            # Use grep to filter out empty lines before sorting
+            grep -v '^[[:space:]]*$' "$CHANGED_BRANCHES_FILE" 2>/dev/null | \
+            sort -t'|' -k3 -r 2>/dev/null | head -5 | {
+                INDEX=0
+                while IFS='|' read -r branch_name commit_sha commit_time commit_title commit_author change_type; do
+                    # Skip if branch_name or commit_sha is empty
+                    if [ -n "$branch_name" ] && [ -n "$commit_sha" ]; then
+                        echo "CHANGED_BRANCH_${INDEX}=$branch_name|$commit_sha|$commit_time|$commit_title|$commit_author|$change_type"
+                        INDEX=$((INDEX + 1))
+                    fi
+                done
+            } || true
+            # Count non-empty lines
+            BRANCH_COUNT=$(grep -v '^[[:space:]]*$' "$CHANGED_BRANCHES_FILE" 2>/dev/null | wc -l | tr -d ' ')
+            echo "CHANGED_BRANCH_COUNT=${BRANCH_COUNT:-0}"
+        else
+            echo "CHANGED_BRANCH_COUNT=0"
+        fi
+
+        # Cleanup changed branches temp file
+        rm -f "$CHANGED_BRANCHES_FILE"
 
         log "Sync completed successfully"
         ;;

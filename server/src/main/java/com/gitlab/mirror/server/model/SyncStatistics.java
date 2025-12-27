@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
  * Sync Statistics Model
  * <p>
@@ -54,6 +56,29 @@ public class SyncStatistics {
      * Total number of tags synced (optional, for future use)
      */
     private Integer tagsSynced;
+
+    /**
+     * Changed branches (last 5, sorted by commit time desc)
+     */
+    private List<ChangedBranch> changedBranches;
+
+    /**
+     * Changed branch details
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ChangedBranch {
+        private String branchName;
+        private String commitSha;
+        private String commitTime;
+        private String commitTitle;
+        private String commitAuthor;
+        private String changeType;  // created, updated, deleted
+    }
 
     /**
      * Check if there are any changes
@@ -106,6 +131,8 @@ public class SyncStatistics {
             return empty();
         }
 
+        java.util.List<ChangedBranch> changedBranches = new java.util.ArrayList<>();
+
         String[] lines = output.split("\n");
         for (String line : lines) {
             String[] parts = line.split("=", 2);
@@ -113,6 +140,23 @@ public class SyncStatistics {
 
             String key = parts[0].trim();
             String value = parts[1].trim();
+
+            // Parse changed branch info: CHANGED_BRANCH_0=branch|sha|time|title|author|type
+            if (key.startsWith("CHANGED_BRANCH_") && !key.equals("CHANGED_BRANCH_COUNT")) {
+                String[] branchParts = value.split("\\|");  // No limit to allow all parts
+                if (branchParts.length >= 6) {
+                    ChangedBranch branch = ChangedBranch.builder()
+                        .branchName(branchParts[0])
+                        .commitSha(branchParts[1])
+                        .commitTime(branchParts[2])
+                        .commitTitle(branchParts[3])
+                        .commitAuthor(branchParts[4])
+                        .changeType(branchParts[5])
+                        .build();
+                    changedBranches.add(branch);
+                }
+                continue;
+            }
 
             try {
                 int intValue = Integer.parseInt(value);
@@ -133,6 +177,10 @@ public class SyncStatistics {
             } catch (NumberFormatException e) {
                 // Skip invalid numbers
             }
+        }
+
+        if (!changedBranches.isEmpty()) {
+            builder.changedBranches(changedBranches);
         }
 
         return builder.build();

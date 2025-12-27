@@ -574,13 +574,36 @@ public class PullSyncExecutorService {
             }
 
             // Record sync result to sync_result table
-            String message = hasChanges ?
-                String.format("Sync completed with changes (source: %s, target: %s)", sourceSha, targetSha) :
-                "Sync completed without changes";
+            String message = buildSyncMessage(hasChanges, sourceSha, targetSha, statistics);
             recordSyncResult(project, task, SyncResult.Status.SUCCESS, message, statistics);
         }
     }
 
+
+    /**
+     * Build sync message with changed branches summary
+     *
+     * @param hasChanges Whether sync has changes
+     * @param sourceSha Source commit SHA
+     * @param targetSha Target commit SHA
+     * @param statistics Sync statistics
+     * @return Formatted message
+     */
+    private String buildSyncMessage(boolean hasChanges, String sourceSha, String targetSha,
+                                     com.gitlab.mirror.server.model.SyncStatistics statistics) {
+        if (!hasChanges) {
+            return "Sync completed without changes";
+        }
+
+        // Simple summary message - detailed branch info shown in Changed Branches table
+        int branchesChanged = statistics.getBranchesUpdated() != null ? statistics.getBranchesUpdated() : 0;
+        branchesChanged += statistics.getBranchesCreated() != null ? statistics.getBranchesCreated() : 0;
+        branchesChanged += statistics.getBranchesDeleted() != null ? statistics.getBranchesDeleted() : 0;
+
+        return String.format("Sync completed: %d branches changed (%d commits pushed)",
+            branchesChanged,
+            statistics.getCommitsPushed() != null ? statistics.getCommitsPushed() : 0);
+    }
 
     /**
      * Handle sync failure (uses separate transaction service to ensure status update persists)

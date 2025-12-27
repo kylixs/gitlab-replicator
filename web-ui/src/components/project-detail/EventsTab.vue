@@ -29,7 +29,7 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="Statistics" width="200">
+      <el-table-column label="Statistics" width="140">
         <template #default="{ row }">
           <div v-if="row.statistics && hasStatistics(row.statistics)" style="font-size: 12px;">
             <span v-if="row.statistics.branchesCreated" style="color: #67c23a;">+{{ row.statistics.branchesCreated }}B </span>
@@ -41,11 +41,13 @@
         </template>
       </el-table-column>
 
-      <el-table-column prop="message" label="Message" min-width="180">
+      <el-table-column prop="message" label="Message" min-width="300">
         <template #default="{ row }">
-          <div class="message-cell text-ellipsis-5">
+          <div class="message-container">
             <el-icon v-if="isSkippedSync(row.message)" :size="16" class="skip-icon"><CircleCheck /></el-icon>
-            <span :class="{ 'skip-message': isSkippedSync(row.message) }">{{ row.message }}</span>
+            <div :class="['message-text', { 'skip-message': isSkippedSync(row.message) }]">
+              {{ formatCompactMessage(row) }}
+            </div>
           </div>
         </template>
       </el-table-column>
@@ -110,24 +112,50 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <!-- Statistics for Sync Events -->
+        <!-- Sync Summary Table -->
         <div v-if="eventDetailEnhanced.statistics && hasStatistics(eventDetailEnhanced.statistics)">
           <el-divider />
-          <h3>Sync Statistics</h3>
-          <div class="statistics-summary">
-            <el-tag v-if="eventDetailEnhanced.statistics.branchesCreated" type="success" size="large" style="margin-right: 8px;">
-              <span style="font-weight: bold;">+{{ eventDetailEnhanced.statistics.branchesCreated }}</span> Branches Created
-            </el-tag>
-            <el-tag v-if="eventDetailEnhanced.statistics.branchesUpdated" type="primary" size="large" style="margin-right: 8px;">
-              <span style="font-weight: bold;">~{{ eventDetailEnhanced.statistics.branchesUpdated }}</span> Branches Updated
-            </el-tag>
-            <el-tag v-if="eventDetailEnhanced.statistics.branchesDeleted" type="danger" size="large" style="margin-right: 8px;">
-              <span style="font-weight: bold;">-{{ eventDetailEnhanced.statistics.branchesDeleted }}</span> Branches Deleted
-            </el-tag>
-            <el-tag v-if="eventDetailEnhanced.statistics.commitsPushed" type="info" size="large">
-              <span style="font-weight: bold;">{{ eventDetailEnhanced.statistics.commitsPushed }}</span> Commits Pushed
-            </el-tag>
-          </div>
+          <h3>Sync Summary</h3>
+          <el-table :data="[eventDetailEnhanced.statistics]" border style="width: 100%">
+            <el-table-column label="Branches Created" width="150" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.branchesCreated && row.branchesCreated > 0" type="success" size="large">
+                  +{{ row.branchesCreated }}
+                </el-tag>
+                <span v-else style="color: #909399">0</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Branches Updated" width="150" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.branchesUpdated && row.branchesUpdated > 0" type="primary" size="large">
+                  ~{{ row.branchesUpdated }}
+                </el-tag>
+                <span v-else style="color: #909399">0</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Branches Deleted" width="150" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.branchesDeleted && row.branchesDeleted > 0" type="danger" size="large">
+                  -{{ row.branchesDeleted }}
+                </el-tag>
+                <span v-else style="color: #909399">0</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Commits Pushed" width="150" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.commitsPushed && row.commitsPushed > 0" type="info" size="large">
+                  {{ row.commitsPushed }}
+                </el-tag>
+                <span v-else style="color: #909399">0</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Message" min-width="200">
+              <template #default>
+                <span v-if="eventDetailEnhanced.eventData?.message">{{ eventDetailEnhanced.eventData.message }}</span>
+                <span v-else style="color: #909399">-</span>
+              </template>
+            </el-table-column>
+          </el-table>
         </div>
 
         <!-- Error Message for Failed Events -->
@@ -135,8 +163,45 @@
           <el-divider />
           <h3>Error Details</h3>
           <el-alert type="error" :closable="false">
-            {{ eventDetailEnhanced.errorMessage }}
+            <pre class="message-content">{{ eventDetailEnhanced.errorMessage }}</pre>
           </el-alert>
+        </div>
+
+        <!-- Changed Branches Details -->
+        <div v-if="eventDetailEnhanced.statistics?.changedBranches && eventDetailEnhanced.statistics.changedBranches.length > 0">
+          <el-divider />
+          <h3>Changed Branches ({{ eventDetailEnhanced.statistics.changedBranches.length }})</h3>
+          <el-table :data="eventDetailEnhanced.statistics.changedBranches" stripe style="width: 100%">
+            <el-table-column label="Branch" min-width="150">
+              <template #default="{ row }">
+                <span style="font-weight: 500">{{ row.branchName }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Change Type" width="120">
+              <template #default="{ row }">
+                <el-tag
+                  :type="row.changeType === 'created' ? 'success' : row.changeType === 'updated' ? 'primary' : 'danger'"
+                  size="small"
+                >
+                  {{ row.changeType }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="Commit" width="100">
+              <template #default="{ row }">
+                <el-tooltip :content="row.commitSha">
+                  <code style="font-size: 12px">{{ row.commitSha ? row.commitSha.substring(0, 8) : '-' }}</code>
+                </el-tooltip>
+              </template>
+            </el-table-column>
+            <el-table-column prop="commitTitle" label="Commit Message" min-width="200" />
+            <el-table-column prop="commitAuthor" label="Author" width="120" />
+            <el-table-column label="Committed At" width="180">
+              <template #default="{ row }">
+                {{ row.commitTime || '-' }}
+              </template>
+            </el-table-column>
+          </el-table>
         </div>
 
         <!-- Branch Information for Successful Events -->
@@ -305,6 +370,39 @@ const hasStatistics = (statistics: any) => {
          (statistics.commitsPushed && statistics.commitsPushed > 0)
 }
 
+const formatCompactMessage = (event: EventListItem) => {
+  const stats = event.statistics
+
+  // If no statistics, return original message
+  if (!stats || !hasStatistics(stats)) {
+    return event.message || '-'
+  }
+
+  // Build multi-line compact message
+  const branchesChanged = (stats.branchesCreated || 0) + (stats.branchesUpdated || 0) + (stats.branchesDeleted || 0)
+  const commitsPushed = stats.commitsPushed || 0
+
+  let message = `Sync: ${branchesChanged} branches changed (${commitsPushed} commits)`
+
+  // Add top 3 changed branches (one per line)
+  if (stats.changedBranches && stats.changedBranches.length > 0) {
+    const limit = Math.min(3, stats.changedBranches.length)
+    for (let i = 0; i < limit; i++) {
+      const branch = stats.changedBranches[i]
+      const shortSha = branch.commitSha ? branch.commitSha.substring(0, 8) : ''
+      message += `\n${branch.branchName} | ${shortSha}`
+    }
+
+    // Add "+N more" if there are more branches
+    const remaining = stats.changedBranches.length - limit
+    if (remaining > 0) {
+      message += `\n+${remaining} more...`
+    }
+  }
+
+  return message
+}
+
 const handleViewDetail = async (event: EventListItem) => {
   selectedEvent.value = event
   eventDetailEnhanced.value = null
@@ -341,14 +439,28 @@ onMounted(() => {
   justify-content: flex-end;
 }
 
-.message-cell {
+.message-container {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
+}
+
+.message-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  max-height: 7.5em; /* ~5 lines */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
 }
 
 .skip-icon {
   color: #67c23a;
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .skip-message {
@@ -356,23 +468,22 @@ onMounted(() => {
   font-style: italic;
 }
 
-.text-ellipsis-5 {
-  display: -webkit-box;
-  -webkit-line-clamp: 5;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.5;
-  max-height: 7.5em; /* 5 lines * 1.5 line-height */
-  word-break: break-word;
-}
-
 .event-detail {
   padding: 0 8px;
 }
 
-.error-section {
+.error-section,
+.success-section {
   margin-top: 16px;
+}
+
+.message-content {
+  margin: 0;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .branch-summary {
